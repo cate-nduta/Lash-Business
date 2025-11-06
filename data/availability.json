@@ -1,0 +1,82 @@
+{
+  "businessHours": {
+    "monday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": true
+    },
+    "tuesday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": true
+    },
+    "wednesday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": true
+    },
+    "thursday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": true
+    },
+    "friday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": true
+    },
+    "saturday": {
+      "open": "09:00",
+      "close": "18:00",
+      "enabled": false
+    },
+    "sunday": {
+      "open": "12:00",
+      "close": "17:00",
+      "enabled": true
+    }
+  },
+  "timeSlots": {
+    "weekdays": [
+      {
+        "hour": 9,
+        "minute": 30,
+        "label": "9:30 AM"
+      },
+      {
+        "hour": 12,
+        "minute": 0,
+        "label": "12:00 PM"
+      },
+      {
+        "hour": 14,
+        "minute": 30,
+        "label": "2:30 PM"
+      },
+      {
+        "hour": 16,
+        "minute": 30,
+        "label": "4:30 PM"
+      }
+    ],
+    "sunday": [
+      {
+        "hour": 12,
+        "minute": 30,
+        "label": "12:30 PM"
+      },
+      {
+        "hour": 15,
+        "minute": 0,
+        "label": "3:00 PM"
+      }
+    ],
+    "saturday": [
+      {
+        "hour": 12,
+        "minute": 30,
+        "label": "12:30 PM"
+      }
+    ]
+  }
+}

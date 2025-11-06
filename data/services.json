@@ -1,0 +1,73 @@
+{
+  "fullSets": [
+    {
+      "name": "Classic Lashes",
+      "price": 6000,
+      "duration": 90
+    },
+    {
+      "name": "Subtle Hybrid Lashes",
+      "price": 6000,
+      "duration": 90
+    },
+    {
+      "name": "Hybrid Lashes",
+      "price": 6500,
+      "duration": 90
+    },
+    {
+      "name": "Volume Lashes",
+      "price": 6500,
+      "duration": 90
+    },
+    {
+      "name": "Mega Volume Lashes",
+      "price": 7500,
+      "duration": 120
+    },
+    {
+      "name": "Wispy Lashes",
+      "price": 7000,
+      "duration": 90
+    }
+  ],
+  "lashFills": [
+    {
+      "name": "Classic Infill",
+      "price": 4000,
+      "duration": 60
+    },
+    {
+      "name": "Subtle Hybrid Infill",
+      "price": 4000,
+      "duration": 60
+    },
+    {
+      "name": "Hybrid Infill",
+      "price": 4000,
+      "duration": 60
+    },
+    {
+      "name": "Volume Infill",
+      "price": 4500,
+      "duration": 60
+    },
+    {
+      "name": "Mega Volume Infill",
+      "price": 5000,
+      "duration": 90
+    },
+    {
+      "name": "Wispy Infill",
+      "price": 4500,
+      "duration": 60
+    }
+  ],
+  "otherServices": [
+    {
+      "name": "Lash Lift",
+      "price": 4500,
+      "duration": 60
+    }
+  ]
+}

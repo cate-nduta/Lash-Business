@@ -1,0 +1,76 @@
+import Link from 'next/link'
+
+export default function Footer() {
+  return (
+    <footer className="bg-pink-light border-t border-brown-light mt-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <h3 className="text-xl font-display text-brown font-bold mb-4">
+              LashDiary
+            </h3>
+            <p className="text-gray-600 text-sm">
+              Premium lash extensions and beauty services. 
+              Experience luxury in every detail.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="font-display text-gray-800 font-semibold mb-4">
+              Quick Links
+            </h4>
+            <ul className="space-y-2">
+              <li>
+                <Link href="/services" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                  Services
+                </Link>
+              </li>
+              <li>
+                <Link href="/gallery" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                  Gallery
+                </Link>
+              </li>
+              <li>
+                <Link href="/booking" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                  Book Appointment
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                  Contact Us
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-display text-gray-800 font-semibold mb-4">
+              Connect
+            </h4>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li>
+                <a 
+                  href="https://instagram.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="hover:text-brown transition-colors"
+                >
+                  Instagram
+                </a>
+              </li>
+              <li>
+                <a href="mailto:catherinenkuria@gmail.com" className="hover:text-brown transition-colors">
+                  catherinenkuria@gmail.com
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-8 border-t border-brown-light text-center text-sm text-gray-600">
+          <p>&copy; {new Date().getFullYear()} LashDiary. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
+  )
+}

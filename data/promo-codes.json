@@ -1,0 +1,17 @@
+{
+  "promoCodes": [
+    {
+      "code": "REFERLASHD5",
+      "description": "5% off for referrals",
+      "discountType": "percentage",
+      "discountValue": 5,
+      "minPurchase": 5000,
+      "maxDiscount": null,
+      "validFrom": "2025-01-01",
+      "validUntil": "2025-12-31",
+      "usageLimit": 10,
+      "usedCount": 0,
+      "active": true
+    }
+  ]
+}

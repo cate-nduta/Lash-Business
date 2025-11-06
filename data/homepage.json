@@ -1,0 +1,33 @@
+{
+  "hero": {
+    "title": "LashDiary",
+    "subtitle": "Luxury Lash Extensions & Beauty Services",
+    "mobileServiceNote": "Mobile service available within Nairobi environs • We come to you at no extra cost"
+  },
+  "intro": {
+    "title": "Welcome to LashDiary",
+    "paragraph1": "Experience the artistry of premium lash extensions in the comfort of your own home! Our mobile service brings expert technicians directly to you within Nairobi environs. No need to worry about transport fees - we've got you covered!",
+    "paragraph2": "From classic to mega volume, we offer a full range of lash services tailored to your unique style. Book your appointment today and let's make your lashes absolutely gorgeous!",
+    "features": "🏠 Mobile Service | 📍 Nairobi Environs | 💰 No Transport Fees"
+  },
+  "features": [
+    {
+      "title": "Expert Technicians",
+      "description": "Certified professionals with years of experience in lash artistry! We love what we do!"
+    },
+    {
+      "title": "Premium Products",
+      "description": "Only the finest quality lash extensions and beauty products. The best for the best!"
+    },
+    {
+      "title": "Mobile Service",
+      "description": "We come to you! Enjoy professional lash services in the comfort of your home. Available within Nairobi environs with no transport fees."
+    }
+  ],
+  "cta": {
+    "title": "Ready to Transform Your Look?",
+    "description": "Book your appointment today and experience luxury lash services in the comfort of your home!",
+    "buttonText": "Book Now!"
+  }
+}
+

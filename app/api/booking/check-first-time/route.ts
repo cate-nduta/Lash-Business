@@ -1,0 +1,93 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { google } from 'googleapis'
+
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+
+// Initialize Google Calendar API
+function getCalendarClient() {
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
+    return null
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      project_id: process.env.GOOGLE_PROJECT_ID,
+    },
+    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  })
+
+  return google.calendar({ version: 'v3', auth })
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const email = searchParams.get('email')
+
+    if (!email) {
+      return NextResponse.json(
+        { error: 'Email is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if this email has made a booking before
+    const calendar = getCalendarClient()
+    let isFirstTime = true
+
+    if (calendar) {
+      try {
+        // Search for events with this email in the description or summary
+        // We'll search events from the past to see if this email has booked before
+        const oneYearAgo = new Date()
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+        
+        const response = await calendar.events.list({
+          calendarId: CALENDAR_ID,
+          timeMin: oneYearAgo.toISOString(),
+          maxResults: 2500, // Maximum allowed
+          singleEvents: true,
+          orderBy: 'startTime',
+        })
+
+        const events = response.data.items || []
+        
+        // Check if any event contains this email
+        for (const event of events) {
+          const description = event.description || ''
+          const summary = event.summary || ''
+          const attendees = event.attendees || []
+          
+          // Check if email appears in description, summary, or attendees
+          if (
+            description.toLowerCase().includes(email.toLowerCase()) ||
+            summary.toLowerCase().includes(email.toLowerCase()) ||
+            attendees.some(attendee => attendee.email?.toLowerCase() === email.toLowerCase())
+          ) {
+            isFirstTime = false
+            break
+          }
+        }
+      } catch (error) {
+        console.warn('Error checking calendar for existing bookings:', error)
+        // If we can't check, assume it's a first-time client (safer to give discount)
+        isFirstTime = true
+      }
+    }
+
+    return NextResponse.json({ 
+      isFirstTime,
+      email 
+    })
+  } catch (error) {
+    console.error('Error checking first-time client status:', error)
+    // Default to first-time client if there's an error (safer to give discount)
+    return NextResponse.json({ 
+      isFirstTime: true,
+      error: 'Could not verify client status, applying first-time discount'
+    })
+  }
+}
+

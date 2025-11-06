@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "url": "http://localhost:3000/uploads/gallery/1762447484287-lash1.jpg",
+      "name": "Whispy Lash Extension"
+    },
+    {
+      "url": "http://localhost:3000/uploads/gallery/1762448559560-kl.jpg",
+      "name": "Lash extension"
+    }
+  ]
+}

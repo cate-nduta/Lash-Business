@@ -1,0 +1,48 @@
+{
+  "testimonials": [
+    {
+      "id": "example-1",
+      "name": "Sarah M.",
+      "email": "sarah@example.com",
+      "photo": null,
+      "testimonial": "Absolutely love my new lashes! The service was professional and the results are stunning. LashDiary came to my home and made the whole experience so convenient. Highly recommend!",
+      "rating": 5,
+      "date": "2025-01-15T10:00:00.000Z",
+      "approved": true,
+      "service": "Volume Lashes"
+    },
+    {
+      "id": "example-2",
+      "name": "Grace K.",
+      "email": "grace@example.com",
+      "photo": null,
+      "testimonial": "Best lash service in Nairobi! The technician was so skilled and made me feel comfortable throughout. My lashes look natural yet glamorous. Will definitely be back!",
+      "rating": 5,
+      "date": "2025-01-10T14:30:00.000Z",
+      "approved": true,
+      "service": "Hybrid Lashes"
+    },
+    {
+      "id": "example-3",
+      "name": "Amanda T.",
+      "email": "amanda@example.com",
+      "photo": null,
+      "testimonial": "I'm so impressed with LashDiary! The mobile service is a game-changer - no need to leave home. The lashes are beautiful and lasted perfectly. Thank you!",
+      "rating": 5,
+      "date": "2025-01-05T09:15:00.000Z",
+      "approved": true,
+      "service": "Classic Lashes"
+    },
+    {
+      "id": "pending-1",
+      "name": "Jessica W.",
+      "email": "jessica@example.com",
+      "photo": null,
+      "testimonial": "Amazing experience! The lash technician was so professional and my lashes look absolutely gorgeous. The mobile service is so convenient - I didn't have to leave my house!",
+      "rating": 5,
+      "date": "2025-01-20T11:00:00.000Z",
+      "approved": false,
+      "service": "Mega Volume Lashes"
+    }
+  ]
+}
