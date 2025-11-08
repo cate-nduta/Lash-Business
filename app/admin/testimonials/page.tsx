@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Toast from '@/components/Toast'
 
 interface Testimonial {
   id: string
@@ -16,6 +17,9 @@ interface Testimonial {
   service?: string
 }
 
+const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { credentials: 'include', ...init })
+
 export default function AdminTestimonials() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,20 +27,37 @@ export default function AdminTestimonials() {
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/admin/auth')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
-          router.push('/admin/login')
-        } else {
-          loadTestimonials()
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await authorizedFetch('/api/admin/current-user')
+        if (!response.ok) {
+          throw new Error('Unauthorized')
         }
-      })
+        const data = await response.json()
+        if (!isMounted) return
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+        loadTestimonials()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   const loadTestimonials = async () => {
     try {
-      const response = await fetch('/api/admin/testimonials')
+      const response = await authorizedFetch('/api/admin/testimonials')
       if (response.ok) {
         const data = await response.json()
         setTestimonials(data.testimonials || [])
@@ -50,7 +71,7 @@ export default function AdminTestimonials() {
 
   const handleApprove = async (id: string) => {
     try {
-      const response = await fetch('/api/admin/testimonials', {
+      const response = await authorizedFetch('/api/admin/testimonials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'approve', testimonialId: id }),
@@ -74,7 +95,7 @@ export default function AdminTestimonials() {
     }
 
     try {
-      const response = await fetch('/api/admin/testimonials', {
+      const response = await authorizedFetch('/api/admin/testimonials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reject', testimonialId: id }),
@@ -98,7 +119,7 @@ export default function AdminTestimonials() {
     }
 
     try {
-      const response = await fetch('/api/admin/testimonials', {
+      const response = await authorizedFetch('/api/admin/testimonials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', testimonialId: id }),
@@ -147,14 +168,13 @@ export default function AdminTestimonials() {
           </Link>
         </div>
 
+        {/* Toast Notification */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {message.text}
-          </div>
+          <Toast
+            message={message.text}
+            type={message.type}
+            onClose={() => setMessage(null)}
+          />
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">

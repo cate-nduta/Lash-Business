@@ -1,0 +1,739 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+import Toast from '@/components/Toast'
+
+interface Settings {
+  business: {
+    name: string
+    phone: string
+    email: string
+    address: string
+    description: string
+    logoType: 'text' | 'image'
+    logoUrl: string
+    logoText: string
+    faviconUrl: string
+  }
+  social: {
+    instagram: string
+    facebook: string
+    tiktok: string
+    twitter: string
+  }
+}
+
+export default function AdminSettings() {
+  const [settings, setSettings] = useState<Settings>({
+    business: {
+      name: '',
+      phone: '',
+      email: '',
+      address: '',
+      description: '',
+      logoType: 'text',
+      logoUrl: '',
+      logoText: '',
+      faviconUrl: '/favicon.svg',
+    },
+    social: {
+      instagram: '',
+      facebook: '',
+      tiktok: '',
+      twitter: '',
+    },
+  })
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingFavicon, setUploadingFavicon] = useState(false)
+  const faviconInputRef = useRef<HTMLInputElement | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  })
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/admin/current-user', {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error('Unauthorized')
+        }
+
+        const data = await response.json()
+        if (!isMounted) return
+
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+
+        loadSettings()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
+  }, [router])
+
+  const loadSettings = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', {
+        credentials: 'include',
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const loaded = data as Settings
+        if (!loaded.business.faviconUrl) {
+          loaded.business.faviconUrl = '/favicon.svg'
+        }
+        setSettings(loaded)
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+      setMessage({ type: 'error', text: 'Failed to load settings' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleInputChange = (section: 'business' | 'social', field: string, value: string) => {
+    setSettings(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value,
+      },
+    }))
+    setHasUnsavedChanges(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...settings,
+          business: {
+            ...settings.business,
+            faviconUrl: settings.business.faviconUrl || '/favicon.svg',
+          },
+        }),
+        credentials: 'include',
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Settings saved successfully!' })
+        setHasUnsavedChanges(false)
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to save settings' })
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      setMessage({ type: 'error', text: 'An error occurred while saving' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordMessage(null)
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordMessage({ type: 'error', text: 'New passwords do not match' })
+      return
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      setPasswordMessage({ type: 'error', text: 'Password must be at least 8 characters' })
+      return
+    }
+
+    try {
+      const response = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+        }),
+        credentials: 'include',
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setPasswordMessage({ type: 'success', text: 'Password changed successfully!' })
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+        setTimeout(() => {
+          setShowPasswordModal(false)
+          setPasswordMessage(null)
+        }, 2000)
+      } else {
+        setPasswordMessage({ type: 'error', text: data.error || 'Failed to change password' })
+      }
+    } catch (error) {
+      console.error('Error changing password:', error)
+      setPasswordMessage({ type: 'error', text: 'An error occurred' })
+    }
+  }
+
+  const handleUploadFavicon = async (file: File) => {
+    setUploadingFavicon(true)
+    setMessage(null)
+    try {
+      const formData = new FormData()
+      formData.append('favicon', file)
+      const response = await fetch('/api/admin/settings/upload-favicon', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload favicon')
+      }
+      setSettings((prev) => ({
+        ...prev,
+        business: {
+          ...prev.business,
+          faviconUrl: data.faviconUrl,
+        },
+      }))
+      setHasUnsavedChanges(true)
+      setMessage({ type: 'success', text: 'Favicon uploaded! Remember to save changes.' })
+    } catch (error: any) {
+      console.error('Error uploading favicon:', error)
+      setMessage({ type: 'error', text: error.message || 'Failed to upload favicon' })
+    } finally {
+      setUploadingFavicon(false)
+      if (faviconInputRef.current) {
+        faviconInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (hasUnsavedChanges) {
+      e.preventDefault()
+      setPendingNavigation(href)
+      setShowUnsavedDialog(true)
+    }
+  }
+
+  const handleLeaveWithoutSaving = () => {
+    setShowUnsavedDialog(false)
+    setHasUnsavedChanges(false)
+    if (pendingNavigation) {
+      router.push(pendingNavigation)
+    }
+  }
+
+  const handleCancelDialog = () => {
+    setShowUnsavedDialog(false)
+    setPendingNavigation(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
+        <div className="text-brown">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-baby-pink-light py-8 px-4">
+      {/* Toast Notification */}
+      {message && (
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+        />
+      )}
+
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-6 flex justify-between items-center">
+          <Link 
+            href="/admin/dashboard" 
+            className="text-brown hover:text-brown-dark"
+            onClick={(e) => handleLinkClick(e, '/admin/dashboard')}
+          >
+            ← Back to Dashboard
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h1 className="text-4xl font-display text-brown-dark mb-8">Settings</h1>
+
+          {/* Business Information */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Business Information</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Business Name
+                </label>
+                <input
+                  type="text"
+                  value={settings.business.name}
+                  onChange={(e) => handleInputChange('business', 'name', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={settings.business.phone}
+                  onChange={(e) => handleInputChange('business', 'phone', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="0748 863 882"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Business Email
+                </label>
+                <input
+                  type="email"
+                  value={settings.business.email}
+                  onChange={(e) => handleInputChange('business', 'email', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="hello@lashdiary.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Business Address
+                </label>
+                <input
+                  type="text"
+                  value={settings.business.address}
+                  onChange={(e) => handleInputChange('business', 'address', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="Nairobi, Kenya"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Business Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={settings.business.description}
+                  onChange={(e) => handleInputChange('business', 'description', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="Luxury Lash Extensions & Beauty Services"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Logo Settings */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Logo Settings</h2>
+            
+            {/* Logo Type Selector */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-brown-dark mb-2">
+                Logo Type
+              </label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange('business', 'logoType', 'text')
+                    setHasUnsavedChanges(true)
+                  }}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-colors ${
+                    settings.business.logoType === 'text'
+                      ? 'bg-brown-dark text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Text Logo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange('business', 'logoType', 'image')
+                    setHasUnsavedChanges(true)
+                  }}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-colors ${
+                    settings.business.logoType === 'image'
+                      ? 'bg-brown-dark text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Image Logo
+                </button>
+              </div>
+            </div>
+
+            {/* Text Logo Option */}
+            {settings.business.logoType === 'text' && (
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Logo Text
+                </label>
+                <input
+                  type="text"
+                  value={settings.business.logoText}
+                  onChange={(e) => handleInputChange('business', 'logoText', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="LashDiary"
+                />
+                <p className="text-xs text-gray-600 mt-2">
+                  This text will appear in your navigation, footer, and emails in your brand font.
+                </p>
+                {/* Logo Preview */}
+                <div className="mt-4 p-6 bg-baby-pink-light rounded-lg border-2 border-brown-light">
+                  <p className="text-xs text-brown-dark mb-2 font-semibold">Preview:</p>
+                  <h1 className="text-3xl font-display text-brown font-bold">
+                    {settings.business.logoText || 'LashDiary'}
+                  </h1>
+                </div>
+              </div>
+            )}
+
+            {/* Image Logo Option */}
+            {settings.business.logoType === 'image' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Upload Logo Image
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+
+                      setUploadingLogo(true)
+                      const formData = new FormData()
+                      formData.append('logo', file)
+
+                      try {
+                        const response = await fetch('/api/admin/settings/upload-logo', {
+                          method: 'POST',
+                          body: formData,
+                          credentials: 'include',
+                        })
+                        const data = await response.json()
+                        
+                        if (response.ok && data.logoUrl) {
+                          handleInputChange('business', 'logoUrl', data.logoUrl)
+                          setMessage({ type: 'success', text: 'Logo uploaded! Remember to save changes.' })
+                        } else {
+                          setMessage({ type: 'error', text: data.error || 'Failed to upload logo' })
+                        }
+                      } catch (error) {
+                        console.error('Error uploading logo:', error)
+                        setMessage({ type: 'error', text: 'Error uploading logo' })
+                      } finally {
+                        setUploadingLogo(false)
+                      }
+                    }}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    Recommended: PNG or SVG with transparent background. Max size: 2MB. Ideal dimensions: 200x60px
+                  </p>
+                </div>
+
+                {/* Logo Preview */}
+                {settings.business.logoUrl && (
+                  <div className="p-6 bg-baby-pink-light rounded-lg border-2 border-brown-light">
+                    <p className="text-xs text-brown-dark mb-2 font-semibold">Current Logo:</p>
+                    <img 
+                      src={settings.business.logoUrl} 
+                      alt="Logo preview" 
+                      className="h-16 object-contain"
+                    />
+                  </div>
+                )}
+
+                {uploadingLogo && (
+                  <div className="text-sm text-brown-dark">Uploading logo...</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Favicon Settings */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-2">Favicon</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This is the small icon shown in browser tabs and bookmarks. Upload a square image (PNG, JPG, WebP, or SVG).
+            </p>
+            <div className="flex items-center gap-6 flex-wrap">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 rounded-xl border-2 border-brown-light flex items-center justify-center bg-white overflow-hidden">
+                  <img
+                    src={settings.business.faviconUrl || '/favicon.svg'}
+                    alt="Favicon preview"
+                    className="w-12 h-12 object-contain"
+                  />
+                </div>
+                <span className="text-xs text-gray-500">Preview</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => faviconInputRef.current?.click()}
+                    disabled={uploadingFavicon}
+                    className="px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown disabled:opacity-50"
+                  >
+                    {uploadingFavicon ? 'Uploading...' : 'Upload New Favicon'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettings((prev) => ({
+                        ...prev,
+                        business: {
+                          ...prev.business,
+                          faviconUrl: '/favicon.svg',
+                        },
+                      }))
+                      setHasUnsavedChanges(true)
+                      setMessage({ type: 'success', text: 'Reverted to default favicon. Save to apply.' })
+                    }}
+                    className="px-4 py-2 bg-white border-2 border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/70"
+                  >
+                    Use Default
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">Tip: A simple 64x64 image with neutral colors works best.</p>
+                <input
+                  ref={faviconInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      handleUploadFavicon(file)
+                    }
+                  }}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Social Media Links */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Social Media Links</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Instagram
+                </label>
+                <input
+                  type="text"
+                  value={settings.social.instagram}
+                  onChange={(e) => handleInputChange('social', 'instagram', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="https://instagram.com/lashdiary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Facebook
+                </label>
+                <input
+                  type="text"
+                  value={settings.social.facebook}
+                  onChange={(e) => handleInputChange('social', 'facebook', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="https://facebook.com/lashdiary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  TikTok
+                </label>
+                <input
+                  type="text"
+                  value={settings.social.tiktok}
+                  onChange={(e) => handleInputChange('social', 'tiktok', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="https://tiktok.com/@lashdiary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Twitter
+                </label>
+                <input
+                  type="text"
+                  value={settings.social.twitter}
+                  onChange={(e) => handleInputChange('social', 'twitter', e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="https://twitter.com/lashdiary"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Security Section */}
+          <div className="mb-8 p-6 bg-pink-light/30 rounded-lg border-2 border-brown-light">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Security</h2>
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              className="px-6 py-3 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors font-semibold"
+            >
+              Change Admin Password
+            </button>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex gap-4">
+            <button
+              onClick={handleSave}
+              disabled={saving || !hasUnsavedChanges}
+              className="flex-1 px-6 py-3 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-6">Change Password</h2>
+
+            {passwordMessage && (
+              <div
+                className={`mb-4 p-3 rounded-lg ${
+                  passwordMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}
+              >
+                {passwordMessage.text}
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.currentPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  required
+                  minLength={8}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+                <p className="text-xs text-gray-500 mt-1">At least 8 characters</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  required
+                  minLength={8}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false)
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+                    setPasswordMessage(null)
+                  }}
+                  className="flex-1 px-4 py-2 text-brown-dark border-2 border-brown-light rounded-lg hover:bg-brown-light/20 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors font-semibold"
+                >
+                  Change Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <UnsavedChangesDialog
+        isOpen={showUnsavedDialog}
+        onSave={handleSave}
+        onLeave={handleLeaveWithoutSaving}
+        onCancel={handleCancelDialog}
+        saving={saving}
+      />
+    </div>
+  )
+}
+

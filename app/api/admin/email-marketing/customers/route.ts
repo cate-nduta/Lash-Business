@@ -1,57 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { writeDataFile } from '@/lib/data-utils'
+import {
+  ManualSubscriber,
+  loadManualSubscribers,
+  loadSubscribers,
+  loadUnsubscribes,
+} from '@/lib/email-campaign-utils'
 
-interface Booking {
-  email: string
-  name: string
-  date: string
+interface ImportPayload {
+  subscribers: Array<{ email: string; name?: string; source?: string }>
 }
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
-    
-    const data = readDataFile<{ bookings: Booking[] }>('bookings.json')
-    const bookings = data.bookings || []
-    
-    // Group by email and aggregate data
-    const customerMap = new Map<string, {
-      email: string
-      name: string
-      totalBookings: number
-      lastBookingDate: string
-    }>()
+    await requireAdminAuth()
 
-    bookings.forEach(booking => {
-      const existing = customerMap.get(booking.email)
-      if (existing) {
-        existing.totalBookings += 1
-        const bookingDate = new Date(booking.date)
-        const lastDate = new Date(existing.lastBookingDate)
-        if (bookingDate > lastDate) {
-          existing.lastBookingDate = booking.date
-        }
-      } else {
-        customerMap.set(booking.email, {
-          email: booking.email,
-          name: booking.name,
-          totalBookings: 1,
-          lastBookingDate: booking.date,
-        })
-      }
-    })
+    const subscribers = await loadSubscribers()
+    const manualSubscribers = await loadManualSubscribers()
+    const unsubscribes = await loadUnsubscribes()
+    const unsubscribedSet = new Set(
+      unsubscribes
+        .filter((record) => record.unsubscribedAt)
+        .map((record) => record.email.toLowerCase())
+    )
 
-    const customers = Array.from(customerMap.values())
-      .sort((a, b) => new Date(b.lastBookingDate).getTime() - new Date(a.lastBookingDate).getTime())
+    const customers = subscribers
+      .map((subscriber) => ({
+        email: subscriber.email,
+        name: subscriber.name,
+        totalBookings: subscriber.totalBookings,
+        lastBookingDate: subscriber.lastBookingDate || null,
+        nextBookingDate: subscriber.nextBookingDate || null,
+        type: subscriber.totalBookings > 1 ? 'returning' : subscriber.totalBookings === 1 ? 'first-time' : 'imported',
+        unsubscribed: unsubscribedSet.has(subscriber.email.toLowerCase()),
+      }))
+      .sort((a, b) => {
+        const dateA = a.lastBookingDate ? new Date(a.lastBookingDate).getTime() : 0
+        const dateB = b.lastBookingDate ? new Date(b.lastBookingDate).getTime() : 0
+        return dateB - dateA
+      })
 
-    return NextResponse.json({ customers })
+    const manualOnly = manualSubscribers
+      .filter((subscriber) => !customers.find((customer) => customer.email === subscriber.email.toLowerCase()))
+      .map((subscriber) => ({
+        email: subscriber.email.toLowerCase(),
+        name: subscriber.name || 'Beautiful Soul',
+        totalBookings: 0,
+        lastBookingDate: null,
+        nextBookingDate: null,
+        type: 'imported',
+        unsubscribed: unsubscribedSet.has(subscriber.email.toLowerCase()),
+      }))
+
+    return NextResponse.json({ customers: [...customers, ...manualOnly] })
   } catch (error: any) {
-    if (error.status === 401) {
+    if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     console.error('Error fetching customers:', error)
     return NextResponse.json({ customers: [] }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await requireAdminAuth()
+    const body: ImportPayload = await request.json()
+
+    if (!body.subscribers || !Array.isArray(body.subscribers)) {
+      return NextResponse.json({ error: 'Invalid subscribers payload' }, { status: 400 })
+    }
+
+    const existing = await loadManualSubscribers()
+    const existingMap = new Map(existing.map((subscriber) => [subscriber.email.toLowerCase(), subscriber]))
+
+    const now = new Date().toISOString()
+    body.subscribers.forEach((subscriber) => {
+      if (!subscriber.email) return
+      const email = subscriber.email.toLowerCase().trim()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
+      existingMap.set(email, {
+        email,
+        name: subscriber.name?.trim() || 'Beautiful Soul',
+        source: subscriber.source || 'import',
+        createdAt: now,
+      })
+    })
+
+    const updated: ManualSubscriber[] = Array.from(existingMap.values())
+    await writeDataFile('email-subscribers.json', { subscribers: updated })
+
+    return NextResponse.json({ success: true, imported: body.subscribers.length })
+  } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    console.error('Error importing subscribers:', error)
+    return NextResponse.json({ error: 'Failed to import subscribers' }, { status: 500 })
   }
 }
 

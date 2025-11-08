@@ -1,0 +1,105 @@
+{
+  "currentTheme": "summer",
+  "themes": {
+    "default": {
+      "name": "Signature Blush",
+      "colors": {
+        "primary": "#733D26",
+        "primaryDark": "#4F2A1B",
+        "primaryLight": "#C78D7F",
+        "secondary": "#F9D0DE",
+        "secondaryDark": "#F4B0C9",
+        "accent": "#F790B2",
+        "background": "#FFF8FB",
+        "surface": "#FFFFFF",
+        "text": "#3B262F"
+      }
+    },
+    "summer": {
+      "name": "Coastal Sunset",
+      "colors": {
+        "primary": "#037F8C",
+        "primaryDark": "#026473",
+        "primaryLight": "#4FB7C6",
+        "secondary": "#F27979",
+        "secondaryDark": "#D86A6A",
+        "accent": "#FEBAED",
+        "background": "#E6FAFF",
+        "surface": "#FFFFFF",
+        "text": "#14454B"
+      }
+    },
+    "winter": {
+      "name": "Mulled Wine",
+      "colors": {
+        "primary": "#6B212C",
+        "primaryDark": "#4A141E",
+        "primaryLight": "#B75C6A",
+        "secondary": "#DCE0E8",
+        "secondaryDark": "#BBC3D1",
+        "accent": "#868859",
+        "background": "#F6F7FA",
+        "surface": "#FFFFFF",
+        "text": "#27363F"
+      }
+    },
+    "spring": {
+      "name": "Apricot Bloom",
+      "colors": {
+        "primary": "#E7AE75",
+        "primaryDark": "#B78052",
+        "primaryLight": "#F6DFB3",
+        "secondary": "#FAD6D3",
+        "secondaryDark": "#F2AEA6",
+        "accent": "#F28AA1",
+        "background": "#FFF8F2",
+        "surface": "#FFFFFF",
+        "text": "#5B3B28"
+      }
+    },
+    "fall": {
+      "name": "Berry Maple",
+      "colors": {
+        "primary": "#7B1D26",
+        "primaryDark": "#4C1208",
+        "primaryLight": "#CA99AB",
+        "secondary": "#E4CDDD",
+        "secondaryDark": "#C8AFC3",
+        "accent": "#F28AA1",
+        "background": "#FBF4F8",
+        "surface": "#FFFFFF",
+        "text": "#2F1A16"
+      }
+    },
+    "dark": {
+      "name": "Midnight Noir",
+      "colors": {
+        "primary": "#7A6CFF",
+        "primaryDark": "#5A4DCC",
+        "primaryLight": "#A69BFF",
+        "secondary": "#2F2840",
+        "secondaryDark": "#221D34",
+        "accent": "#F6B5FF",
+        "background": "#151321",
+        "surface": "#221D34",
+        "text": "#F8F7FF",
+        "onPrimary": "#FFFFFF",
+        "onSecondary": "#F8F7FF"
+      }
+    },
+    "rose_gold": {
+      "name": "Rose Gold Glam",
+      "colors": {
+        "primary": "#B76E79",
+        "primaryDark": "#8A5158",
+        "primaryLight": "#E4A5AD",
+        "secondary": "#FBE8E9",
+        "secondaryDark": "#F6C9CE",
+        "accent": "#FFD1DC",
+        "background": "#FFF9F9",
+        "surface": "#FFFFFF",
+        "text": "#3D1F23"
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "campaigns": [
+    {
+      "id": "welcome-series",
+      "name": "Welcome Series",
+      "enabled": true,
+      "trigger": "first_booking",
+      "emails": [
+        {
+          "dayOffset": 0,
+          "subject": "Welcome! Your Lash Journey Starts Here 💕",
+          "content": "<h2>Welcome to the Family!</h2><p>Thank you for booking with us! We're excited to give you beautiful lashes.</p>"
+        },
+        {
+          "dayOffset": 7,
+          "subject": "Lash Care Tips for Long-Lasting Results",
+          "content": "<h2>Keep Your Lashes Looking Perfect!</h2><p>Here are some tips to maintain your gorgeous lashes...</p>"
+        },
+        {
+          "dayOffset": 14,
+          "subject": "Time for Your Fill? Book Your Next Appointment!",
+          "content": "<h2>Ready for a Refresh?</h2><p>It's been 2 weeks! Book your fill to keep your lashes looking fabulous.</p>"
+        }
+      ]
+    },
+    {
+      "id": "re-engagement",
+      "name": "Re-engagement Series",
+      "enabled": true,
+      "trigger": "no_booking_90_days",
+      "emails": [
+        {
+          "dayOffset": 0,
+          "subject": "We Miss You! Come Back for Beautiful Lashes 💕",
+          "content": "<h2>It's Been a While!</h2><p>We'd love to see you again. Here's 15% off your next visit!</p>"
+        },
+        {
+          "dayOffset": 14,
+          "subject": "Last Chance: Your Special Offer Expires Soon!",
+          "content": "<h2>Don't Miss Out!</h2><p>Your 15% discount expires in 7 days. Book now!</p>"
+        }
+      ]
+    }
+  ]
+}
+

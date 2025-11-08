@@ -53,11 +53,22 @@ interface MonthlyStats {
   profit: number
 }
 
+interface YearlyStats {
+  year: string
+  servicesCount: number
+  totalRevenue: number
+  deposits: number
+  balance: number
+  expenses: number
+  profit: number
+}
+
 export default function AdminAnalytics() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('day')
+  const [hasAccess, setHasAccess] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day')
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0],
@@ -65,12 +76,17 @@ export default function AdminAnalytics() {
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/admin/auth')
+    fetch('/api/admin/current-user')
       .then((res) => res.json())
       .then((data) => {
         if (!data.authenticated) {
           router.push('/admin/login')
+        } else if (data.role !== 'owner') {
+          // Non-owner admins can't access analytics
+          setHasAccess(false)
+          setLoading(false)
         } else {
+          setHasAccess(true)
           loadData()
         }
       })
@@ -297,6 +313,60 @@ export default function AdminAnalytics() {
       })
   }
 
+  const calculateYearlyStats = (): YearlyStats[] => {
+    const filteredBookings = filterBookingsByDateRange(bookings)
+    const filteredExpenses = filterExpensesByDateRange(expenses)
+    const yearlyMap = new Map<string, YearlyStats>()
+
+    filteredBookings.forEach(booking => {
+      const date = new Date(booking.date)
+      const year = date.getFullYear().toString()
+
+      const existing = yearlyMap.get(year) || {
+        year: year,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        profit: 0,
+      }
+
+      existing.servicesCount += 1
+      existing.totalRevenue += booking.finalPrice
+      existing.deposits += booking.deposit
+      existing.balance += (booking.finalPrice - booking.deposit)
+
+      yearlyMap.set(year, existing)
+    })
+
+    filteredExpenses.forEach(expense => {
+      const date = new Date(expense.date)
+      const year = date.getFullYear().toString()
+
+      const existing = yearlyMap.get(year) || {
+        year: year,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        profit: 0,
+      }
+
+      existing.expenses += expense.amount
+      yearlyMap.set(year, existing)
+    })
+
+    // Calculate profit for all entries
+    yearlyMap.forEach((stat) => {
+      stat.profit = stat.totalRevenue - stat.expenses
+    })
+
+    return Array.from(yearlyMap.values())
+      .sort((a, b) => parseInt(b.year) - parseInt(a.year))
+  }
+
   const getTotalStats = () => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
@@ -327,6 +397,26 @@ export default function AdminAnalytics() {
     return `KSH ${amount.toLocaleString()}`
   }
 
+const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | YearlyStats) => {
+  if ('date' in stat) {
+    return new Date(stat.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  if ('week' in stat) {
+    return stat.week
+  }
+
+  if ('year' in stat) {
+    return stat.year
+  }
+
+  return stat.month
+}
+
   if (loading) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
@@ -335,12 +425,53 @@ export default function AdminAnalytics() {
     )
   }
 
+  if (!hasAccess) {
+    return (
+      <div className="min-h-screen bg-baby-pink-light py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <Link 
+              href="/admin/dashboard" 
+              className="text-brown hover:text-brown-dark"
+            >
+              ← Back to Dashboard
+            </Link>
+          </div>
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <div className="text-6xl mb-4">🔒</div>
+            <h1 className="text-3xl font-display text-brown-dark mb-4">Access Restricted</h1>
+            <p className="text-brown-dark mb-6">
+              This page is only accessible to the business owner.
+            </p>
+            <p className="text-sm text-gray-600">
+              If you need access to analytics and reports, please contact the business owner.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const dailyStats = calculateDailyStats()
   const weeklyStats = calculateWeeklyStats()
   const monthlyStats = calculateMonthlyStats()
+  const yearlyStats = calculateYearlyStats()
   const totalStats = getTotalStats()
 
-  const currentStats = selectedPeriod === 'day' ? dailyStats : selectedPeriod === 'week' ? weeklyStats : monthlyStats
+  const currentStats = selectedPeriod === 'day' ? dailyStats : selectedPeriod === 'week' ? weeklyStats : selectedPeriod === 'month' ? monthlyStats : yearlyStats
+
+  // Debug: Log data to console
+  console.log('Analytics Debug:', {
+    totalBookings: bookings.length,
+    totalExpenses: expenses.length,
+    dateRange,
+    selectedPeriod,
+    dailyStatsCount: dailyStats.length,
+    weeklyStatsCount: weeklyStats.length,
+    monthlyStatsCount: monthlyStats.length,
+    yearlyStatsCount: yearlyStats.length,
+    currentStatsCount: currentStats.length,
+  })
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
@@ -416,6 +547,16 @@ export default function AdminAnalytics() {
               >
                 Monthly
               </button>
+              <button
+                onClick={() => setSelectedPeriod('year')}
+                className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+                  selectedPeriod === 'year'
+                    ? 'bg-brown-dark text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Yearly
+              </button>
             </div>
           </div>
 
@@ -453,7 +594,7 @@ export default function AdminAnalytics() {
         {/* Detailed Stats Table */}
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h2 className="text-2xl font-display text-brown-dark mb-6">
-            {selectedPeriod === 'day' ? 'Daily' : selectedPeriod === 'week' ? 'Weekly' : 'Monthly'} Breakdown
+            {selectedPeriod === 'day' ? 'Daily' : selectedPeriod === 'week' ? 'Weekly' : selectedPeriod === 'month' ? 'Monthly' : 'Yearly'} Breakdown
           </h2>
 
           {currentStats.length === 0 ? (
@@ -466,7 +607,7 @@ export default function AdminAnalytics() {
                 <thead>
                   <tr className="border-b-2 border-brown-light">
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">
-                      {selectedPeriod === 'day' ? 'Date' : selectedPeriod === 'week' ? 'Week' : 'Month'}
+                      {selectedPeriod === 'day' ? 'Date' : selectedPeriod === 'week' ? 'Week' : selectedPeriod === 'month' ? 'Month' : 'Year'}
                     </th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Services</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Revenue</th>
@@ -480,16 +621,7 @@ export default function AdminAnalytics() {
                   {currentStats.map((stat, index) => (
                     <tr key={index} className="border-b border-brown-light/30 hover:bg-pink-light/20">
                       <td className="py-3 px-4 text-brown font-medium">
-                        {selectedPeriod === 'day' 
-                          ? new Date(stat.date).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric', 
-                              year: 'numeric' 
-                            })
-                          : selectedPeriod === 'week'
-                          ? stat.week
-                          : stat.month
-                        }
+                        {formatPeriodLabel(stat)}
                       </td>
                       <td className="py-3 px-4 text-brown font-semibold">{stat.servicesCount}</td>
                       <td className="py-3 px-4 text-green-700 font-semibold">{formatCurrency(stat.totalRevenue)}</td>

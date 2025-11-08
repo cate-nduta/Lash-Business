@@ -17,11 +17,11 @@ interface EmailCampaign {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
-    const data = readDataFile<{ campaigns: EmailCampaign[] }>('email-campaigns.json')
+    await requireAdminAuth()
+    const data = await readDataFile<{ campaigns: EmailCampaign[] }>('email-campaigns.json', { campaigns: [] })
     return NextResponse.json({ campaigns: data.campaigns || [] })
   } catch (error: any) {
-    if (error.status === 401) {
+    if (error.status === 401 || error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     console.error('Error fetching campaigns:', error)

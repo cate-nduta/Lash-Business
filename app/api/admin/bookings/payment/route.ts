@@ -27,12 +27,31 @@ interface Booking {
     date: string
     mpesaCheckoutRequestID?: string
   }>
+  status: 'confirmed' | 'cancelled' | 'completed'
+  calendarEventId?: string | null
+  cancelledAt?: string | null
+  cancelledBy?: 'admin' | 'client' | null
+  cancellationReason?: string | null
+  refundStatus?: 'not_required' | 'not_applicable' | 'pending' | 'refunded' | 'retained'
+  refundAmount?: number | null
+  refundNotes?: string | null
+  rescheduledAt?: string | null
+  rescheduledBy?: 'admin' | 'client' | null
+  rescheduleHistory?: Array<{
+    fromDate: string
+    fromTimeSlot: string
+    toDate: string
+    toTimeSlot: string
+    rescheduledAt: string
+    rescheduledBy: 'admin' | 'client'
+    notes?: string | null
+  }>
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
-    
+    await requireAdminAuth()
+
     const body = await request.json()
     const { bookingId, amount, paymentMethod, mpesaCheckoutRequestID } = body
 
@@ -43,8 +62,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For M-Pesa, amount can be 0 if we're just saving the checkout request ID
-    // The actual amount will be updated when the callback is received
     if (paymentMethod === 'cash' && (!amount || amount <= 0)) {
       return NextResponse.json(
         { error: 'Amount is required for cash payments' },
@@ -52,11 +69,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const data = readDataFile<{ bookings: Booking[] }>('bookings.json')
+    const data = await readDataFile<{ bookings: Booking[] }>('bookings.json', { bookings: [] })
     const bookings = data.bookings || []
-    
+
     const bookingIndex = bookings.findIndex(b => b.id === bookingId)
-    
+
     if (bookingIndex === -1) {
       return NextResponse.json(
         { error: 'Booking not found' },
@@ -65,20 +82,17 @@ export async function POST(request: NextRequest) {
     }
 
     const booking = bookings[bookingIndex]
-    
-    // Initialize payments array if it doesn't exist
+
     if (!booking.payments) {
       booking.payments = []
     }
 
-    // For M-Pesa with checkout request ID, check if it already exists
     if (mpesaCheckoutRequestID) {
       const existingPayment = booking.payments.find(
         (p: any) => p.mpesaCheckoutRequestID === mpesaCheckoutRequestID
       )
-      
+
       if (existingPayment) {
-        // Payment already exists, just return success
         return NextResponse.json({
           success: true,
           message: 'Payment request already recorded',
@@ -87,22 +101,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Add payment record
     booking.payments.push({
-      amount: amount || 0, // Will be updated for M-Pesa when callback is received
+      amount: amount || 0,
       method: paymentMethod,
       date: new Date().toISOString(),
       mpesaCheckoutRequestID: mpesaCheckoutRequestID || undefined,
     })
 
-    // Update deposit only for cash payments (M-Pesa will be updated via callback)
     if (paymentMethod === 'cash' && amount > 0) {
       booking.deposit = (booking.deposit || 0) + amount
     }
 
-    // Save updated booking
     bookings[bookingIndex] = booking
-    writeDataFile('bookings.json', { bookings })
+    await writeDataFile('bookings.json', { bookings })
 
     return NextResponse.json({
       success: true,

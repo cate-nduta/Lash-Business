@@ -8,25 +8,25 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Custom Color Palette
-        'brown': '#733D26',        // Dark brown - text, borders
-        'brown-dark': '#5A2F1D',   // Darker brown - accents, form backgrounds
-        'brown-light': '#AF7F73',  // Muted rose/brown - accents
-        'brown-lighter': '#D4B5A8', // Very light brown - backgrounds
-        'pink-light': '#F9D0DE',   // Light pink - backgrounds
-        'pink': '#F8B0C8',         // Medium pink - buttons, highlights
-        'pink-dark': '#F790B2',    // Brighter pink - primary actions
-        // Legacy support (mapped to new colors)
-        'red': '#F790B2',
-        'red-light': '#F9D0DE',
-        'red-dark': '#F8B0C8',
-        'pink-dark-text': '#733D26',
-        // Neutral colors
+        // Theme-based colors (CSS variables)
+        'brown': 'var(--color-primary)',
+        'brown-dark': 'var(--color-primary-dark)',
+        'brown-light': 'var(--color-primary-light)',
+        'brown-lighter': 'var(--color-primary-light)',
+        'pink-light': 'var(--color-secondary)',
+        'pink': 'var(--color-secondary-dark)',
+        'pink-dark': 'var(--color-accent)',
+        // Legacy support (mapped to theme colors)
+        'red': 'var(--color-accent)',
+        'red-light': 'var(--color-secondary)',
+        'red-dark': 'var(--color-secondary-dark)',
+        'pink-dark-text': 'var(--color-primary)',
+        // Background colors
+        'baby-pink': 'var(--color-background)',
+        'baby-pink-light': 'var(--color-background)',
+        // Neutral colors (keep static)
         'beige': '#F5F1EB',
         'beige-light': '#FAF8F5',
-        // Background colors
-        'baby-pink': '#F9D0DE',
-        'baby-pink-light': '#F9D0DE',
       },
       fontFamily: {
         'display': ['Playfair Display', 'serif'],

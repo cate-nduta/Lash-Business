@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+
+const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { credentials: 'include', ...init })
 
 export default function AdminContact() {
   const [contact, setContact] = useState({
@@ -12,7 +16,6 @@ export default function AdminContact() {
     instagram: '',
     instagramUrl: '',
     location: '',
-    mobileServiceNote: '',
   })
   const [originalContact, setOriginalContact] = useState({
     phone: '',
@@ -20,7 +23,6 @@ export default function AdminContact() {
     instagram: '',
     instagramUrl: '',
     location: '',
-    mobileServiceNote: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -31,24 +33,42 @@ export default function AdminContact() {
   const hasUnsavedChanges = JSON.stringify(contact) !== JSON.stringify(originalContact)
 
   useEffect(() => {
-    fetch('/api/admin/auth')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
-          router.push('/admin/login')
-        } else {
-          loadContact()
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await authorizedFetch('/api/admin/current-user')
+        if (!response.ok) {
+          throw new Error('Unauthorized')
         }
-      })
+        const data = await response.json()
+        if (!isMounted) return
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+        loadContact()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   const loadContact = async () => {
     try {
-      const response = await fetch('/api/admin/contact')
+      const response = await authorizedFetch('/api/admin/contact')
       if (response.ok) {
         const data = await response.json()
-        setContact(data)
-        setOriginalContact(data)
+        const { mobileServiceNote, ...rest } = data || {}
+        setContact(rest)
+        setOriginalContact(rest)
       }
     } catch (error) {
       console.error('Error loading contact:', error)
@@ -110,7 +130,7 @@ export default function AdminContact() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/admin/contact', {
+      const response = await authorizedFetch('/api/admin/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(contact),
@@ -163,14 +183,13 @@ export default function AdminContact() {
           </button>
         </div>
 
+        {/* Toast Notification */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {message.text}
-          </div>
+          <Toast
+            message={message.text}
+            type={message.type}
+            onClose={() => setMessage(null)}
+          />
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8">
@@ -232,29 +251,15 @@ export default function AdminContact() {
 
             <div>
               <label className="block text-sm font-medium text-brown-dark mb-2">
-                Location/Service Area
+                Studio Location
               </label>
               <input
                 type="text"
                 value={contact.location}
                 onChange={(e) => setContact({ ...contact, location: e.target.value })}
-                placeholder="Nairobi environs"
+                placeholder="LashDiary Studio, Nairobi, Kenya"
                 className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Mobile Service Note
-              </label>
-              <input
-                type="text"
-                value={contact.mobileServiceNote}
-                onChange={(e) => setContact({ ...contact, mobileServiceNote: e.target.value })}
-                placeholder="Mobile service available within Nairobi environs • We come to you at no extra cost"
-                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-              />
-              <p className="text-xs text-gray-500 mt-1">This appears on the homepage</p>
             </div>
           </div>
         </div>

@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import Logo from './Logo'
 
 export default function Footer() {
   return (
@@ -6,9 +9,9 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="text-xl font-display text-brown font-bold mb-4">
-              LashDiary
-            </h3>
+            <div className="mb-4">
+              <Logo className="text-xl font-display text-brown font-bold" />
+            </div>
             <p className="text-gray-600 text-sm">
               Premium lash extensions and beauty services. 
               Experience luxury in every detail.
@@ -68,7 +71,11 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 pt-8 border-t border-brown-light text-center text-sm text-gray-600">
-          <p>&copy; {new Date().getFullYear()} LashDiary. All rights reserved.</p>
+          <div className="flex items-center justify-center gap-1">
+            <span>&copy; {new Date().getFullYear()}</span>
+            <Logo className="inline text-sm font-display text-brown font-bold" />
+            <span>. All rights reserved.</span>
+          </div>
         </div>
       </div>
     </footer>

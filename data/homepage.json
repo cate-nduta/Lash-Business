@@ -2,13 +2,14 @@
   "hero": {
     "title": "LashDiary",
     "subtitle": "Luxury Lash Extensions & Beauty Services",
-    "mobileServiceNote": "Mobile service available within Nairobi environs • We come to you at no extra cost"
+    "highlight": "Visit our Nairobi studio for a bespoke lash experience.",
+    "badge": "Nairobi Studio Experience"
   },
   "intro": {
     "title": "Welcome to LashDiary",
-    "paragraph1": "Experience the artistry of premium lash extensions in the comfort of your own home! Our mobile service brings expert technicians directly to you within Nairobi environs. No need to worry about transport fees - we've got you covered!",
+    "paragraph1": "Experience the artistry of premium lash extensions at our Nairobi studio. Settle into a serene space designed to pamper you while we craft a look that suits your lifestyle.",
     "paragraph2": "From classic to mega volume, we offer a full range of lash services tailored to your unique style. Book your appointment today and let's make your lashes absolutely gorgeous!",
-    "features": "🏠 Mobile Service | 📍 Nairobi Environs | 💰 No Transport Fees"
+    "features": "🏢 Nairobi Studio | 🕒 Flexible Scheduling | 💖 Personalized Aftercare"
   },
   "features": [
     {
@@ -20,13 +21,13 @@
       "description": "Only the finest quality lash extensions and beauty products. The best for the best!"
     },
     {
-      "title": "Mobile Service",
-      "description": "We come to you! Enjoy professional lash services in the comfort of your home. Available within Nairobi environs with no transport fees."
+      "title": "Relaxing Studio Experience",
+      "description": "Visit our beautifully appointed studio in Nairobi for a calm, hygienic environment and personalized attention from start to finish."
     }
   ],
   "cta": {
     "title": "Ready to Transform Your Look?",
-    "description": "Book your appointment today and experience luxury lash services in the comfort of your home!",
+    "description": "Book your appointment today and enjoy luxury lash services at our Nairobi studio!",
     "buttonText": "Book Now!"
   }
 }

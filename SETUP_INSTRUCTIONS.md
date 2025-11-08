@@ -68,6 +68,13 @@ GOOGLE_CALENDAR_ID=primary
 GOOGLE_CALENDAR_EMAIL=catherinenkuria@gmail.com
 CALENDAR_EMAIL=catherinenkuria@gmail.com
 
+# Supabase (optional – enables the hosted data layer)
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Studio location (used in booking emails & UI)
+NEXT_PUBLIC_STUDIO_LOCATION="LashDiary Studio, Nairobi, Kenya"
+
 # Base URL (for production, use your domain)
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
@@ -143,6 +150,34 @@ The system sends two emails:
 2. **Business Owner Notification**: Sent to you with all booking information
 
 Both emails are beautifully formatted with your brand colors (pink and red) and include all appointment details.
+
+## Supabase Data Layer (Production Ready)
+
+By default, the app reads and writes JSON files from the `data/` directory. To enable the hosted, multi-user data layer:
+
+### 1. Provision Supabase Resources
+1. Create a Supabase project at [supabase.com](https://supabase.com/)
+2. In the SQL editor, run the migration in `supabase/migrations/20251107_create_app_documents_table.sql` (or add it to your Supabase CLI migrations and run `supabase db push`)
+
+This sets up a simple `app_documents` table that stores each JSON document keyed by filename.
+
+### 2. Seed Supabase with Existing Data
+1. Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are defined in your environment (service role key is required locally; never expose it client-side)
+2. Run:
+
+```bash
+npm run seed:supabase
+```
+
+The script reads every `.json` file in the `data/` folder and upserts it into the `app_documents` table.
+
+### 3. Switch the App to Supabase Mode
+Once the environment variables are present (locally or on your host), `lib/data-utils.ts` automatically detects Supabase and will read/write through the hosted table instead of the filesystem. Remove or archive the JSON files after verifying the hosted data works end-to-end.
+
+### 4. Recommended Hardening
+- Add row-level security (RLS) policies that match your access model
+- Create dedicated service/API keys with limited scopes if exposing Supabase to edge functions or API routes
+- Back up the `app_documents` table regularly using Supabase backups or the CLI
 
 ## Production Deployment
 

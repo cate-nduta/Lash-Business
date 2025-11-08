@@ -31,16 +31,19 @@ export default function PromoBanner() {
   const message = `🎉 Special Offer: ${discountPercentage}% OFF for First-Time Clients! Book your appointment today and save! 🎉`
   
   return (
-    <div className="bg-brown-dark text-white py-1.5 overflow-hidden relative w-full z-50">
+    <div
+      className="py-1.5 overflow-hidden relative w-full z-50 bg-[var(--color-primary)] text-white border-b border-[var(--color-primary-dark)]/25 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+      style={{ color: '#fff' }}
+    >
       <div className="flex animate-scroll whitespace-nowrap">
         {/* Duplicate content for seamless loop */}
         <div className="flex items-center gap-6 shrink-0">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center gap-6 shrink-0">
-              <span className="text-xs md:text-sm font-medium">
+              <span className="text-xs md:text-sm font-semibold tracking-wide uppercase text-white">
                 {message}
               </span>
-              <span className="text-pink-light text-sm">•</span>
+              <span className="text-sm text-white">•</span>
             </div>
           ))}
         </div>
@@ -48,10 +51,10 @@ export default function PromoBanner() {
         <div className="flex items-center gap-6 shrink-0">
           {[...Array(3)].map((_, i) => (
             <div key={`dup-${i}`} className="flex items-center gap-6 shrink-0">
-              <span className="text-xs md:text-sm font-medium">
+              <span className="text-xs md:text-sm font-semibold tracking-wide uppercase text-white">
                 {message}
               </span>
-              <span className="text-pink-light text-sm">•</span>
+              <span className="text-sm text-white">•</span>
             </div>
           ))}
         </div>

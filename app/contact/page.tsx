@@ -9,7 +9,6 @@ interface ContactData {
   instagram: string
   instagramUrl: string
   location: string
-  mobileServiceNote: string
 }
 
 export default function Contact() {
@@ -40,8 +39,7 @@ export default function Contact() {
     email: 'catherinenkuria@gmail.com',
     instagram: '@lashdiary',
     instagramUrl: 'https://instagram.com/lashdiary',
-    location: 'Nairobi environs',
-    mobileServiceNote: 'Mobile service available within Nairobi environs • We come to you at no extra cost',
+    location: 'LashDiary Studio, Nairobi, Kenya',
   }
 
   return (
@@ -58,7 +56,7 @@ export default function Contact() {
             Get In Touch
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            We're a mobile service! We come to you within Nairobi environs. Get in touch to book your appointment!
+            Visit us at our Nairobi studio or reach out with any questions. We can’t wait to welcome you and curate a stunning lash look.
           </p>
         </div>
 
@@ -74,10 +72,10 @@ export default function Contact() {
             <div className="space-y-5">
               <div className="bg-pink-light/40 border-2 border-brown-light rounded-lg p-4">
                 <p className="text-brown-dark font-bold text-sm mb-1">
-                  🚗 Mobile Service Available
+                  📍 Studio Location
                 </p>
                 <p className="text-gray-700 text-xs">
-                  We come to you! Available within Nairobi environs. No transport fees.
+                  {contact.location}
                 </p>
               </div>
 
@@ -174,7 +172,7 @@ export default function Contact() {
                 Ready to Book?
               </h2>
               <p className="text-gray-700 mb-6 text-sm">
-                Book your mobile lash service appointment today! We come to you within Nairobi environs.
+                Reserve your studio appointment today and let us pamper you with a luxury lash experience in Nairobi.
               </p>
               <a
                 href="/booking"

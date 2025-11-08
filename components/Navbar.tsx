@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import Logo from './Logo'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -15,13 +16,11 @@ export default function Navbar() {
   ]
 
   return (
-    <nav className="bg-white/95 backdrop-blur-sm shadow-soft sticky top-0 z-50">
+    <nav className="bg-white shadow-soft w-full relative z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link href="/" className="flex items-center space-x-2 hover:scale-105 transition-transform">
-            <h1 className="text-2xl font-display text-brown font-bold">
-              LashDiary
-            </h1>
+            <Logo />
           </Link>
 
           {/* Desktop Navigation */}
@@ -30,7 +29,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-gray-700 hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform"
+                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform"
               >
                 {link.label}
               </Link>
@@ -39,7 +38,7 @@ export default function Navbar() {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-gray-700 focus:outline-none"
+            className="md:hidden text-brown-dark focus:outline-none"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
@@ -68,7 +67,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="block text-gray-700 hover:text-brown transition-colors duration-300 font-medium py-2"
+                className="block text-brown-dark hover:text-brown transition-colors duration-300 font-medium py-2"
                 onClick={() => setIsOpen(false)}
               >
                 {link.label}

@@ -1,0 +1,19 @@
+{
+  "invites": [
+    {
+      "id": "invite-1762518389113-t3j2s3u",
+      "email": "danielkinyanjuikuria@gmail.com",
+      "name": "dan",
+      "role": "admin",
+      "tokenHash": "",
+      "expiresAt": "2025-11-10T12:26:50.255Z",
+      "createdAt": "2025-11-07T12:26:29.058Z",
+      "invitedBy": "owner",
+      "status": "revoked",
+      "lastTokenIssuedAt": "2025-11-07T12:26:50.255Z",
+      "lastSentAt": null,
+      "revokedAt": "2025-11-07T14:39:34.016Z",
+      "revokedBy": "owner"
+    }
+  ]
+}

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
       // Try to find and update the booking
       try {
-        const data = readDataFile<{ bookings: any[] }>('bookings.json')
+        const data = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
         const bookings = data.bookings || []
         
         // Find booking by checkoutRequestID (could be in initial deposit or balance payment)
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
             // Save updated booking
             bookings[bookingIndex] = booking
-            writeDataFile('bookings.json', { bookings })
+            await writeDataFile('bookings.json', { bookings })
 
             console.log(`✅ Payment recorded for booking ${booking.id}: KSH ${amountInKSH.toLocaleString()}`)
           } else {

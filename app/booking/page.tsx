@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
 import CalendarPicker from '@/components/CalendarPicker'
 
+export const dynamic = 'force-dynamic'
+
 interface TimeSlot {
   value: string
   label: string
@@ -27,6 +29,8 @@ export default function Booking() {
   const [serviceOptions, setServiceOptions] = useState<string[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
 
+  const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -34,7 +38,7 @@ export default function Booking() {
     service: '',
     date: '',
     timeSlot: '',
-    location: '',
+    notes: '',
   })
 
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([])
@@ -105,21 +109,33 @@ export default function Booking() {
   const [discounts, setDiscounts] = useState<{
     firstTimeClientDiscount: { enabled: boolean; percentage: number }
     depositPercentage: number
-  }>({
-    firstTimeClientDiscount: { enabled: true, percentage: 10 },
-    depositPercentage: 35,
-  })
+  } | null>(null)
+  const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
   useEffect(() => {
-    fetch('/api/discounts')
+    fetch('/api/discounts', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        setDiscounts(data)
+        const normalized = {
+          firstTimeClientDiscount: {
+            enabled: Boolean(data?.firstTimeClientDiscount?.enabled),
+            percentage: Number(data?.firstTimeClientDiscount?.percentage ?? 0),
+          },
+          depositPercentage: Number(data?.depositPercentage ?? 0),
+        }
+        setDiscounts(normalized)
       })
       .catch((error) => {
         console.error('Error loading discounts:', error)
       })
+      .finally(() => {
+        setDiscountsLoaded(true)
+      })
   }, [])
+
+  const firstTimeDiscountEnabled = discounts?.firstTimeClientDiscount?.enabled ?? false
+  const firstTimeDiscountPercentage = discounts?.firstTimeClientDiscount?.percentage ?? 0
+  const depositPercentage = discounts?.depositPercentage ?? 0
 
   // Load services data from API
   useEffect(() => {
@@ -249,8 +265,8 @@ export default function Booking() {
     let discountType: 'first-time' | 'promo' | null = null
 
     // First-time client discount (takes priority)
-    if (isFirstTimeClient === true && discounts.firstTimeClientDiscount.enabled) {
-      const discountPercentage = discounts.firstTimeClientDiscount.percentage
+    if (isFirstTimeClient === true && firstTimeDiscountEnabled) {
+      const discountPercentage = firstTimeDiscountPercentage
       discount = Math.round(originalPrice * (discountPercentage / 100))
       discountType = 'first-time'
     }
@@ -270,7 +286,7 @@ export default function Booking() {
     }
 
     const finalPrice = Math.max(0, originalPrice - discount)
-    const deposit = Math.round(finalPrice * (discounts.depositPercentage / 100))
+    const deposit = Math.round(finalPrice * (depositPercentage / 100))
 
     return {
       originalPrice,
@@ -413,7 +429,7 @@ export default function Booking() {
     setSubmitStatus({ type: null, message: '' })
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -512,6 +528,7 @@ export default function Booking() {
           },
           body: JSON.stringify({
             ...formData,
+            location: STUDIO_LOCATION,
             isFirstTimeClient: isFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
             discount: pricingDetails.discount,
@@ -587,7 +604,7 @@ export default function Booking() {
         setSubmitStatus({
           type: 'success',
           message: '🎉 Appointment Booked Successfully!',
-          details: `${data.message || 'Your appointment has been confirmed.'} ${emailStatus}`,
+          details: `${data.message || 'Your appointment has been confirmed.'} ${emailStatus} If the email isn't in your inbox within a few minutes, please check your spam or promotions folder and mark it as not spam.`,
         })
         
         // Reset form
@@ -598,7 +615,7 @@ export default function Booking() {
           service: '',
           date: '',
           timeSlot: '',
-          location: '',
+          notes: '',
         })
         setTimeSlots([])
         
@@ -658,23 +675,24 @@ export default function Booking() {
             Book Your Appointment
           </h1>
           <p className="text-xl text-gray-700 max-w-2xl mx-auto leading-relaxed mb-4">
-            Schedule your mobile lash service with ease! We come to you within Nairobi environs. 
-            Select a date and time, then fill out the form below. Let's make you gorgeous!
+            Schedule your luxury studio appointment with ease. Select a date and time below, share your contact details, and we’ll prepare a bespoke lash experience waiting for you at {STUDIO_LOCATION}.
           </p>
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 max-w-2xl mx-auto mb-6 rounded-r-lg">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-semibold text-yellow-800">
-                  A {discounts.depositPercentage}% deposit is required to secure your booking
-                </p>
+          {discountsLoaded && depositPercentage > 0 && (
+            <div className="bg-white border-l-4 border-[var(--color-accent)]/80 p-5 max-w-2xl mx-auto mb-6 rounded-r-xl shadow-md">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-[var(--color-accent)]" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-base font-semibold text-black">
+                    A {depositPercentage}% deposit is required to secure your booking.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Calendar Picker */}
@@ -789,26 +807,25 @@ export default function Booking() {
               />
             </div>
 
-            {/* Location Field */}
+            {/* Notes Field */}
             <div>
               <label
-                htmlFor="location"
+                htmlFor="notes"
                 className="block text-sm font-semibold text-brown-dark mb-2"
               >
-                Location/Address * (For mobile service)
+                Special Notes / Instructions (Optional)
               </label>
-              <input
-                type="text"
-                id="location"
-                name="location"
-                required
-                value={formData.location}
+              <textarea
+                id="notes"
+                name="notes"
+                rows={4}
+                value={formData.notes}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
-                placeholder="e.g., Westlands, ABC Apartments, Block 3, Unit 5, Near ABC Mall"
+                placeholder="Any special preferences, sensitivity notes, or other information you'd like us to know..."
               />
               <p className="mt-2 text-sm text-brown-dark/70">
-                Please provide a detailed address including area, building name, apartment/unit number, and nearby landmarks. This helps us locate you easily and avoid any miscommunication.
+                Share any additional information that will help us provide the best service (e.g., building access codes, where to park, specific preferences, etc.)
               </p>
             </div>
 
@@ -925,10 +942,10 @@ export default function Booking() {
                       Checking eligibility for first-time client discount...
                     </div>
                   )}
-                  {isFirstTimeClient === true && discounts.firstTimeClientDiscount.enabled && (
+                  {discountsLoaded && isFirstTimeClient === true && firstTimeDiscountEnabled && (
                     <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <p className="text-sm text-green-800 font-semibold">
-                        🎉 You qualify for our {discounts.firstTimeClientDiscount.percentage}% first-time client discount!
+                        🎉 You qualify for our {firstTimeDiscountPercentage}% first-time client discount!
                       </p>
                       <p className="text-xs text-green-700 mt-1">
                         First-time clients cannot use promo codes.
@@ -951,7 +968,7 @@ export default function Booking() {
                       <>
                         {pricing.discountType === 'first-time' && (
                           <div className="flex justify-between items-center text-green-700">
-                            <span className="font-semibold">First-Time Client Discount ({discounts.firstTimeClientDiscount.percentage}%):</span>
+                            <span className="font-semibold">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>
                             <span className="font-bold">- KSH {pricing.discount.toLocaleString()}</span>
                           </div>
                         )}
@@ -974,7 +991,7 @@ export default function Booking() {
                       </>
                     )}
                     <div className="flex justify-between items-center pt-2 border-t border-brown-light/50">
-                      <span className="text-brown-dark font-semibold">Required Deposit ({discounts.depositPercentage}%):</span>
+                      <span className="text-brown-dark font-semibold">Required Deposit ({depositPercentage}%):</span>
                       <span className="text-brown-dark font-bold text-lg">KSH {depositAmount.toLocaleString()}</span>
                     </div>
                   </div>
@@ -1044,7 +1061,7 @@ export default function Booking() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || loadingDates || loadingSlots || !formData.date || !formData.timeSlot || !formData.location || !formData.service || mpesaStatus.loading}
+              disabled={loading || loadingDates || loadingSlots || !formData.date || !formData.timeSlot || !formData.service || mpesaStatus.loading}
               className="w-full bg-brown-dark hover:bg-brown text-white font-semibold px-8 py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading || mpesaStatus.loading ? 'Processing...' : 'Book Appointment & Pay Deposit'}
@@ -1150,7 +1167,7 @@ export default function Booking() {
             {/* Message */}
             <div className="bg-brown-light/20 border-l-4 border-brown-dark p-4 rounded-lg mb-6">
               <p className="text-brown-dark/80 text-sm">
-                A confirmation email has been sent to your email address. Please check your inbox and follow the important reminders.
+                A confirmation email has been sent to your email address. Please check your inbox and follow the important reminders. If you don't see it within a few minutes, check your spam or promotions folder and mark it as “Not spam” so future updates land in your inbox.
               </p>
             </div>
 

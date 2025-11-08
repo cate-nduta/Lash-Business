@@ -124,34 +124,34 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-soft p-6">
+      <div className="bg-[var(--color-surface)] rounded-3xl shadow-soft p-6 border border-[var(--color-text)]/10">
         <div className="text-center text-gray-500">Loading calendar...</div>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-soft p-6">
+    <div className="bg-[var(--color-surface)] rounded-3xl shadow-soft p-6 border border-[var(--color-text)]/10">
       {/* Month Navigation */}
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={goToPreviousMonth}
-          className="p-2 hover:bg-pink-light rounded-lg transition-all transform hover:scale-110 hover:-rotate-12"
+          className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:-rotate-12"
           aria-label="Previous month"
         >
-          <svg className="w-5 h-5 text-brown" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h3 className="text-xl font-display text-brown font-semibold">
+        <h3 className="text-xl font-display text-[var(--color-text)] font-semibold">
           {monthNames[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </h3>
         <button
           onClick={goToNextMonth}
-          className="p-2 hover:bg-pink-light rounded-lg transition-all transform hover:scale-110 hover:rotate-12"
+          className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:rotate-12"
           aria-label="Next month"
         >
-          <svg className="w-5 h-5 text-brown" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -160,7 +160,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
       {/* Day Headers */}
       <div className="grid grid-cols-7 gap-2 mb-2">
         {dayNames.map((day) => (
-          <div key={day} className="text-center text-sm font-semibold text-gray-600 py-2">
+          <div key={day} className="text-center text-sm font-semibold text-[var(--color-text)] py-2">
             {day}
           </div>
         ))}
@@ -184,37 +184,42 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const isSundayDay = isSunday(date)
           const isFullyBookedDate = isFullyBooked(date)
           const isToday = date.toDateString() === new Date().toDateString()
-          
           // For Sundays, they're available if not past and not fully booked
           // For other days, check if they're in the availableDates array
           const isSundayAvailable = isSundayDay && !isPast && !isFullyBookedDate
           const isAvailable = isDateAvailable(date)
+          const isDisabledSaturday = isSaturdayDay && (!saturdayEnabled || !isAvailable)
           const isActuallyAvailable = isSundayAvailable || (isAvailable && !isSundayDay)
+          const shouldFadeUnavailable = (isPast || !isActuallyAvailable) && !isFullyBookedDate
 
-          let cellClasses = 'aspect-square flex items-center justify-center rounded-lg transition-all cursor-pointer font-medium '
+          let cellClasses = 'aspect-square flex items-center justify-center rounded-xl transition-all cursor-pointer font-semibold text-[var(--color-text)] '
           
           // Block past dates and unavailable dates
           // Saturdays are only blocked if they're disabled
           if (isPast || !isActuallyAvailable || isFullyBookedDate) {
-            if (isSaturdayDay && !saturdayEnabled) {
-              // Saturdays are closed (disabled) - dark brown
-              cellClasses += 'text-brown-dark cursor-not-allowed bg-brown-dark/20 opacity-70'
-            } else if (isFullyBookedDate) {
-              // Fully booked dates are dark brown and faded
-              cellClasses += 'text-brown-dark cursor-not-allowed bg-brown-dark/20 opacity-60 line-through'
-            } else if (isPast) {
-              // Past dates - dark brown
-              cellClasses += 'text-brown-dark cursor-not-allowed bg-brown-dark/20 opacity-60'
+            if (isFullyBookedDate) {
+              cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 line-through shadow-inner'
             } else {
-              // Other unavailable dates - dark brown
-              cellClasses += 'text-brown-dark cursor-not-allowed bg-brown-dark/20 opacity-60'
+              cellClasses += 'cursor-not-allowed border border-[var(--color-text)]/20 shadow-inner'
+
+              if (shouldFadeUnavailable) {
+                cellClasses += ' opacity-40 text-[var(--color-text)]/35 bg-[color-mix(in srgb,var(--color-surface) 90%, var(--color-background) 10%)]'
+              }
+
+              if (isDisabledSaturday && !isPast) {
+                cellClasses += ' ring-1 ring-inset ring-[var(--color-text)] ring-opacity-[0.15] backdrop-brightness-[0.95]'
+              }
+              
+              if (isPast) {
+                cellClasses += ' backdrop-brightness-[0.9]'
+              }
             }
           } else if (isSelected) {
-            cellClasses += 'bg-pink text-white shadow-lg transform scale-110 animate-pulse border-2 border-brown'
+            cellClasses += 'bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-xl transform scale-105 border-2 border-[var(--color-primary-dark)] ring-2 ring-[var(--color-accent)]/40'
           } else if (isToday) {
-            cellClasses += 'bg-pink-light text-brown border-2 border-brown-light hover:bg-pink hover:text-white hover:scale-110 hover:rotate-2 transform'
+            cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] text-[var(--color-on-primary)] border border-[var(--color-accent)]/70 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transform hover:scale-105'
           } else {
-            cellClasses += 'bg-white text-gray-700 border border-gray-200 hover:bg-pink-light hover:border-brown-light hover:text-brown hover:scale-110 hover:-rotate-1 transform'
+            cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 40%, var(--color-surface) 60%)] text-[var(--color-primary-dark)] border border-[var(--color-accent)]/55 hover:bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] hover:border-[var(--color-accent)]/75 hover:shadow-[0_10px_18px_rgba(0,0,0,0.08)] transform hover:scale-[1.04]'
           }
 
           return (
@@ -224,6 +229,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
               disabled={isPast || !isActuallyAvailable || isFullyBookedDate}
               className={cellClasses}
               type="button"
+              aria-disabled={isPast || !isActuallyAvailable || isFullyBookedDate}
               title={isSaturdayDay && !saturdayEnabled ? 'Closed on Saturdays' : isFullyBookedDate ? 'All time slots booked for this date' : isPast ? 'Past dates are unavailable' : undefined}
             >
               {day}
@@ -234,37 +240,55 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
 
       {/* Legend */}
       <div className="mt-6 mb-4">
-        <div className="flex flex-wrap gap-4 text-xs text-gray-700 mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-pink rounded border-2 border-brown"></div>
-            <span className="font-semibold">Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-pink-light border-2 border-brown-light rounded"></div>
-            <span className="font-semibold">Today</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
-            <span className="font-semibold">Available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-brown-dark/20 rounded border border-brown-dark/40">
-              <div className="w-full h-0.5 bg-brown-dark mt-1.5"></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg shadow-inner border border-[var(--color-primary-dark)]/30"></div>
+            <div>
+              <div className="font-bold text-[var(--color-text)] text-sm">Selected</div>
+              <div className="text-xs text-[var(--color-text)]/70">Your chosen date</div>
             </div>
-            <span className="font-semibold">Fully Booked</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-brown-dark/20 rounded border border-brown-dark/40"></div>
-            <span className="font-semibold text-brown-dark">Unavailable</span>
+          
+          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-8 h-8 rounded-lg border border-[var(--color-text)]/15 bg-white"></div>
+            <div>
+              <div className="font-bold text-[var(--color-text)] text-sm">Available</div>
+              <div className="text-xs text-[var(--color-text)]/70">Click to book</div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-8 h-8 bg-yellow-100 rounded-lg border-2 border-[#FACC15]"></div>
+            <div>
+              <div className="font-bold text-[#EAB308] text-sm">Fully Booked</div>
+              <div className="text-xs text-[#CA8A04]">All slots taken</div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div
+              className="w-8 h-8 rounded-lg border border-[var(--color-text)]/25"
+              style={{ background: 'color-mix(in srgb,var(--color-text) 28%, var(--color-surface) 72%)' }}
+            ></div>
+            <div>
+              <div className="font-bold text-[var(--color-text)]/80 text-sm">Not Available</div>
+              <div className="text-xs text-[var(--color-text)]/65">Cannot book</div>
+            </div>
           </div>
         </div>
-        <div className="bg-brown-light/20 border-l-4 border-brown-dark p-3 rounded-r-lg">
-          <p className="text-sm text-brown-dark">
-            <strong>Note:</strong> Available dates can be selected for booking. Fully booked dates have all time slots taken. 
-            Unavailable dates include past dates and closed days (if Saturday is disabled in business hours). 
-            <strong> Weekdays (Mon-Fri):</strong> 9:30 AM, 12:00 PM, 2:30 PM, 4:30 PM. 
-            <strong> Sundays:</strong> 12:30 PM, 3:00 PM.
+        
+        <div className="bg-[color-mix(in srgb,var(--color-background) 70%, var(--color-surface) 30%)]/60 border-l-4 border-[var(--color-primary)]/40 p-4 rounded-r-lg shadow-inner">
+          <p className="text-sm text-[var(--color-text)] font-semibold mb-3">
+            📅 Available Booking Times:
           </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-[var(--color-text)]/85">
+            <div>
+              <strong>Weekdays (Mon-Fri):</strong> 9:30 AM • 12:00 PM • 2:30 PM • 4:30 PM
+            </div>
+            <div>
+              <strong>Sundays:</strong> 12:30 PM • 3:00 PM
+            </div>
+          </div>
         </div>
       </div>
     </div>

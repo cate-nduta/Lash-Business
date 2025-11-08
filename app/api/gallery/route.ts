@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const gallery = readDataFile('gallery.json')
+    const gallery = await readDataFile('gallery.json', [])
     return NextResponse.json(gallery)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to load gallery' }, { status: 500 })
+    console.error('Error loading gallery:', error)
+    return NextResponse.json({ gallery: [] }, { status: 500 })
   }
 }
 

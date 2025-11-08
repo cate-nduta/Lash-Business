@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const contact = readDataFile('contact.json')
+    const contact = await readDataFile('contact.json', {})
     return NextResponse.json(contact)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to load contact info' }, { status: 500 })
+    console.error('Error loading contact info:', error)
+    return NextResponse.json({ contact: null }, { status: 500 })
   }
 }
 

@@ -6,14 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:supabase": "node scripts/seed-supabase.cjs"
   },
   "dependencies": {
     "googleapis": "^128.0.0",
+    "@supabase/supabase-js": "^2.45.2",
+    "dotenv": "^16.4.5",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-intersection-observer": "^9.5.3",
+    "react-quill": "^2.0.0",
     "resend": "^6.4.1"
   },
   "devDependencies": {

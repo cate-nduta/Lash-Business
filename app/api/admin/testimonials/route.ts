@@ -5,77 +5,81 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 interface Testimonial {
   id: string
   name: string
-  email: string
-  photo?: string
-  testimonial: string
-  rating?: number
-  date: string
-  approved: boolean
-  service?: string
+  message: string
+  rating: number
+  photoUrl?: string
+  createdAt: string
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
-    
-    const data = readDataFile<{ testimonials: Testimonial[] }>('testimonials.json')
-    // Return all testimonials, sorted by date (newest first)
-    const testimonials = (data.testimonials || [])
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    
-    return NextResponse.json({ testimonials })
+    await requireAdminAuth()
+    const data = await readDataFile<{ testimonials: Testimonial[] }>('testimonials.json', { testimonials: [] })
+    return NextResponse.json({ testimonials: data.testimonials || [] })
   } catch (error: any) {
-    if (error.status === 401) {
+    if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('Error fetching testimonials:', error)
+    console.error('Error loading testimonials:', error)
     return NextResponse.json({ testimonials: [] }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
-    
+    await requireAdminAuth()
+    const data = await readDataFile<{ testimonials: Testimonial[] }>('testimonials.json', { testimonials: [] })
+    const testimonials = data.testimonials || []
+
     const body = await request.json()
-    const { action, testimonialId, approved } = body
+    const { testimonial } = body as { testimonial: Testimonial }
 
-    if (action === 'approve' || action === 'reject') {
-      const data = readDataFile<{ testimonials: Testimonial[] }>('testimonials.json')
-      const testimonials = data.testimonials || []
-      
-      const index = testimonials.findIndex(t => t.id === testimonialId)
-      if (index === -1) {
-        return NextResponse.json({ error: 'Testimonial not found' }, { status: 404 })
-      }
-
-      if (action === 'approve') {
-        testimonials[index].approved = true
-      } else {
-        // Remove rejected testimonial
-        testimonials.splice(index, 1)
-      }
-
-      writeDataFile('testimonials.json', { testimonials })
-      return NextResponse.json({ success: true })
+    if (!testimonial || !testimonial.id) {
+      return NextResponse.json({ error: 'Invalid testimonial data' }, { status: 400 })
     }
 
-    if (action === 'delete') {
-      const data = readDataFile<{ testimonials: Testimonial[] }>('testimonials.json')
-      const testimonials = data.testimonials || []
-      
-      const filtered = testimonials.filter(t => t.id !== testimonialId)
-      writeDataFile('testimonials.json', { testimonials: filtered })
-      return NextResponse.json({ success: true })
+    const index = testimonials.findIndex((item) => item.id === testimonial.id)
+    if (index === -1) {
+      testimonials.push(testimonial)
+    } else {
+      testimonials[index] = testimonial
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    await writeDataFile('testimonials.json', { testimonials })
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    if (error.status === 401) {
+    if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('Error updating testimonial:', error)
-    return NextResponse.json({ error: 'Failed to update testimonial' }, { status: 500 })
+    console.error('Error saving testimonial:', error)
+    return NextResponse.json({ error: 'Failed to save testimonial' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireAdminAuth()
+    const data = await readDataFile<{ testimonials: Testimonial[] }>('testimonials.json', { testimonials: [] })
+    const testimonials = data.testimonials || []
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Testimonial ID is required' }, { status: 400 })
+    }
+
+    const filtered = testimonials.filter((testimonial) => testimonial.id !== id)
+
+    await writeDataFile('testimonials.json', { testimonials: filtered })
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    console.error('Error deleting testimonial:', error)
+    return NextResponse.json({ error: 'Failed to delete testimonial' }, { status: 500 })
   }
 }
 

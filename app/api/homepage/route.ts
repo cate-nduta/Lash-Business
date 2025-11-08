@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
-export async function GET() {
+export const revalidate = 0
+
+export async function GET(request: NextRequest) {
   try {
-    const homepage = readDataFile('homepage.json')
+    const homepage = await readDataFile('homepage.json', {})
     return NextResponse.json(homepage)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to load homepage content' }, { status: 500 })
+    console.error('Error loading homepage content:', error)
+    return NextResponse.json({ homepage: null }, { status: 500 })
   }
 }
 

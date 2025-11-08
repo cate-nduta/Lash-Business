@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 
 interface BusinessHours {
@@ -28,6 +29,9 @@ interface AvailabilityData {
   }
 }
 
+const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { credentials: 'include', ...init })
+
 export default function AdminAvailability() {
   const [availability, setAvailability] = useState<AvailabilityData>({
     businessHours: {},
@@ -48,20 +52,37 @@ export default function AdminAvailability() {
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
   useEffect(() => {
-    fetch('/api/admin/auth')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
-          router.push('/admin/login')
-        } else {
-          loadAvailability()
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await authorizedFetch('/api/admin/current-user')
+        if (!response.ok) {
+          throw new Error('Unauthorized')
         }
-      })
+        const data = await response.json()
+        if (!isMounted) return
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+        loadAvailability()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   const loadAvailability = async () => {
     try {
-      const response = await fetch('/api/admin/availability')
+      const response = await authorizedFetch('/api/admin/availability')
       if (response.ok) {
         const data = await response.json()
         // Ensure saturday time slots array exists
@@ -131,7 +152,7 @@ export default function AdminAvailability() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/admin/availability', {
+      const response = await authorizedFetch('/api/admin/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(availability),
@@ -236,14 +257,13 @@ export default function AdminAvailability() {
           </button>
         </div>
 
+        {/* Toast Notification */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {message.text}
-          </div>
+          <Toast
+            message={message.text}
+            type={message.type}
+            onClose={() => setMessage(null)}
+          />
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
@@ -343,9 +363,9 @@ export default function AdminAvailability() {
               + Add Slot
             </button>
           </div>
-          <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Saturday time slots will only be used when Saturday is enabled in Business Hours above. 
+          <div className="mb-4 p-4 bg-white border-l-4 border-[var(--color-accent)]/80 rounded-r-xl shadow-sm">
+            <p className="text-sm text-black">
+              <strong className="text-[var(--color-accent)]">Note:</strong> Saturday time slots will only be used when Saturday is enabled in Business Hours above. 
               If no Saturday slots are configured, weekday slots will be used as a fallback.
             </p>
           </div>

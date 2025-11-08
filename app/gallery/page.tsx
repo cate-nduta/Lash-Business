@@ -98,27 +98,28 @@ export default function Gallery() {
       {/* Lightbox Modal */}
       {selectedImage && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 animate-fade-in"
           onClick={() => setSelectedImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] w-full">
+          <div className="relative max-w-3xl w-full">
             <button
               onClick={() => setSelectedImage(null)}
-              className="absolute -top-12 right-0 text-white hover:text-red transition-colors text-2xl font-bold"
+              className="absolute -top-3 -right-3 bg-white/90 text-brown-dark hover:bg-white hover:text-red transition-colors rounded-full w-10 h-10 flex items-center justify-center text-xl shadow-lg"
               aria-label="Close"
             >
               ✕
             </button>
-            <img
-              src={selectedImage.url}
-              alt={selectedImage.name}
-              className="w-full h-full object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="mt-4 text-center text-white">
-              <h3 className="font-display text-2xl font-semibold mb-1">
-                {selectedImage.name}
-              </h3>
+            <div className="bg-white rounded-xl overflow-hidden shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name}
+                className="w-full h-full max-h-[70vh] object-contain bg-black"
+              />
+              <div className="p-4 text-center text-brown-dark bg-white">
+                <h3 className="font-display text-xl font-semibold">
+                  {selectedImage.name}
+                </h3>
+              </div>
             </div>
           </div>
         </div>

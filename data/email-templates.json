@@ -1,0 +1,47 @@
+{
+  "templates": [
+    {
+      "id": "welcome",
+      "name": "Welcome Email",
+      "subject": "Welcome to {businessName} – Nairobi's Luxury Lash Studio 💕",
+      "content": "<h2>Hey {name}!</h2><p>We’re thrilled to welcome you to {businessName}, your new home for bespoke lash artistry in Nairobi.</p><p>Here’s what to expect when you visit our studio:</p><ul><li>A calm, beautifully curated space designed for pure relaxation</li><li>Custom lash mapping to complement your features and lifestyle</li><li>Premium products that prioritize comfort, retention, and lash health</li><li>Friendly experts who guide you through aftercare so the glow lasts</li></ul><p><strong>Need to tweak your booking or have a question?</strong><br>Call or WhatsApp us: {phone}<br>Reply to this email anytime—we’re here for you!</p><p>We can’t wait to host you! 💖</p>",
+      "category": "Welcome"
+    },
+    {
+      "id": "appointment-reminder",
+      "name": "Appointment Reminder",
+      "subject": "Hi {name}! Your studio appointment is tomorrow at {appointmentTime}",
+      "content": "<h2>Hi {name}!</h2><p>Your lash appointment at {businessName} is almost here.</p><p><strong>Your booking:</strong><br><strong>Date:</strong> {appointmentDate}<br><strong>Time:</strong> {appointmentTime}<br><strong>Service:</strong> {serviceName}</p><p><strong>Before you arrive:</strong></p><ul><li>Come with clean lashes—no mascara or eye makeup</li><li>Avoid caffeine right before your appointment so you can comfortably relax</li><li>Plan to arrive a few minutes early to settle in and complete paperwork if needed</li><li>Let us know in advance if you have sensitivities or special requests</li></ul><p>If anything changes, call or text {phone} at least 24 hours ahead so we can assist.</p><p>See you soon—your lashes are about to look incredible! ✨</p>",
+      "category": "Reminder"
+    },
+    {
+      "id": "thank-you",
+      "name": "Thank You After Visit",
+      "subject": "Thank you {name}! Loved hosting you at our studio ✨",
+      "content": "<h2>You’re glowing, {name}!</h2><p>Thank you for visiting {businessName} today. We hope you loved the experience as much as we enjoyed creating your lash look.</p><p><strong>Aftercare tips:</strong></p><ul><li>Avoid steam or water for the first 24 hours</li><li>Sleep on your back the first night to protect your curl</li><li>Brush your lashes gently every morning with the wand we provided</li><li>Keep oil-based products away from the lash line</li></ul><p>Ready for your next fill? Book your studio visit in 2–3 weeks to keep the look fresh.</p><p>Want to share the glam? Refer a friend and we’ll treat you both!</p><p>Thanks for choosing {businessName}. We can’t wait to welcome you back. 💖</p>",
+      "category": "Follow-up"
+    },
+    {
+      "id": "special-offer",
+      "name": "Special Promotion",
+      "subject": "Exclusive studio treat for you, {name}! 🎉",
+      "content": "<h2>Hi {name}!</h2><p>Your next glow-up is waiting at {businessName}. For a limited time, enjoy <strong>20% OFF</strong> your next studio lash service.</p><p><strong>What you’ll love:</strong></p><ul><li>Private appointment in our serene Nairobi studio</li><li>Personalized lash styling tailored to your vibe</li><li>Luxurious aftercare so your set stays flawless</li></ul><p><strong>How to redeem:</strong><br>Use code <strong>GLAMLUXE</strong> at checkout before [Date].</p><p>Slots fill up fast—call or text {phone} to reserve your preferred time.</p><p>We can’t wait to pamper you again! 💕</p>",
+      "category": "Promotion"
+    },
+    {
+      "id": "birthday",
+      "name": "Birthday Wishes",
+      "subject": "Happy Birthday {name}! Celebrate with a studio glow-up 🎂",
+      "content": "<h2>Happy Birthday, {name}! 🎉</h2><p>We love a birthday glam moment, so we’re celebrating you with <strong>25% OFF</strong> any lash service this month.</p><p><strong>Why celebrate with us?</strong></p><ul><li>Indulge in a private, relaxing studio experience</li><li>Custom lash artistry to match your party plans</li><li>Complimentary birthday photo moment after your set</li></ul><p>Call or WhatsApp {phone} to lock in your appointment.</p><p>Here’s to another gorgeous year—thanks for letting us be part of it! 💖</p>",
+      "category": "Celebration"
+    },
+    {
+      "id": "re-engagement",
+      "name": "We Miss You",
+      "subject": "We miss seeing you in the studio, {name}! 💕",
+      "content": "<h2>We miss you, {name}!</h2><p>It’s been a little while since we welcomed you to {businessName}, and your lash seat has been patiently waiting.</p><p><strong>Comeback treat:</strong> Enjoy <strong>15% OFF</strong> your next studio service when you book this week.</p><p><strong>What’s new since your last visit?</strong></p><ul><li>Fresh lash styles curated for every eye shape</li><li>Extended evening appointments for after-work pampering</li><li>Even more luxurious treatment room touches</li></ul><p>Ready for a little “me time”? Call or text {phone} and we’ll save you a spot.</p><p>We can’t wait to style you again! 💖</p>",
+      "category": "Re-engagement"
+    }
+  ]
+}
+

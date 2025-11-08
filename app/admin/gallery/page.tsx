@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 
 interface GalleryImage {
@@ -33,20 +34,45 @@ export default function AdminGallery() {
   const hasUnsavedChanges = JSON.stringify(gallery) !== JSON.stringify(originalGallery)
 
   useEffect(() => {
-    fetch('/api/admin/auth')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
-          router.push('/admin/login')
-        } else {
-          loadGallery()
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/admin/current-user', {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error('Unauthorized')
         }
-      })
+
+        const data = await response.json()
+        if (!isMounted) return
+
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+
+        loadGallery()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   const loadGallery = async () => {
     try {
-      const response = await fetch('/api/admin/gallery')
+      const response = await fetch('/api/admin/gallery', {
+        credentials: 'include',
+      })
       if (response.ok) {
         const data = await response.json()
         setGallery(data)
@@ -116,6 +142,7 @@ export default function AdminGallery() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(gallery),
+        credentials: 'include',
       })
 
       if (response.ok) {
@@ -200,6 +227,7 @@ export default function AdminGallery() {
       const response = await fetch('/api/admin/gallery/upload', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       })
 
       const data = await response.json()
@@ -222,6 +250,7 @@ export default function AdminGallery() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedGallery),
+          credentials: 'include',
         })
 
         if (saveResponse.ok) {
@@ -299,14 +328,13 @@ export default function AdminGallery() {
           </button>
         </div>
 
+        {/* Toast Notification */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {message.text}
-          </div>
+          <Toast
+            message={message.text}
+            type={message.type}
+            onClose={() => setMessage(null)}
+          />
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">

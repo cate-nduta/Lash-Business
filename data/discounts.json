@@ -1,7 +1,7 @@
 {
   "firstTimeClientDiscount": {
     "enabled": true,
-    "percentage": 5
+    "percentage": 8
   },
   "depositPercentage": 35
 }

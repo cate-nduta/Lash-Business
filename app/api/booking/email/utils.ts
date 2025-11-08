@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 const OWNER_EMAIL = process.env.CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev' // Default Resend email for testing
+const DEFAULT_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 
 // Initialize Resend
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
@@ -68,6 +69,7 @@ function createCustomerEmailTemplate(bookingData: {
   servicePrice: string
 }) {
   const { name, email, service, formattedDate, formattedTime, formattedEndTime, location, deposit, servicePrice } = bookingData
+  const appointmentLocation = location || DEFAULT_LOCATION
   
   return `
 <!DOCTYPE html>
@@ -123,7 +125,7 @@ function createCustomerEmailTemplate(bookingData: {
                   </tr>
                   <tr>
                     <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Location:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0;">${location}</td>
+                    <td style="color: #333333; font-size: 14px; padding: 8px 0;">${appointmentLocation}</td>
                   </tr>
                 </table>
               </div>
@@ -139,12 +141,12 @@ function createCustomerEmailTemplate(bookingData: {
               </div>
               
               <div style="background-color: #F9D0DE; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Important Reminders</h3>
+                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Before Your Appointment</h3>
                 <ul style="color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-                  <li>Please ensure you have a clean, well-lit space ready for the appointment</li>
-                  <li>If you live in a gated community or apartment, please notify your security/gateman in advance to allow access</li>
-                  <li>Make sure the room is accessible and free from distractions</li>
-                  <li>Have a comfortable seating area prepared for the service</li>
+                  <li>Arrive a few minutes early so you can settle in and relax before we begin.</li>
+                  <li>Please come with clean lashes (no eye makeup or mascara).</li>
+                  <li>Avoid caffeine right before your appointment so you can comfortably rest.</li>
+                  <li>Let us know ahead of time if you have any sensitivities or special requests.</li>
                 </ul>
               </div>
               
@@ -203,6 +205,7 @@ function createOwnerEmailTemplate(bookingData: {
   isFirstTimeClient?: boolean
 }, customerEmailError?: string | null, customerEmail?: string) {
   const { name, email, phone, service, formattedDate, formattedTime, formattedEndTime, location, deposit, servicePrice, originalPrice, discount, isFirstTimeClient } = bookingData
+  const appointmentLocation = location || DEFAULT_LOCATION
   
   return `
 <!DOCTYPE html>
@@ -264,7 +267,7 @@ function createOwnerEmailTemplate(bookingData: {
                       </tr>
                       <tr>
                         <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Location:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${location}</td>
+                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${appointmentLocation}</td>
                       </tr>
                       <tr>
                         <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Deposit Required (35%):</strong></td>
@@ -306,13 +309,13 @@ Your appointment details:
 - Service: ${service || 'Lash Service'}
 - Service Price: ${servicePrice}
 - Deposit Required (35%): ${deposit}
-- Location: ${location}
+- Location: ${appointmentLocation}
 
-Important Reminders:
-- Please ensure you have a clean, well-lit space ready
-- If you live in a gated community, please notify security/gateman in advance
-- Make sure the room is accessible and free from distractions
-- Have a comfortable seating area prepared
+Before you arrive:
+- Please come with clean lashes (no mascara or eye makeup)
+- Avoid caffeine just before your appointment so you can comfortably relax
+- Let us know if you have any sensitivities or special requests
+- Plan to arrive a few minutes early so we can start on time
 
 If you have any questions, please contact us at ${OWNER_EMAIL}.
 
@@ -360,6 +363,7 @@ export async function sendEmailNotification(bookingData: {
   deposit?: number
 }) {
   const { name, email, phone, service, date, timeSlot, location, isFirstTimeClient, originalPrice, discount, finalPrice, deposit } = bookingData
+  const appointmentLocation = location || DEFAULT_LOCATION
   let customerEmailError: string | null = null
   
   // Use provided pricing or calculate from service
@@ -447,7 +451,7 @@ export async function sendEmailNotification(bookingData: {
       formattedDate,
       formattedTime,
       formattedEndTime,
-      location,
+      location: appointmentLocation,
       deposit: depositFormatted,
       servicePrice: finalPriceFormatted,
       originalPrice: servicePriceFormatted,
@@ -462,6 +466,7 @@ export async function sendEmailNotification(bookingData: {
       const customerEmailResult = await resend.emails.send({
         from: `LashDiary <${FROM_EMAIL}>`,
         to: email,
+        replyTo: OWNER_EMAIL,
         subject: 'Appointment Confirmation - LashDiary',
         html: createCustomerEmailTemplate({
           name,
@@ -470,7 +475,7 @@ export async function sendEmailNotification(bookingData: {
           formattedDate,
           formattedTime,
           formattedEndTime,
-          location,
+          location: appointmentLocation,
           deposit: depositFormatted,
           servicePrice: finalPriceFormatted,
         }),
@@ -495,7 +500,7 @@ export async function sendEmailNotification(bookingData: {
           formattedDate,
           formattedTime,
           formattedEndTime,
-          location,
+          location: appointmentLocation,
           deposit: depositFormatted,
           servicePrice: finalPriceFormatted,
           originalPrice: servicePriceFormatted,
@@ -543,19 +548,21 @@ export async function sendEmailNotification(bookingData: {
         service: service || 'Not specified',
         formattedDate,
         formattedTime,
-          location,
-          deposit: depositFormatted,
-          servicePrice: finalPriceFormatted,
-          originalPrice: servicePriceFormatted,
-          discount: discountFormatted,
-          isFirstTimeClient: isFirstTimeClient === true,
-        }, customerEmailError, email)
+        formattedEndTime,
+        location: appointmentLocation,
+        deposit: depositFormatted,
+        servicePrice: finalPriceFormatted,
+        originalPrice: servicePriceFormatted,
+        discount: discountFormatted,
+        isFirstTimeClient: isFirstTimeClient === true,
+      }, customerEmailError, email)
     }
     
     // Send email to business owner
     const ownerEmailResult = await resend.emails.send({
       from: `LashDiary <${FROM_EMAIL}>`,
       to: OWNER_EMAIL,
+      replyTo: email || OWNER_EMAIL,
       subject: `New Booking Request - ${name}`,
       html: ownerEmailHtml,
     })

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 
 interface DiscountsData {
@@ -12,6 +13,9 @@ interface DiscountsData {
   }
   depositPercentage: number
 }
+
+const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { credentials: 'include', ...init })
 
 export default function AdminDiscounts() {
   const [discounts, setDiscounts] = useState<DiscountsData>({
@@ -31,20 +35,37 @@ export default function AdminDiscounts() {
   const hasUnsavedChanges = JSON.stringify(discounts) !== JSON.stringify(originalDiscounts)
 
   useEffect(() => {
-    fetch('/api/admin/auth')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
-          router.push('/admin/login')
-        } else {
-          loadDiscounts()
+    let isMounted = true
+
+    const checkAuth = async () => {
+      try {
+        const response = await authorizedFetch('/api/admin/current-user')
+        if (!response.ok) {
+          throw new Error('Unauthorized')
         }
-      })
+        const data = await response.json()
+        if (!isMounted) return
+        if (!data.authenticated) {
+          router.replace('/admin/login')
+          return
+        }
+        loadDiscounts()
+      } catch (error) {
+        if (!isMounted) return
+        router.replace('/admin/login')
+      }
+    }
+
+    checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   const loadDiscounts = async () => {
     try {
-      const response = await fetch('/api/admin/discounts')
+      const response = await authorizedFetch('/api/admin/discounts')
       if (response.ok) {
         const data = await response.json()
         setDiscounts(data)
@@ -110,7 +131,7 @@ export default function AdminDiscounts() {
     setMessage(null)
 
     try {
-      const response = await fetch('/api/admin/discounts', {
+      const response = await authorizedFetch('/api/admin/discounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(discounts),
@@ -163,14 +184,13 @@ export default function AdminDiscounts() {
           </button>
         </div>
 
+        {/* Toast Notification */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {message.text}
-          </div>
+          <Toast
+            message={message.text}
+            type={message.type}
+            onClose={() => setMessage(null)}
+          />
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8">

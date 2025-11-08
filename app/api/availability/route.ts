@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const availability = readDataFile('availability.json')
+    const availability = await readDataFile('availability.json', {})
     return NextResponse.json(availability)
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to load availability' }, { status: 500 })
+    console.error('Error loading availability:', error)
+    return NextResponse.json({ availability: [] }, { status: 500 })
   }
 }
 

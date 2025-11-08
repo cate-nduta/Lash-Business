@@ -5,6 +5,7 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 
 // Initialize Google Calendar API with write access
 function getCalendarClient() {
@@ -31,7 +32,8 @@ function getCalendarClient() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, phone, timeSlot, service, date, location, isFirstTimeClient, originalPrice, discount, finalPrice, deposit, mpesaCheckoutRequestID } = body
+    const { name, email, phone, timeSlot, service, date, location, notes, isFirstTimeClient, originalPrice, discount, finalPrice, deposit, mpesaCheckoutRequestID } = body
+    const bookingLocation = location || STUDIO_LOCATION
 
     // Validate required fields
     if (!name || !email || !phone || !timeSlot) {
@@ -75,7 +77,8 @@ export async function POST(request: NextRequest) {
             Email: ${email}
             Phone: ${phone}
             Service: ${service || 'Lash Service'}
-            Location: ${location || 'Not specified'}
+            Location: ${bookingLocation}
+            ${notes ? `Special Notes: ${notes}` : ''}
             Deposit: KSH ${deposit || 0}
             ${mpesaCheckoutRequestID ? `M-Pesa Checkout ID: ${mpesaCheckoutRequestID}` : ''}
           `,
@@ -124,7 +127,7 @@ export async function POST(request: NextRequest) {
         service: service || '',
         date,
         timeSlot,
-        location: location || '',
+        location: bookingLocation,
         isFirstTimeClient: isFirstTimeClient === true,
         originalPrice: originalPrice || 0,
         discount: discount || 0,
@@ -159,10 +162,12 @@ export async function POST(request: NextRequest) {
 
     // Save booking to bookings.json
     try {
-      const bookingsData = readDataFile<{ bookings: any[] }>('bookings.json')
+      const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
       const bookings = bookingsData.bookings || []
       
       const bookingId = `booking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const hasDeposit = (deposit || 0) > 0
+
       const newBooking = {
         id: bookingId,
         name,
@@ -171,7 +176,8 @@ export async function POST(request: NextRequest) {
         service: service || '',
         date,
         timeSlot,
-        location: location || '',
+        location: bookingLocation,
+        notes: notes || '',
         originalPrice: originalPrice || 0,
         discount: discount || 0,
         finalPrice: finalPrice || originalPrice || 0,
@@ -182,13 +188,37 @@ export async function POST(request: NextRequest) {
         createdAt: new Date().toISOString(),
         testimonialRequested: false,
         testimonialRequestedAt: null,
+        status: 'confirmed',
+        calendarEventId: eventId || null,
+        cancelledAt: null,
+        cancelledBy: null,
+        cancellationReason: null,
+        refundStatus: hasDeposit ? 'not_applicable' : 'not_required',
+        refundAmount: 0,
+        refundNotes: null,
+        rescheduledAt: null,
+        rescheduledBy: null,
+        rescheduleHistory: [],
       }
-      
+
       bookings.push(newBooking)
-      writeDataFile('bookings.json', { bookings })
-    } catch (bookingError) {
-      console.error('Error saving booking:', bookingError)
-      // Don't fail the booking if saving to file fails
+
+      await writeDataFile('bookings.json', { bookings })
+
+      return NextResponse.json({
+        success: true,
+        bookingId,
+        calendarEventId: eventId,
+        emailSent,
+        emailError,
+        calendarConfigured,
+      })
+    } catch (fileError: any) {
+      console.error('Error saving booking:', fileError)
+      return NextResponse.json(
+        { error: 'Booking could not be saved. Please try again.' },
+        { status: 500 }
+      )
     }
 
     // Return success if calendar event was created OR if we're using email fallback
