@@ -11,21 +11,46 @@ interface ContactData {
   location: string
 }
 
+interface AvailabilityData {
+  businessHours?: {
+    [key: string]: {
+      open: string
+      close: string
+      enabled: boolean
+    }
+  }
+}
+
 export default function Contact() {
   const [contactData, setContactData] = useState<ContactData | null>(null)
+  const [availabilityData, setAvailabilityData] = useState<AvailabilityData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/contact')
-      .then((res) => res.json())
-      .then((data) => {
-        setContactData(data)
+    const loadContactAndAvailability = async () => {
+      try {
+        const [contactRes, availabilityRes] = await Promise.all([
+          fetch('/api/contact', { cache: 'no-store' }),
+          fetch('/api/availability', { cache: 'no-store' }),
+        ])
+
+        if (contactRes.ok) {
+          const contactJson = await contactRes.json()
+          setContactData(contactJson)
+        }
+
+        if (availabilityRes.ok) {
+          const availabilityJson = await availabilityRes.json()
+          setAvailabilityData(availabilityJson)
+        }
+      } catch (error) {
+        console.error('Error loading contact/availability data:', error)
+      } finally {
         setLoading(false)
-      })
-      .catch((error) => {
-        console.error('Error loading contact data:', error)
-        setLoading(false)
-      })
+      }
+    }
+
+    loadContactAndAvailability()
   }, [])
 
   const [ref, inView] = useInView({
@@ -41,6 +66,47 @@ export default function Contact() {
     instagramUrl: 'https://instagram.com/lashdiary',
     location: 'LashDiary Studio, Nairobi, Kenya',
   }
+
+  const dayOrder = [
+    { key: 'monday', label: 'Monday' },
+    { key: 'tuesday', label: 'Tuesday' },
+    { key: 'wednesday', label: 'Wednesday' },
+    { key: 'thursday', label: 'Thursday' },
+    { key: 'friday', label: 'Friday' },
+    { key: 'saturday', label: 'Saturday' },
+    { key: 'sunday', label: 'Sunday' },
+  ] as const
+
+  const defaultHours: Record<
+    (typeof dayOrder)[number]['key'],
+    { enabled: boolean; open: string; close: string }
+  > = {
+    monday: { enabled: true, open: '09:00', close: '18:00' },
+    tuesday: { enabled: true, open: '09:00', close: '18:00' },
+    wednesday: { enabled: true, open: '09:00', close: '18:00' },
+    thursday: { enabled: true, open: '09:00', close: '18:00' },
+    friday: { enabled: true, open: '09:00', close: '18:00' },
+    saturday: { enabled: false, open: '09:00', close: '18:00' },
+    sunday: { enabled: true, open: '12:00', close: '17:00' },
+  }
+
+  const businessHours = dayOrder.map(({ key, label }) => {
+    const config = availabilityData?.businessHours?.[key]
+    const resolved =
+      typeof config?.enabled === 'boolean'
+        ? { ...defaultHours[key], ...config }
+        : defaultHours[key]
+
+    if (resolved.enabled) {
+      return {
+        label,
+        status: `${formatTime(resolved.open)} - ${formatTime(resolved.close)}`,
+        open: true,
+      }
+    }
+
+    return { label, status: 'Closed', open: false }
+  })
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-20">
@@ -129,20 +195,20 @@ export default function Contact() {
                 Business Hours
               </h2>
             </div>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-pink-light/20 rounded-lg">
-                <span className="font-semibold text-gray-800">Monday - Friday</span>
-                <span className="text-brown font-bold">9:00 AM - 6:00 PM</span>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-pink-light/20 rounded-lg">
-                <span className="font-semibold text-gray-800">Sunday</span>
-                <span className="text-brown font-bold">12:00 PM - 5:00 PM</span>
-              </div>
-              <div className="mt-4 p-3 bg-gray-100 rounded-lg border border-gray-300">
-                <p className="text-sm text-gray-600 text-center italic">
-                  Closed on Saturdays
-                </p>
-              </div>
+            <div className="space-y-3">
+              {businessHours.map(({ label, status, open }) => (
+                <div
+                  key={label}
+                  className={`flex justify-between items-center p-3 rounded-lg ${
+                    open ? 'bg-pink-light/20' : 'bg-gray-100'
+                  }`}
+                >
+                  <span className="font-semibold text-gray-800 text-sm">{label}</span>
+                  <span className={`font-bold text-sm ${open ? 'text-brown' : 'text-gray-500 italic'}`}>
+                    {open ? status : 'Closed'}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -186,5 +252,16 @@ export default function Contact() {
       </div>
     </div>
   )
+}
+
+function formatTime(time: string) {
+  if (!time) return ''
+  const [hourStr, minuteStr] = time.split(':')
+  const hour = Number(hourStr)
+  const minutes = Number(minuteStr)
+  if (Number.isNaN(hour) || Number.isNaN(minutes)) return time
+  const date = new Date()
+  date.setHours(hour, minutes, 0, 0)
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 

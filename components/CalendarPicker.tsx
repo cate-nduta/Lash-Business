@@ -12,15 +12,64 @@ interface CalendarPickerProps {
     businessHours: {
       [key: string]: { open: string; close: string; enabled: boolean }
     }
+    timeSlots?: {
+      weekdays?: Array<{ hour: number; minute: number; label: string }>
+      saturday?: Array<{ hour: number; minute: number; label: string }>
+      sunday?: Array<{ hour: number; minute: number; label: string }>
+    }
   }
 }
 
 export default function CalendarPicker({ selectedDate, onDateSelect, availableDates, fullyBookedDates = [], loading = false, availabilityData }: CalendarPickerProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [viewMonth, setViewMonth] = useState(new Date())
-  
-  // Check if Saturday is enabled
-  const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
+
+  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+  const defaultEnabled: Record<typeof dayKeys[number], boolean> = {
+    sunday: true,
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+  }
+
+  const formatSlotList = (slots?: Array<{ label: string }> | null, fallback?: string[]) => {
+    const labels =
+      slots && slots.length > 0
+        ? slots.map((slot) => slot.label?.trim()).filter(Boolean)
+        : fallback ?? []
+    return labels.join(' • ')
+  }
+
+  const weekdaySlotSummary = formatSlotList(
+    availabilityData?.timeSlots?.weekdays ?? null,
+    ['9:30 AM', '12:00 PM', '2:30 PM', '4:30 PM']
+  )
+  const sundaySlotSummary = formatSlotList(
+    availabilityData?.timeSlots?.sunday ?? null,
+    ['12:30 PM', '3:00 PM']
+  )
+  const saturdaySlotSummary = formatSlotList(
+    availabilityData?.timeSlots?.saturday ?? null,
+    ['9:30 AM', '12:00 PM', '2:30 PM', '4:30 PM']
+  )
+  const sundayEnabled =
+    availabilityData?.businessHours?.sunday?.enabled ??
+    defaultEnabled.sunday
+  const saturdayEnabled =
+    availabilityData?.businessHours?.saturday?.enabled ??
+    defaultEnabled.saturday
+
+  const isDayEnabled = (date: Date) => {
+    const key = dayKeys[date.getDay()]
+    const configured = availabilityData?.businessHours?.[key]?.enabled
+    if (typeof configured === 'boolean') {
+      return configured
+    }
+    return defaultEnabled[key]
+  }
 
   // Get first day of month and number of days
   const firstDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
@@ -40,24 +89,12 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
   // Check if date is available
   const isDateAvailable = (date: Date): boolean => {
     const dateStr = date.toISOString().split('T')[0]
-    const dayOfWeek = date.getDay()
-    const isSunday = dayOfWeek === 0
-    const isSaturday = dayOfWeek === 6
-    
-    // Saturdays: available if enabled and not past/fully booked
-    if (isSaturday) {
-      return saturdayEnabled && !fullyBookedDates.includes(dateStr)
+    if (!isDayEnabled(date)) {
+      return false
     }
-    
-    // Sundays: always available (if not past and not fully booked)
-    if (isSunday) {
-      return !fullyBookedDates.includes(dateStr)
-    }
-    
-    // Other dates: available if they're in availableDates and not in fullyBookedDates
     return availableDates.includes(dateStr) && !fullyBookedDates.includes(dateStr)
   }
-  
+    
   // Check if date is fully booked
   const isFullyBooked = (date: Date): boolean => {
     const dateStr = date.toISOString().split('T')[0]
@@ -89,18 +126,10 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     
     // Create date object for day-of-week and date comparison checks
     const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
-    const isSundayDay = isSunday(date)
+    
     const isFullyBookedDate = fullyBookedDates.includes(dateStr)
-    
-    // Block past dates
-    // Allow Saturdays if enabled and not past/fully booked
-    // Allow Sundays if not past and not fully booked
-    // Allow other dates if they're available
-    const isSaturdayAvailable = isSaturday(date) && saturdayEnabled && !isPastDate(date) && !isFullyBookedDate
-    const isSundayAvailable = isSundayDay && !isPastDate(date) && !isFullyBookedDate
-    const isOtherDateAvailable = !isSundayDay && !isSaturday(date) && !isPastDate(date) && isDateAvailable(date)
-    
-    if (!isPastDate(date) && (isSaturdayAvailable || isSundayAvailable || isOtherDateAvailable)) {
+
+    if (!isPastDate(date) && !isFullyBookedDate && isDayEnabled(date) && isDateAvailable(date)) {
       onDateSelect(dateStr)
     }
   }
@@ -184,13 +213,13 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const isSundayDay = isSunday(date)
           const isFullyBookedDate = isFullyBooked(date)
           const isToday = date.toDateString() === new Date().toDateString()
+          const enabledForDay = isDayEnabled(date)
           // For Sundays, they're available if not past and not fully booked
           // For other days, check if they're in the availableDates array
-          const isSundayAvailable = isSundayDay && !isPast && !isFullyBookedDate
           const isAvailable = isDateAvailable(date)
-          const isDisabledSaturday = isSaturdayDay && (!saturdayEnabled || !isAvailable)
-          const isActuallyAvailable = isSundayAvailable || (isAvailable && !isSundayDay)
-          const shouldFadeUnavailable = (isPast || !isActuallyAvailable) && !isFullyBookedDate
+          const isDisabledSaturday = isSaturdayDay && !enabledForDay
+          const isActuallyAvailable = enabledForDay && isAvailable && !isFullyBookedDate
+          const shouldFadeUnavailable = (isPast || !enabledForDay || !isAvailable) && !isFullyBookedDate
 
           let cellClasses = 'aspect-square flex items-center justify-center rounded-xl transition-all cursor-pointer font-semibold text-[var(--color-text)] '
           
@@ -283,11 +312,26 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-[var(--color-text)]/85">
             <div>
-              <strong>Weekdays (Mon-Fri):</strong> 9:30 AM • 12:00 PM • 2:30 PM • 4:30 PM
+              <strong>Weekdays (Mon-Fri):</strong> {weekdaySlotSummary || 'No slots configured'}
             </div>
-            <div>
-              <strong>Sundays:</strong> 12:30 PM • 3:00 PM
-            </div>
+            {sundayEnabled ? (
+              <div>
+                <strong>Sundays:</strong> {sundaySlotSummary || 'No slots configured'}
+              </div>
+            ) : (
+              <div className="text-[var(--color-text)]/70">
+                <strong>Sundays:</strong> Closed
+              </div>
+            )}
+            {saturdayEnabled ? (
+              <div className="md:col-span-2">
+                <strong>Saturdays:</strong> {saturdaySlotSummary || 'No slots configured'}
+              </div>
+            ) : (
+              <div className="md:col-span-2 text-[var(--color-text)]/70">
+                <strong>Saturdays:</strong> Closed
+              </div>
+            )}
           </div>
         </div>
       </div>

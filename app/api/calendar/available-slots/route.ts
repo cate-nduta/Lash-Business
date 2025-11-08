@@ -2,8 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 import { readDataFile } from '@/lib/data-utils'
 
+export const revalidate = 0
+export const dynamic = 'force-dynamic'
+
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+
+type AvailabilityData = {
+  businessHours?: {
+    [key: string]: { open: string; close: string; enabled: boolean }
+  }
+  timeSlots?: {
+    weekdays?: Array<{ hour: number; minute: number; label: string }>
+    saturday?: Array<{ hour: number; minute: number; label: string }>
+    sunday?: Array<{ hour: number; minute: number; label: string }>
+  }
+}
+
+async function loadAvailabilityData(): Promise<AvailabilityData | null> {
+  try {
+    return await readDataFile<AvailabilityData>('availability.json', {})
+  } catch (error) {
+    console.warn('Error loading availability data, using defaults:', error)
+    return null
+  }
+}
 
 // Initialize Google Calendar API
 function getCalendarClient() {
@@ -63,7 +86,7 @@ function getDayOfWeek(year: number, month: number, day: number): number {
 // Sunday: 12:30 PM, 3:00 PM
 // Saturday: Closed (no slots)
 // dateStr should be in YYYY-MM-DD format
-function generateTimeSlotsForDate(dateStr: string): string[] {
+async function generateTimeSlotsForDate(dateStr: string, availabilityData?: AvailabilityData | null): Promise<string[]> {
   const slots: string[] = []
   
   // Parse the date string to get year, month, day
@@ -74,31 +97,40 @@ function generateTimeSlotsForDate(dateStr: string): string[] {
   const dayOfWeek = getDayOfWeek(year, month, day)
   const isSunday = dayOfWeek === 0
   const isSaturday = dayOfWeek === 6
+  const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
   
   console.log(`[DEBUG generateTimeSlotsForDate] Date: ${dateStr}, Year: ${year}, Month: ${month}, Day: ${day}`)
   console.log(`[DEBUG generateTimeSlotsForDate] DayOfWeek: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
   console.log(`[DEBUG generateTimeSlotsForDate] isSunday: ${isSunday}, isSaturday: ${isSaturday}`)
   
   // Load availability data from availability.json first to check if Saturday is enabled
-  let availabilityData
-  try {
-    availabilityData = readDataFile<{
-      businessHours: {
-        [key: string]: { open: string; close: string; enabled: boolean }
-      }
-      timeSlots: {
-        weekdays: Array<{ hour: number; minute: number; label: string }>
-        sunday: Array<{ hour: number; minute: number; label: string }>
-        saturday?: Array<{ hour: number; minute: number; label: string }>
-      }
-    }>('availability.json')
-  } catch (error) {
-    console.warn('Error loading availability data, using defaults:', error)
-    availabilityData = null
+  if (availabilityData === undefined) {
+    availabilityData = await loadAvailabilityData()
   }
 
-  // Check if Saturday is enabled
-  const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
+  const defaultEnabled = {
+    sunday: true,
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+  } as const
+
+  const dayEnabled =
+    availabilityData?.businessHours?.[dayKey]?.enabled ??
+    defaultEnabled[dayKey as keyof typeof defaultEnabled]
+
+  if (!dayEnabled) {
+    console.log(`[DEBUG generateTimeSlotsForDate] ${dayKey} disabled - returning empty slots`)
+    return []
+  }
+
+  // Check if Saturday is enabled (used for time slot selection below)
+  const saturdayEnabled =
+    availabilityData?.businessHours?.saturday?.enabled ??
+    defaultEnabled.saturday
 
   // If Saturday is disabled, return empty slots
   if (isSaturday && !saturdayEnabled) {
@@ -110,29 +142,39 @@ function generateTimeSlotsForDate(dateStr: string): string[] {
   let timeSlots: Array<{ hour: number; minute: number; label: string }>
   
   if (isSunday) {
-    timeSlots = availabilityData?.timeSlots?.sunday || [
+    timeSlots = availabilityData?.timeSlots?.sunday && availabilityData.timeSlots.sunday.length > 0
+      ? availabilityData.timeSlots.sunday
+      : [
       { hour: 12, minute: 30, label: '12:30 PM' },
       { hour: 15, minute: 0, label: '3:00 PM' },
-    ]
+      ]
   } else if (isSaturday && saturdayEnabled) {
     // Use Saturday-specific slots if available, otherwise use weekday slots
-    timeSlots = availabilityData?.timeSlots?.saturday || availabilityData?.timeSlots?.weekdays || [
+    timeSlots =
+      (availabilityData?.timeSlots?.saturday && availabilityData.timeSlots.saturday.length > 0
+        ? availabilityData.timeSlots.saturday
+        : undefined) ??
+      (availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
+        ? availabilityData.timeSlots.weekdays
+        : undefined) ??
+      [
       { hour: 9, minute: 30, label: '9:30 AM' },
       { hour: 12, minute: 0, label: '12:00 PM' },
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
-    ]
+      ]
   } else {
     // Weekdays (Mon-Fri)
-    timeSlots = availabilityData?.timeSlots?.weekdays || [
+    timeSlots =
+      availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
+        ? availabilityData.timeSlots.weekdays
+        : [
       { hour: 9, minute: 30, label: '9:30 AM' },
       { hour: 12, minute: 0, label: '12:00 PM' },
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
-    ]
+        ]
   }
-  
-  console.log(`[DEBUG generateTimeSlotsForDate] Using ${isSunday ? 'Sunday' : 'Weekday'} time slots:`, timeSlots)
   
   for (const slot of timeSlots) {
     // Create ISO string for this time slot in Nairobi timezone (UTC+3)
@@ -141,7 +183,6 @@ function generateTimeSlotsForDate(dateStr: string): string[] {
     slots.push(slotDateTime)
   }
   
-  console.log(`[DEBUG generateTimeSlotsForDate] Generated ${slots.length} slots:`, slots)
   return slots
 }
 
@@ -162,6 +203,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const dateParam = searchParams.get('date')
     const fullyBookedOnly = searchParams.get('fullyBookedOnly') === 'true'
+    const availabilityData = await loadAvailabilityData()
     
     // If only fully booked dates are requested, return them quickly
     if (fullyBookedOnly) {
@@ -185,19 +227,8 @@ export async function GET(request: NextRequest) {
         const dayOfWeek = getDayOfWeek(year, month, day)
         const isSaturday = dayOfWeek === 6
         
-        // Check if Saturday is enabled
-        let saturdayEnabled = false
-        try {
-          const availabilityData = readDataFile<{
-            businessHours: {
-              [key: string]: { open: string; close: string; enabled: boolean }
-            }
-          }>('availability.json')
-          saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
-        } catch (error) {
-          saturdayEnabled = false
-        }
-        
+        const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
+
         if (!isSaturday || saturdayEnabled) {
           datesToCheck.push(dateStr)
         }
@@ -237,7 +268,7 @@ export async function GET(request: NextRequest) {
           
           // Check each date in batch
           for (const dateStr of batch) {
-            const allSlots = generateTimeSlotsForDate(dateStr)
+            const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
             const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set()
             
             const availableSlots = allSlots.filter(slot => {
@@ -289,7 +320,7 @@ export async function GET(request: NextRequest) {
           let isFullyBooked = false
           if (calendar) {
             try {
-              const allSlots = generateTimeSlotsForDate(dateStr)
+              const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
               const startOfDay = new Date(currentDate)
               startOfDay.setHours(0, 0, 0, 0)
               const endOfDay = new Date(currentDate)
@@ -378,20 +409,7 @@ export async function GET(request: NextRequest) {
     console.log(`[DEBUG GET] Calculated day of week: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
     
     if (isSaturday) {
-      // Check if Saturday is enabled in availability settings
-      let saturdayEnabled = false
-      try {
-        const availabilityData = readDataFile<{
-          businessHours: {
-            [key: string]: { open: string; close: string; enabled: boolean }
-          }
-        }>('availability.json')
-        saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
-      } catch (error) {
-        // If error reading availability, default to closed
-        saturdayEnabled = false
-      }
-      
+      const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
       if (!saturdayEnabled) {
         console.log(`[DEBUG GET] Saturday detected and disabled - returning empty slots`)
         return NextResponse.json({ slots: [] })
@@ -409,7 +427,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Generate time slots for the selected date (pass date string, not Date object)
-    const allSlots = generateTimeSlotsForDate(dateParam)
+    const allSlots = await generateTimeSlotsForDate(dateParam, availabilityData)
     console.log(`[DEBUG] Date: ${dateParam}, Generated ${allSlots.length} slots:`, allSlots)
     
     // If no slots generated, return early

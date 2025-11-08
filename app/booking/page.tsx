@@ -305,11 +305,16 @@ export default function Booking() {
     businessHours: {
       [key: string]: { open: string; close: string; enabled: boolean }
     }
+    timeSlots?: {
+      weekdays?: Array<{ hour: number; minute: number; label: string }>
+      saturday?: Array<{ hour: number; minute: number; label: string }>
+      sunday?: Array<{ hour: number; minute: number; label: string }>
+    }
   } | null>(null)
 
   // Load availability data
   useEffect(() => {
-    fetch('/api/availability')
+    fetch('/api/availability', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setAvailabilityData(data)
@@ -325,35 +330,51 @@ export default function Booking() {
     const dates: AvailableDate[] = []
     const dateStrings: string[] = []
     const today = new Date()
-    
-    // Check if Saturday is enabled from availability data
-    const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
-    
+
+    const defaultBusinessHours: Record<
+      'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday',
+      { enabled: boolean; open: string; close: string }
+    > = {
+      sunday: { enabled: true, open: '12:00', close: '17:00' },
+      monday: { enabled: true, open: '09:00', close: '18:00' },
+      tuesday: { enabled: true, open: '09:00', close: '18:00' },
+      wednesday: { enabled: true, open: '09:00', close: '18:00' },
+      thursday: { enabled: true, open: '09:00', close: '18:00' },
+      friday: { enabled: true, open: '09:00', close: '18:00' },
+      saturday: { enabled: false, open: '09:00', close: '18:00' },
+    }
+
+    const resolvedBusinessHours = {
+      ...defaultBusinessHours,
+      ...(availabilityData?.businessHours ?? {}),
+    }
+
     for (let i = 0; i < 30; i++) {
       const date = new Date(today)
       date.setDate(today.getDate() + i)
-      
+
       const dayOfWeek = date.getDay()
-      // Include weekdays (Mon-Fri), Sundays, and Saturdays if enabled
-      const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5
-      const isSunday = dayOfWeek === 0
-      const isSaturday = dayOfWeek === 6
-      
-      if (isWeekday || isSunday || (isSaturday && saturdayEnabled)) {
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        const dateStr = `${year}-${month}-${day}`
-        
-        const formattedDate = date.toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })
-        
-        dates.push({ value: dateStr, label: formattedDate })
-        dateStrings.push(dateStr)
+      const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
+      const config = resolvedBusinessHours[dayKey as keyof typeof resolvedBusinessHours]
+      const enabled = typeof config?.enabled === 'boolean' ? config.enabled : true
+
+      if (!enabled) {
+        continue
       }
+
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const dateStr = `${year}-${month}-${day}`
+
+      const formattedDate = date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })
+
+      dates.push({ value: dateStr, label: formattedDate })
+      dateStrings.push(dateStr)
     }
     
     // Set dates immediately (no loading state)
@@ -364,7 +385,9 @@ export default function Booking() {
     // Fetch fully booked dates in the background (non-blocking)
     const fetchFullyBookedDates = async () => {
       try {
-        const response = await fetch('/api/calendar/available-slots?fullyBookedOnly=true')
+        const response = await fetch('/api/calendar/available-slots?fullyBookedOnly=true', {
+          cache: 'no-store',
+        })
         const data = await response.json()
         if (data.fullyBookedDates) {
           setFullyBookedDates(data.fullyBookedDates)
@@ -395,7 +418,9 @@ export default function Booking() {
     setSubmitStatus({ type: null, message: '' })
     
     try {
-      const response = await fetch(`/api/calendar/available-slots?date=${date}`)
+      const response = await fetch(`/api/calendar/available-slots?date=${date}`, {
+        cache: 'no-store',
+      })
       const data = await response.json()
       if (data.slots) {
         setTimeSlots(data.slots)
