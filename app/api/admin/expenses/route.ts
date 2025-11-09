@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
       const [removedExpense] = expenses.splice(index, 1)
       await writeDataFile('expenses.json', { expenses })
       await archiveExpense(removedExpense, performedBy)
+      const sanitizedRemovedExpense = JSON.parse(JSON.stringify(removedExpense)) as Record<string, unknown>
       await recordActivity({
         module: 'expenses',
         action: 'delete',
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
         summary: `Deleted expense for ${removedExpense.category}`,
         targetId: removedExpense.id,
         targetType: 'expense',
-        details: removedExpense,
+        details: sanitizedRemovedExpense,
       })
       return NextResponse.json({ success: true })
     }
