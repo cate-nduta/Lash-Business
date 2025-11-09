@@ -87,17 +87,17 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
   }
 
   // Check if date is available
+  const formatDateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
   const isDateAvailable = (date: Date): boolean => {
-    const dateStr = date.toISOString().split('T')[0]
-    if (!isDayEnabled(date)) {
-      return false
-    }
+    const dateStr = formatDateKey(date)
     return availableDates.includes(dateStr) && !fullyBookedDates.includes(dateStr)
   }
     
   // Check if date is fully booked
   const isFullyBooked = (date: Date): boolean => {
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateKey(date)
     return fullyBookedDates.includes(dateStr)
   }
 
@@ -129,7 +129,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     
     const isFullyBookedDate = fullyBookedDates.includes(dateStr)
 
-    if (!isPastDate(date) && !isFullyBookedDate && isDayEnabled(date) && isDateAvailable(date)) {
+    if (!isPastDate(date) && !isFullyBookedDate && isDateAvailable(date)) {
       onDateSelect(dateStr)
     }
   }
@@ -210,16 +210,12 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const isSelected = selectedDate === dateStr
           const isPast = isPastDate(date)
           const isSaturdayDay = isSaturday(date)
-          const isSundayDay = isSunday(date)
           const isFullyBookedDate = isFullyBooked(date)
           const isToday = date.toDateString() === new Date().toDateString()
-          const enabledForDay = isDayEnabled(date)
-          // For Sundays, they're available if not past and not fully booked
-          // For other days, check if they're in the availableDates array
           const isAvailable = isDateAvailable(date)
-          const isDisabledSaturday = isSaturdayDay && !enabledForDay
-          const isActuallyAvailable = enabledForDay && isAvailable && !isFullyBookedDate
-          const shouldFadeUnavailable = (isPast || !enabledForDay || !isAvailable) && !isFullyBookedDate
+          const isDisabledSaturday = isSaturdayDay && (!saturdayEnabled || !isAvailable)
+          const isActuallyAvailable = !isPast && isAvailable && !isFullyBookedDate
+          const shouldFadeUnavailable = (isPast || !isAvailable) && !isFullyBookedDate
 
           let cellClasses = 'aspect-square flex items-center justify-center rounded-xl transition-all cursor-pointer font-semibold text-[var(--color-text)] '
           
@@ -259,7 +255,15 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
               className={cellClasses}
               type="button"
               aria-disabled={isPast || !isActuallyAvailable || isFullyBookedDate}
-              title={isSaturdayDay && !saturdayEnabled ? 'Closed on Saturdays' : isFullyBookedDate ? 'All time slots booked for this date' : isPast ? 'Past dates are unavailable' : undefined}
+              title={
+                isFullyBookedDate
+                  ? 'All time slots booked for this date'
+                  : !isAvailable
+                  ? 'No booking slots available for this date'
+                  : isPast
+                  ? 'Past dates are unavailable'
+                  : undefined
+              }
             >
               {day}
             </button>

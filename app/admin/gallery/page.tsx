@@ -233,9 +233,11 @@ export default function AdminGallery() {
       const data = await response.json()
 
       if (response.ok && data.success) {
-        // Get the base URL for the uploaded image
-        const baseUrl = window.location.origin
-        const imageUrl = `${baseUrl}${data.url}`
+        // Use absolute URL if provided (Supabase), otherwise fall back to origin-relative path
+        const imageUrl =
+          typeof data.url === 'string' && data.url.startsWith('http')
+            ? data.url
+            : `${window.location.origin}${data.url}`
         
         // Add image to gallery
         const updatedGallery = {
