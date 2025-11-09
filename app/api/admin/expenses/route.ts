@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
+    await requireAdminAuth()
     const body = await request.json()
     const { id, category, description, amount, date } = body
 
@@ -187,7 +187,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdminAuth(request)
+    await requireAdminAuth()
     const currentUser = await getAdminUser()
     const performedBy = currentUser?.username || 'owner'
     const body = await request.json()
@@ -209,6 +209,7 @@ export async function DELETE(request: NextRequest) {
 
     await writeDataFile('expenses.json', { expenses })
     await archiveExpense(removedExpense, performedBy)
+    const sanitizedRemovedExpense = JSON.parse(JSON.stringify(removedExpense)) as Record<string, unknown>
     await recordActivity({
       module: 'expenses',
       action: 'delete',
@@ -216,7 +217,7 @@ export async function DELETE(request: NextRequest) {
       summary: `Deleted expense for ${removedExpense.category}`,
       targetId: removedExpense.id,
       targetType: 'expense',
-      details: removedExpense,
+      details: sanitizedRemovedExpense,
     })
 
     return NextResponse.json({ success: true, message: 'Expense deleted successfully' })
