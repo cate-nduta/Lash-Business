@@ -1,5 +1,4 @@
 import nodemailer from 'nodemailer'
-import { Resend } from 'resend'
 
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
@@ -7,7 +6,6 @@ const BUSINESS_NOTIFICATION_EMAIL =
   process.env.CALENDAR_EMAIL ||
   'hello@lashdiary.co.ke'
 const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
-const RESEND_API_KEY = process.env.RESEND_API_KEY
 const DEFAULT_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || '')
   .replace(/\/$/, '')
@@ -26,11 +24,7 @@ const ZOHO_FROM_EMAIL =
 const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
-  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : 'onboarding@resend.dev') // Default Resend email for testing
-const RESEND_SANDBOX_FROM =
-  process.env.RESEND_SANDBOX_FROM ||
-  process.env.RESEND_DEFAULT_FROM ||
-  'onboarding@resend.dev'
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 
 const EMAIL_STYLES = {
   background: '#FDF9F4',
@@ -41,8 +35,6 @@ const EMAIL_STYLES = {
   brand: '#7C4B31',
 }
 
-// Initialize Resend
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS
     ? nodemailer.createTransport({
@@ -148,156 +140,6 @@ function buildGoogleCalendarLink(options: {
     details: options.description,
   })
   return `https://calendar.google.com/calendar/render?${params.toString()}`
-}
-
-type ResendSendParams = {
-  to: string | string[]
-  subject: string
-  html: string
-  text?: string
-  replyTo?: string | string[]
-  cc?: string | string[]
-  bcc?: string | string[]
-  tags?: Array<{ name: string; value: string }>
-}
-
-type ResendSendOutcome = {
-  messageId: string | null
-  sender: string
-  rawResponse: any
-}
-
-function buildResendFromCandidates() {
-  const candidates: string[] = []
-
-  const pushCandidate = (email?: string | null) => {
-    if (!email) return
-    const trimmed = email.trim()
-    if (!trimmed || !trimmed.includes('@')) return
-    const formatted = `${EMAIL_FROM_NAME} <${trimmed}>`
-    if (!candidates.includes(formatted)) {
-      candidates.push(formatted)
-    }
-  }
-
-  pushCandidate(ZOHO_FROM_EMAIL)
-  pushCandidate(FROM_EMAIL)
-
-  if (RESEND_SANDBOX_FROM) {
-    pushCandidate(RESEND_SANDBOX_FROM)
-  } else {
-    pushCandidate('onboarding@resend.dev')
-  }
-
-  return candidates
-}
-
-function extractResendMessageId(result: any): string | null {
-  if (!result) return null
-  if (typeof result.id === 'string') return result.id
-  if (result.data && typeof result.data.id === 'string') return result.data.id
-  return null
-}
-
-function normaliseErrorMessage(error: any): string {
-  if (!error) return ''
-  if (typeof error === 'string') return error
-  if (error.message) return error.message
-  if (typeof error.error === 'string') return error.error
-  if (error.error?.message) return error.error.message
-  if (error.body?.message) return error.body.message
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return ''
-  }
-}
-
-function shouldRetryResendSender(error: any) {
-  if (!error) return false
-  const statusCode = error.statusCode ?? error.status ?? error.code
-  const message = normaliseErrorMessage(error).toLowerCase()
-
-  if (!message && typeof statusCode === 'number') {
-    return statusCode === 403
-  }
-
-  return (
-    statusCode === 403 ||
-    message.includes('sender identity') ||
-    message.includes('sender identity has not been verified') ||
-    message.includes('domain not found') ||
-    message.includes('domain is not verified') ||
-    message.includes('add and verify') ||
-    message.includes('not a verified domain') ||
-    message.includes('forbidden')
-  )
-}
-
-async function sendViaResendWithFallback(params: ResendSendParams): Promise<ResendSendOutcome> {
-  if (!resend) {
-    throw new Error('Resend client not configured')
-  }
-
-  const fromCandidates = buildResendFromCandidates()
-  if (fromCandidates.length === 0) {
-    throw new Error('No sender identity available for Resend emails')
-  }
-
-  let lastError: any = null
-
-  for (const from of fromCandidates) {
-    try {
-      const response = await resend.emails.send({ ...params, from })
-      if ((response as any)?.error) {
-        const payload = (response as any).error
-        lastError = payload
-        const shouldRetry = shouldRetryResendSender(payload)
-        console.warn(
-          `Resend responded with an error for sender ${from}${shouldRetry ? ', retrying with fallback sender...' : ''}`,
-          payload,
-        )
-        if (shouldRetry) {
-          continue
-        }
-        const errorMessage =
-          typeof payload === 'string'
-            ? payload
-            : payload?.message || JSON.stringify(payload)
-        throw new Error(errorMessage)
-      }
-
-      const messageId = extractResendMessageId(response)
-      return {
-        messageId,
-        sender: from,
-        rawResponse: response,
-      }
-    } catch (error: any) {
-      lastError = error
-      if (shouldRetryResendSender(error)) {
-        console.warn(
-          `Resend send failed for sender ${from}, attempting next fallback sender...`,
-          normaliseErrorMessage(error),
-        )
-        continue
-      }
-      throw error
-    }
-  }
-
-  if (lastError) {
-    if (lastError instanceof Error) {
-      throw lastError
-    }
-    const message =
-      typeof lastError === 'string'
-        ? lastError
-        : normaliseErrorMessage(lastError) || 'Resend send attempt failed'
-    throw new Error(message)
-  }
-
-  throw new Error('Failed to send email via Resend: no sender addresses were accepted.')
 }
 
 // Create HTML email template for customer
@@ -683,7 +525,7 @@ The LashDiary Team
   `.trim()
 }
 
-// Send email notification using Resend
+// Send email notification using Zoho SMTP
 export async function sendEmailNotification(bookingData: SendEmailPayload) {
   const {
     name,
@@ -856,11 +698,10 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
   let ownerEmailHtml = baseOwnerEmailHtml
 
   const hasZoho = Boolean(zohoTransporter)
-  const hasResend = Boolean(resend)
 
-  if (!hasZoho && !hasResend) {
-    console.warn('⚠️ Resend API key not configured. Email notifications will not be sent.')
-    console.warn('Please add RESEND_API_KEY to your .env.local file')
+  if (!hasZoho) {
+    console.error('⚠️ Zoho SMTP credentials are not configured. Email notifications will not be sent.')
+    console.error('Please add ZOHO_SMTP_USER and ZOHO_SMTP_PASS to your environment.')
     console.log('=== NEW BOOKING REQUEST (Email not sent) ===')
     console.log('To:', OWNER_EMAIL)
     console.log('Subject: New Booking Request -', name)
@@ -870,7 +711,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     return {
       success: false,
       status: 'disabled',
-      error: 'Email service not configured. Please add RESEND_API_KEY to .env.local',
+      error: 'Email service not configured. Please add Zoho SMTP credentials to the environment.',
     }
   }
 
@@ -960,154 +801,12 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
       }
     } catch (zohoError: any) {
       console.error('❌ Zoho SMTP error:', zohoError)
-      if (!hasResend) {
-        return {
-          success: false,
-          status: 'error',
-          error: zohoError.message || 'Zoho SMTP error',
-          details: zohoError.stack,
-        }
+      return {
+        success: false,
+        status: 'error',
+        error: zohoError.message || 'Zoho SMTP error',
+        details: zohoError.stack,
       }
-      console.warn('⚠️ Zoho SMTP failed, falling back to Resend...')
-      customerEmailError = null
-      customerEmailStatus = 'skipped'
-      customerEmailId = null
-      ownerEmailHtml = baseOwnerEmailHtml
-    }
-  }
-
-  try {
-    console.log('📧 Attempting to send emails via Resend (fallback mode)...')
-    ownerEmailHtml = baseOwnerEmailHtml
-    customerEmailId = null
-    customerEmailStatus = 'skipped'
-    customerEmailError = null
-
-    const resendChannels: { customer?: string; owner?: string } = {}
-
-    if (email) {
-      try {
-        console.log('📧 Sending customer email via Resend to:', email)
-        const customerOutcome = await sendViaResendWithFallback({
-          to: email,
-          replyTo: OWNER_EMAIL,
-          subject: 'Appointment Confirmation - LashDiary',
-          html: createCustomerEmailTemplate({
-            name,
-            email,
-            service: service || 'Lash Service',
-            formattedDate,
-            formattedTime,
-            formattedEndTime,
-            location: appointmentLocation,
-            deposit: depositFormatted,
-            servicePrice: finalPriceFormatted,
-            manageLink,
-            addToCalendarLink,
-              icsLink: normalizedIcsLink,
-            policyWindowHours: windowHours,
-            transferNote,
-            transferFinancialNote,
-          }),
-          text: [
-            `Hi ${name},`,
-            '',
-            transferNote ? transferNote : null,
-            transferFinancialNote ? transferFinancialNote : null,
-            `Your appointment for ${service || 'Lash Service'} is confirmed.`,
-            `📅 ${formattedDate} at ${formattedTime}`,
-            `📍 ${appointmentLocation}`,
-            depositFormatted !== 'N/A' ? `Deposit on file: ${depositFormatted}` : null,
-            '',
-            manageLink ? `Manage or reschedule here: ${manageLink}` : `Manage or reschedule: ${BASE_URL}/booking`,
-            addToCalendarLink ? `Add to Google Calendar: ${addToCalendarLink}` : null,
-            normalizedIcsLink ? `Add to Apple/Outlook Calendar (.ics): ${normalizedIcsLink}` : null,
-            '',
-            `Need anything? Reply to this email and we’ll be right with you.`,
-          ]
-            .filter((line) => line !== null)
-            .join('\n'),
-        })
-
-        customerEmailId = customerOutcome.messageId
-        customerEmailStatus = customerEmailId ? 'sent' : 'pending'
-        resendChannels.customer = customerOutcome.sender
-        console.log('✅ Customer email sent via Resend!', {
-          sender: customerOutcome.sender,
-          messageId: customerEmailId,
-        })
-      } catch (customerError: any) {
-        customerEmailError = customerError.message || 'Unknown Resend error'
-        customerEmailStatus = 'error'
-        console.error('❌ Failed to send customer email via Resend:', {
-          message: customerEmailError,
-          statusCode: customerError?.statusCode,
-          stack: customerError?.stack,
-        })
-        ownerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData, customerEmailError, email)
-      }
-    }
-
-    console.log('📧 Sending owner notification via Resend...')
-    const ownerOutcome = await sendViaResendWithFallback({
-      to: OWNER_EMAIL,
-      replyTo: email || OWNER_EMAIL,
-      subject: `New Booking Request - ${name}`,
-      html: ownerEmailHtml,
-      text: [
-        `New booking for ${name}`,
-        `Service: ${service || 'Lash Service'}`,
-        `Date: ${formattedDate}`,
-        `Time: ${formattedTime} – ${formattedEndTime}`,
-        `Location: ${appointmentLocation}`,
-        ownerNotes ? `Notes: ${ownerNotes}` : null,
-        '',
-        addToCalendarLink ? `Add to Google Calendar: ${addToCalendarLink}` : null,
-        normalizedIcsLink ? `Download .ics for Apple/Outlook: ${normalizedIcsLink}` : null,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    })
-
-    resendChannels.owner = ownerOutcome.sender
-    console.log('✅ Owner email sent via Resend!', {
-      sender: ownerOutcome.sender,
-      messageId: ownerOutcome.messageId,
-    })
-
-    const status =
-      customerEmailStatus === 'sent'
-        ? 'sent'
-        : customerEmailStatus === 'pending'
-        ? 'pending'
-        : customerEmailStatus === 'error'
-        ? 'customer_error'
-        : 'owner_only'
-
-    return {
-      success: true,
-      status,
-      ownerEmailId: ownerOutcome.messageId,
-      customerEmailId,
-      customerEmailError,
-      ownerEmailSent: true,
-      customerEmailSent: customerEmailStatus === 'sent',
-      resendChannels,
-    }
-  } catch (error: any) {
-    console.error('❌ Error sending emails via Resend fallback:', error)
-    console.error('Error details:', {
-      message: error.message,
-      name: error.name,
-      statusCode: error.statusCode,
-    })
-    
-    // Return more detailed error information
-    return {
-      success: false,
-      status: error.statusCode === 403 ? 'needs_sender_verification' : 'error',
-      error: error.message || 'Failed to send emails',
-      details: `Resend API error: ${error.message || 'Unknown error'}`,
     }
   }
 }

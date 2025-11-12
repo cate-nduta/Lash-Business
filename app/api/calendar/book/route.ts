@@ -244,27 +244,34 @@ export async function POST(request: NextRequest) {
         policyWindowHours,
         notes: typeof notes === 'string' ? notes : undefined,
       })
-      emailSent = emailResult.success === true && emailResult.ownerEmailSent === true
-      emailStatus = emailResult.status || (emailSent ? 'sent' : 'issue')
-      if (emailSent) {
-        console.log('Email notifications status:', {
-          ownerEmailSent: emailResult.ownerEmailSent,
-          ownerEmailId: emailResult.ownerEmailId,
-          customerEmailSent: emailResult.customerEmailSent,
-          customerEmailId: emailResult.customerEmailId,
-          customerEmailError: emailResult.customerEmailError,
-        })
-        
-        if (!emailResult.customerEmailSent) {
-          console.warn('⚠️ Customer email was not sent!')
-          if (emailResult.customerEmailError) {
-            console.error('Customer email error:', emailResult.customerEmailError)
-          }
-        }
+      if (!emailResult) {
+        console.warn('Email notification service did not return a response.')
+        emailSent = false
+        emailError = 'Email service unavailable'
+        emailStatus = 'error'
       } else {
-        console.warn('Email notifications not sent:', emailResult.error)
-        emailError = emailResult.error
-        emailStatus = emailResult.status || 'issue'
+        emailSent = emailResult.success === true && emailResult.ownerEmailSent === true
+        emailStatus = emailResult.status || (emailSent ? 'sent' : 'issue')
+        if (emailSent) {
+          console.log('Email notifications status:', {
+            ownerEmailSent: emailResult.ownerEmailSent,
+            ownerEmailId: emailResult.ownerEmailId,
+            customerEmailSent: emailResult.customerEmailSent,
+            customerEmailId: emailResult.customerEmailId,
+            customerEmailError: emailResult.customerEmailError,
+          })
+          
+          if (!emailResult.customerEmailSent) {
+            console.warn('⚠️ Customer email was not sent!')
+            if (emailResult.customerEmailError) {
+              console.error('Customer email error:', emailResult.customerEmailError)
+            }
+          }
+        } else {
+          console.warn('Email notifications not sent:', emailResult.error)
+          emailError = emailResult.error
+          emailStatus = emailResult.status || 'issue'
+        }
       }
     } catch (emailErr: any) {
       console.error('Error sending email notifications:', emailErr)

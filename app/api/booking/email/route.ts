@@ -48,11 +48,22 @@ export async function POST(request: NextRequest) {
       notes: typeof body.notes === 'string' ? body.notes : undefined,
     })
 
+    if (!result) {
+      return NextResponse.json(
+        {
+          success: false,
+          status: 'error',
+          error: 'Email notification service did not return a response.',
+        },
+        { status: 500 },
+      )
+    }
+
     return NextResponse.json({
       ...result,
-      message: result.success 
-        ? 'Email notifications sent successfully' 
-        : 'Email service not configured',
+      message: result.success
+        ? 'Email notifications sent successfully'
+        : result.error || 'Email service not configured',
     })
   } catch (error: any) {
     console.error('Error sending email notification:', error)
