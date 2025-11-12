@@ -10,9 +10,9 @@ import type { SubscriberRecord } from '@/lib/email-campaign-utils'
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-const TEST_EMAIL = process.env.CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+const TEST_EMAIL = process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
 const UNSUBSCRIBE_SECRET = process.env.EMAIL_UNSUBSCRIBE_SECRET || 'lashdiary-secret'
-const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'catherinenkuria@gmail.com'
+const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke'
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
@@ -129,7 +129,7 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
           <tr>
             <td style="background-color: #FDF1F6; padding: 28px 32px; text-align: center;">
               <p style="font-size: 13px; color: #9B5B72; margin: 0 0 8px 0;">
-                Questions or special requests? Reply to this email or call us at ${business.phone || '+254 748 863 882'}.
+                Questions or special requests? Reply to this email and we’ll be happy to help.
               </p>
               <p style="font-size: 12px; color: #B07A8F; margin: 0;">
                 ${business.name || 'LashDiary'} • ${business.address || 'Nairobi, Kenya'} • <a href="${BASE_URL}" style="color: #B07A8F; text-decoration: underline;">${BASE_URL.replace(/^https?:\/\//, '')}</a>

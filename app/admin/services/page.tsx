@@ -1,44 +1,52 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
-
-interface Service {
-  name: string
-  price: number
-  duration: number
-}
-
-interface ServicesData {
-  fullSets: Service[]
-  lashFills: Service[]
-  otherServices: Service[]
-}
+import { type ServiceCatalog, type ServiceCategory, type Service } from '@/lib/services-utils'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
 
+const generateId = (prefix: string) => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+const blankService = (): Service => ({
+  id: generateId('service'),
+  name: '',
+  price: 0,
+  duration: 60,
+})
+
+const blankCategory = (): ServiceCategory => ({
+  id: generateId('category'),
+  name: 'New Category',
+  showNotice: false,
+  notice: '',
+  services: [blankService()],
+})
+
 export default function AdminServices() {
-  const [services, setServices] = useState<ServicesData>({
-    fullSets: [],
-    lashFills: [],
-    otherServices: [],
-  })
-  const [originalServices, setOriginalServices] = useState<ServicesData>({
-    fullSets: [],
-    lashFills: [],
-    otherServices: [],
-  })
+  const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
+  const [originalCatalog, setOriginalCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showDialog, setShowDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const router = useRouter()
-  const hasUnsavedChanges = JSON.stringify(services) !== JSON.stringify(originalServices)
+
+  const hasUnsavedChanges = useMemo(
+    () => JSON.stringify(catalog) !== JSON.stringify(originalCatalog),
+    [catalog, originalCatalog],
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -69,28 +77,11 @@ export default function AdminServices() {
     }
   }, [router])
 
-  const loadServices = async () => {
-    try {
-      const response = await authorizedFetch('/api/admin/services')
-      if (response.ok) {
-        const data = await response.json()
-        setServices(data)
-        setOriginalServices(data)
-      }
-    } catch (error) {
-      console.error('Error loading services:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Handle unsaved changes warning
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
-        e.preventDefault()
-        e.returnValue = ''
-        return ''
+        event.preventDefault()
+        event.returnValue = ''
       }
     }
 
@@ -101,10 +92,69 @@ export default function AdminServices() {
     }
   }, [hasUnsavedChanges])
 
-  // Intercept Link clicks
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  useEffect(() => {
+    if (catalog.categories.length === 0) {
+      setActiveCategoryId(null)
+      return
+    }
+    if (!activeCategoryId || !catalog.categories.some((category) => category.id === activeCategoryId)) {
+      setActiveCategoryId(catalog.categories[0].id)
+    }
+  }, [catalog, activeCategoryId])
+
+  const loadServices = async () => {
+    try {
+      const response = await authorizedFetch('/api/admin/services')
+      if (!response.ok) {
+        throw new Error('Failed to load services')
+      }
+      const data: ServiceCatalog = await response.json()
+      setCatalog(data)
+      setOriginalCatalog(data)
+      if (data.categories.length > 0) {
+        setActiveCategoryId(data.categories[0].id)
+      }
+    } catch (error) {
+      console.error('Error loading services:', error)
+      setMessage({ type: 'error', text: 'Failed to load services' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+const setCatalogWithUpdate = (updater: (previous: ServiceCatalog) => ServiceCatalog) => {
+  setCatalog((previous) => updater(previous))
+}
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+
+    try {
+      const response = await authorizedFetch('/api/admin/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(catalog),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save services')
+      }
+
+      setOriginalCatalog(catalog)
+      setMessage({ type: 'success', text: 'Services updated successfully!' })
+      setShowDialog(false)
+    } catch (error) {
+      console.error('Error saving services:', error)
+      setMessage({ type: 'error', text: 'Failed to save services' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLinkClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (hasUnsavedChanges) {
-      e.preventDefault()
+      event.preventDefault()
       setPendingNavigation(href)
       setShowDialog(true)
     }
@@ -113,7 +163,6 @@ export default function AdminServices() {
   const handleDialogSave = async () => {
     await handleSave()
     if (pendingNavigation) {
-      setShowDialog(false)
       router.push(pendingNavigation)
       setPendingNavigation(null)
     }
@@ -132,122 +181,120 @@ export default function AdminServices() {
     setPendingNavigation(null)
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    setMessage(null)
+  const addCategory = () => {
+    const newCategory = blankCategory()
+    setCatalogWithUpdate((prev) => ({
+      categories: [...prev.categories, newCategory],
+    }))
+    setActiveCategoryId(newCategory.id)
+  }
 
-    try {
-      const response = await authorizedFetch('/api/admin/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(services),
-      })
+const updateCategory = (categoryId: string, updater: (category: ServiceCategory) => ServiceCategory) => {
+  setCatalogWithUpdate((previous) => ({
+    categories: previous.categories.map((category) =>
+      category.id === categoryId ? updater(category) : category,
+    ),
+  }))
+}
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Services updated successfully!' })
-        setOriginalServices(services) // Update original to clear unsaved changes flag
-        setShowDialog(false) // Close dialog if open
-      } else {
-        setMessage({ type: 'error', text: 'Failed to save services' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'An error occurred' })
-    } finally {
-      setSaving(false)
+const removeCategory = (categoryId: string) => {
+  const category = catalog.categories.find((cat) => cat.id === categoryId)
+  if (!category) return
+
+    const confirmed = window.confirm(
+      `Remove the category “${category.name}” and all its services? This cannot be undone.`,
+    )
+    if (!confirmed) return
+
+    setCatalogWithUpdate((prev) => ({
+      categories: prev.categories.filter((cat) => cat.id !== categoryId),
+    }))
+  }
+
+const addService = (categoryId: string) => {
+  updateCategory(categoryId, (category) => ({
+    ...category,
+    services: [...category.services, blankService()],
+  }))
+}
+
+const updateService = (categoryId: string, serviceId: string, field: keyof Service, value: string | number) => {
+  updateCategory(categoryId, (category) => ({
+    ...category,
+    services: category.services.map((service) =>
+      service.id === serviceId ? { ...service, [field]: value } : service,
+    ),
+  }))
+}
+
+const removeService = (categoryId: string, serviceId: string) => {
+  updateCategory(categoryId, (category) => ({
+    ...category,
+    services: category.services.filter((service) => service.id !== serviceId),
+  }))
+}
+
+const moveCategory = (categoryId: string, direction: 'left' | 'right') => {
+  setCatalogWithUpdate((previous) => {
+    const index = previous.categories.findIndex((category) => category.id === categoryId)
+    if (index === -1) return previous
+
+    const targetIndex = direction === 'left' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= previous.categories.length) {
+      return previous
     }
-  }
 
-  const updateService = (category: keyof ServicesData, index: number, field: keyof Service, value: string | number) => {
-    setServices((prev) => {
-      const updated = { ...prev }
-      updated[category] = [...updated[category]]
-      updated[category][index] = { ...updated[category][index], [field]: value }
-      return updated
-    })
-  }
+    const updated = [...previous.categories]
+    const [removed] = updated.splice(index, 1)
+    updated.splice(targetIndex, 0, removed)
 
-  const addService = (category: keyof ServicesData) => {
-    setServices((prev) => ({
-      ...prev,
-      [category]: [...prev[category], { name: '', price: 0, duration: 60 }],
-    }))
-  }
+    return { categories: updated }
+  })
+}
 
-  const removeService = (category: keyof ServicesData, index: number) => {
-    setServices((prev) => ({
-      ...prev,
-      [category]: prev[category].filter((_, i) => i !== index),
-    }))
-  }
+const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'down') => {
+  updateCategory(categoryId, (category) => {
+    const services = [...category.services]
+    const index = services.findIndex((service) => service.id === serviceId)
+    if (index === -1) return category
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= services.length) {
+      return category
+    }
+
+    const [removed] = services.splice(index, 1)
+    services.splice(targetIndex, 0, removed)
+    return { ...category, services }
+  })
+}
 
   if (loading) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
-        <div className="text-brown">Loading...</div>
+        <div className="text-brown">Loading services...</div>
       </div>
     )
   }
 
-  const renderServiceCategory = (title: string, category: keyof ServicesData) => (
-    <div className="bg-white rounded-lg shadow p-6 mb-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold text-brown-dark">{title}</h2>
-        <button
-          onClick={() => addService(category)}
-          className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
-        >
-          + Add Service
-        </button>
-      </div>
-      <div className="space-y-4">
-        {services[category].map((service, index) => (
-          <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
-            <input
-              type="text"
-              value={service.name}
-              onChange={(e) => updateService(category, index, 'name', e.target.value)}
-              placeholder="Service name"
-              className="px-3 py-2 border border-brown-light rounded bg-white"
-            />
-            <input
-              type="number"
-              value={service.price}
-              onChange={(e) => updateService(category, index, 'price', parseInt(e.target.value) || 0)}
-              placeholder="Price (KSH)"
-              className="px-3 py-2 border border-brown-light rounded bg-white"
-            />
-            <input
-              type="number"
-              value={service.duration}
-              onChange={(e) => updateService(category, index, 'duration', parseInt(e.target.value) || 60)}
-              placeholder="Duration (minutes)"
-              className="px-3 py-2 border border-brown-light rounded bg-white"
-            />
-            <button
-              onClick={() => removeService(category, index)}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  const activeCategory = catalog.categories.find((category) => category.id === activeCategoryId) ?? null
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-6 flex justify-between items-center">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           {hasUnsavedChanges && (
-            <div className="text-sm text-orange-600 font-medium">
-              ⚠️ You have unsaved changes
+            <div className="text-sm text-orange-600 font-medium flex items-center gap-2">
+              <span role="img" aria-label="warning">
+                ⚠️
+              </span>
+              You have unsaved changes
             </div>
           )}
-          <Link 
-            href="/admin/dashboard" 
+          <Link
+            href="/admin/dashboard"
             className="text-brown hover:text-brown-dark"
-            onClick={(e) => handleLinkClick(e, '/admin/dashboard')}
+            onClick={(event) => handleLinkClick(event, '/admin/dashboard')}
           >
             ← Back to Dashboard
           </Link>
@@ -260,7 +307,6 @@ export default function AdminServices() {
           </button>
         </div>
 
-        {/* Toast Notification */}
         {message && (
           <Toast
             message={message.text}
@@ -269,11 +315,227 @@ export default function AdminServices() {
           />
         )}
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-display text-brown-dark mb-8">Service Prices Management</h1>
-          {renderServiceCategory('Full Sets', 'fullSets')}
-          {renderServiceCategory('Lash Fills', 'lashFills')}
-          {renderServiceCategory('Other Services', 'otherServices')}
+        <div className="bg-white rounded-2xl shadow-lg p-8">
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            {catalog.categories.map((category, index) => (
+              <div key={category.id} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveCategoryId(category.id)}
+                  className={`px-4 py-2 rounded-full border transition-colors ${
+                    category.id === activeCategoryId
+                      ? 'bg-brown-dark text-white border-brown-dark shadow-lg'
+                      : 'bg-white text-brown-dark border-brown-light hover:bg-pink-light/60'
+                  }`}
+                >
+                  {category.name || 'Untitled'}
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Move left"
+                    onClick={() => moveCategory(category.id, 'left')}
+                    className="p-2 text-xs rounded border border-brown-light text-brown-dark hover:bg-pink-light/70 disabled:opacity-40"
+                    disabled={index === 0}
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    title="Move right"
+                    onClick={() => moveCategory(category.id, 'right')}
+                    className="p-2 text-xs rounded border border-brown-light text-brown-dark hover:bg-pink-light/70 disabled:opacity-40"
+                    disabled={index === catalog.categories.length - 1}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addCategory}
+              className="px-4 py-2 rounded-full border border-dashed border-brown-light text-brown-dark hover:bg-pink-light/60"
+            >
+              + Add Category
+            </button>
+          </div>
+
+          {activeCategory ? (
+            <div className="border border-brown-light rounded-2xl p-6 space-y-6 bg-pink-light/30">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Category Name
+                  </label>
+                  <input
+                    type="text"
+                    value={activeCategory.name}
+                    onChange={(event) =>
+                      updateCategory(activeCategory.id, (category) => ({
+                        ...category,
+                        name: event.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+                <div className="flex flex-col justify-end items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => removeCategory(activeCategory.id)}
+                    className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-100 transition"
+                  >
+                    Delete Category
+                  </button>
+                </div>
+              </div>
+
+              <div className="border border-brown-light rounded-xl bg-white p-4 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-brown-dark">
+                  <input
+                    type="checkbox"
+                    checked={activeCategory.showNotice}
+                    onChange={(event) =>
+                      updateCategory(activeCategory.id, (category) => ({
+                        ...category,
+                        showNotice: event.target.checked,
+                        notice: event.target.checked ? category.notice : '',
+                      }))
+                    }
+                    className="w-4 h-4"
+                  />
+                  Show notice before this category
+                </label>
+                {activeCategory.showNotice && (
+                  <textarea
+                    value={activeCategory.notice}
+                    onChange={(event) =>
+                      updateCategory(activeCategory.id, (category) => ({
+                        ...category,
+                        notice: event.target.value,
+                      }))
+                    }
+                    placeholder="Add a helpful notice or reminder that clients will see before these services."
+                    rows={3}
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
+                  />
+                )}
+              </div>
+
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-brown-dark">Services</h2>
+                <button
+                  type="button"
+                  onClick={() => addService(activeCategory.id)}
+                  className="px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown"
+                >
+                  + Add Service
+                </button>
+              </div>
+
+              {activeCategory.services.length === 0 ? (
+                <div className="border border-dashed border-brown-light rounded-xl p-6 text-center text-gray-500">
+                  No services yet. Click “Add Service” to create one.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activeCategory.services.map((service, index) => (
+                    <div
+                      key={service.id}
+                      className="bg-white border border-brown-light rounded-xl p-4 shadow-sm space-y-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-1">
+                            Service Name
+                          </label>
+                          <input
+                            type="text"
+                            value={service.name}
+                            onChange={(event) =>
+                              updateService(activeCategory.id, service.id, 'name', event.target.value)
+                            }
+                            placeholder="Service name"
+                            className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-1">
+                            Price (KSH)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={service.price}
+                            onChange={(event) =>
+                              updateService(
+                                activeCategory.id,
+                                service.id,
+                                'price',
+                                Number(event.target.value) || 0,
+                              )
+                            }
+                            className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-1">
+                            Duration (minutes)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={service.duration}
+                            onChange={(event) =>
+                              updateService(
+                                activeCategory.id,
+                                service.id,
+                                'duration',
+                                Number(event.target.value) || 0,
+                              )
+                            }
+                            className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2 justify-between">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => moveService(activeCategory.id, service.id, 'up')}
+                              className="flex-1 px-3 py-2 border border-brown-light rounded-lg text-sm text-brown-dark hover:bg-pink-light/60 disabled:opacity-40"
+                              disabled={index === 0}
+                            >
+                              ↑ Move Up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveService(activeCategory.id, service.id, 'down')}
+                              className="flex-1 px-3 py-2 border border-brown-light rounded-lg text-sm text-brown-dark hover:bg-pink-light/60 disabled:opacity-40"
+                              disabled={index === activeCategory.services.length - 1}
+                            >
+                              ↓ Move Down
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeService(activeCategory.id, service.id)}
+                            className="px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-100 transition"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="border border-dashed border-brown-light rounded-2xl p-8 text-center text-gray-500">
+              No categories yet. Create your first category to begin.
+            </div>
+          )}
         </div>
       </div>
 

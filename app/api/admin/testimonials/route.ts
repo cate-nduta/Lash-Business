@@ -5,11 +5,13 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 interface Testimonial {
   id: string
   name: string
-  message: string
-  rating: number
+  message?: string
+  testimonial?: string
+  rating?: number
   photoUrl?: string
   createdAt: string
   status?: 'pending' | 'approved' | 'rejected'
+  approved?: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -33,7 +35,43 @@ export async function POST(request: NextRequest) {
     const testimonials = data.testimonials || []
 
     const body = await request.json()
-    const { testimonial } = body as { testimonial: Testimonial }
+    const { action, testimonialId, testimonial } = body as {
+      action?: 'approve' | 'reject' | 'delete'
+      testimonialId?: string
+      testimonial?: Testimonial
+    }
+
+    if (action) {
+      if (!testimonialId) {
+        return NextResponse.json({ error: 'Testimonial ID is required' }, { status: 400 })
+      }
+
+      const index = testimonials.findIndex((item) => item.id === testimonialId)
+      if (index === -1) {
+        return NextResponse.json({ error: 'Testimonial not found' }, { status: 404 })
+      }
+
+      if (action === 'approve') {
+        const existing = testimonials[index]
+        const createdAtString = existing.createdAt && !Number.isNaN(new Date(existing.createdAt).getTime())
+          ? existing.createdAt
+          : new Date().toISOString()
+
+        testimonials[index] = {
+          ...existing,
+          status: 'approved',
+          approved: true,
+          createdAt: createdAtString,
+        }
+      } else if (action === 'reject' || action === 'delete') {
+        testimonials.splice(index, 1)
+      } else {
+        return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
+      }
+
+      await writeDataFile('testimonials.json', { testimonials })
+      return NextResponse.json({ success: true })
+    }
 
     if (!testimonial || !testimonial.id) {
       return NextResponse.json({ error: 'Invalid testimonial data' }, { status: 400 })

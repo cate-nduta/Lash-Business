@@ -1,8 +1,11 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { google } from 'googleapis'
 import { recordActivity } from '@/lib/activity-log'
+import { updateFullyBookedState } from '@/lib/availability-utils'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 
@@ -31,8 +34,6 @@ function getCalendarClient() {
   }
 }
 
-type RefundAction = 'retain' | 'refund_now' | 'refund_pending'
-
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
@@ -40,19 +41,9 @@ export async function POST(request: NextRequest) {
     const performedBy = currentUser?.username || 'owner'
 
     const body = await request.json()
-    const {
-      bookingId,
-      reason,
-      refundAction,
-      refundAmount,
-      refundNotes,
-      cancelledBy = 'admin',
-    } = body as {
+    const { bookingId, reason, cancelledBy = 'admin' } = body as {
       bookingId: string
       reason?: string
-      refundAction: RefundAction
-      refundAmount?: number
-      refundNotes?: string
       cancelledBy?: 'admin' | 'client'
     }
 
@@ -88,37 +79,13 @@ export async function POST(request: NextRequest) {
     const isLateCancellation = typeof hoursUntilAppointment === 'number' ? hoursUntilAppointment < 10 : true
 
     const depositAmount = Number.isFinite(booking.deposit) ? Number(booking.deposit) : 0
-    const action: RefundAction = refundAction || 'retain'
-
-    let resolvedRefundAmount = depositAmount
-    if (typeof refundAmount === 'number' && refundAmount >= 0) {
-      resolvedRefundAmount = refundAmount
-    }
-
-    let refundStatus: 'not_required' | 'not_applicable' | 'pending' | 'refunded' | 'retained' = 'not_required'
-    if (depositAmount > 0) {
-      switch (action) {
-        case 'refund_now':
-          refundStatus = 'refunded'
-          break
-        case 'refund_pending':
-          refundStatus = 'pending'
-          break
-        case 'retain':
-        default:
-          refundStatus = 'retained'
-          resolvedRefundAmount = 0
-          break
-      }
-    }
-
     booking.status = 'cancelled'
     booking.cancelledAt = now.toISOString()
     booking.cancelledBy = cancelledBy
     booking.cancellationReason = reason || null
-    booking.refundStatus = depositAmount > 0 ? refundStatus : 'not_required'
-    booking.refundAmount = depositAmount > 0 ? resolvedRefundAmount : 0
-    booking.refundNotes = refundNotes || null
+    booking.refundStatus = depositAmount > 0 ? 'retained' : 'not_required'
+    booking.refundAmount = 0
+    booking.refundNotes = null
 
     let calendarEventRemoved = false
     if (booking.calendarEventId) {
@@ -140,6 +107,11 @@ export async function POST(request: NextRequest) {
 
     bookings[bookingIndex] = booking
     await writeDataFile('bookings.json', { bookings })
+    try {
+      await updateFullyBookedState(booking.date, bookings)
+    } catch (error) {
+      console.error('Failed to refresh fully booked dates after admin cancellation:', error)
+    }
     await recordActivity({
       module: 'bookings',
       action: 'cancel',
@@ -150,7 +122,7 @@ export async function POST(request: NextRequest) {
       details: {
         cancellationReason: reason || null,
         refundStatus: booking.refundStatus,
-        refundAmount: booking.refundAmount,
+        depositRetained: depositAmount,
         calendarEventRemoved,
         isLateCancellation,
       },

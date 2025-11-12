@@ -160,9 +160,9 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
   }
 
   return (
-    <div className="bg-[var(--color-surface)] rounded-3xl shadow-soft p-6 border border-[var(--color-text)]/10">
+    <div className="max-w-3xl mx-auto bg-[var(--color-surface)] rounded-2xl shadow-soft p-4 sm:p-5 border border-[var(--color-text)]/10">
       {/* Month Navigation */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <button
           onClick={goToPreviousMonth}
           className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:-rotate-12"
@@ -172,7 +172,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h3 className="text-xl font-display text-[var(--color-text)] font-semibold">
+        <h3 className="text-lg sm:text-xl font-display text-[var(--color-text)] font-semibold">
           {monthNames[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </h3>
         <button
@@ -187,16 +187,16 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
       </div>
 
       {/* Day Headers */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
+      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
         {dayNames.map((day) => (
-          <div key={day} className="text-center text-sm font-semibold text-[var(--color-text)] py-2">
+          <div key={day} className="text-center text-xs sm:text-sm font-semibold text-[var(--color-text)] py-1.5">
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1.5">
         {calendarDays.map((day, index) => {
           if (day === null) {
             return <div key={`empty-${index}`} className="aspect-square" />
@@ -217,13 +217,13 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const isActuallyAvailable = !isPast && isAvailable && !isFullyBookedDate
           const shouldFadeUnavailable = (isPast || !isAvailable) && !isFullyBookedDate
 
-          let cellClasses = 'aspect-square flex items-center justify-center rounded-xl transition-all cursor-pointer font-semibold text-[var(--color-text)] '
+          let cellClasses = 'relative aspect-square flex items-center justify-center rounded-lg transition-all cursor-pointer font-semibold text-[var(--color-text)] overflow-hidden text-sm sm:text-base '
           
           // Block past dates and unavailable dates
           // Saturdays are only blocked if they're disabled
           if (isPast || !isActuallyAvailable || isFullyBookedDate) {
             if (isFullyBookedDate) {
-              cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 line-through shadow-inner'
+              cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 shadow-inner'
             } else {
               cellClasses += 'cursor-not-allowed border border-[var(--color-text)]/20 shadow-inner'
 
@@ -240,11 +240,11 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
               }
             }
           } else if (isSelected) {
-            cellClasses += 'bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-xl transform scale-105 border-2 border-[var(--color-primary-dark)] ring-2 ring-[var(--color-accent)]/40'
+            cellClasses += 'bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-xl transform scale-[1.03] border border-[var(--color-primary-dark)] ring-2 ring-[var(--color-accent)]/40'
           } else if (isToday) {
-            cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] text-[var(--color-on-primary)] border border-[var(--color-accent)]/70 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transform hover:scale-105'
+            cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] text-[var(--color-on-primary)] border border-[var(--color-accent)]/70 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transform hover:scale-[1.03]'
           } else {
-            cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 40%, var(--color-surface) 60%)] text-[var(--color-primary-dark)] border border-[var(--color-accent)]/55 hover:bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] hover:border-[var(--color-accent)]/75 hover:shadow-[0_10px_18px_rgba(0,0,0,0.08)] transform hover:scale-[1.04]'
+            cellClasses += 'bg-white text-[var(--color-primary-dark)] border border-[color-mix(in srgb,var(--color-primary) 35%, var(--color-surface) 65%)] hover:bg-[color-mix(in srgb,#ffffff 70%, var(--color-primary) 30%)] hover:border-[var(--color-primary)]/70 hover:text-[var(--color-primary-dark)] hover:shadow-[0_10px_18px_rgba(0,0,0,0.08)] transform hover:scale-[1.03]'
           }
 
           return (
@@ -266,55 +266,58 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
               }
             >
               {day}
+              {isFullyBookedDate && (
+                <span className="absolute inset-0 bg-[#FB923C]/70 pointer-events-none rounded-xl"></span>
+              )}
             </button>
           )
         })}
       </div>
 
       {/* Legend */}
-      <div className="mt-6 mb-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
-            <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg shadow-inner border border-[var(--color-primary-dark)]/30"></div>
+      <div className="mt-4 mb-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-6 h-6 bg-[var(--color-primary)] rounded-md shadow-inner border border-[var(--color-primary-dark)]/30"></div>
             <div>
-              <div className="font-bold text-[var(--color-text)] text-sm">Selected</div>
+              <div className="font-bold text-[var(--color-text)] text-xs sm:text-sm">Selected</div>
               <div className="text-xs text-[var(--color-text)]/70">Your chosen date</div>
             </div>
           </div>
           
-          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
-            <div className="w-8 h-8 rounded-lg border border-[var(--color-text)]/15 bg-white"></div>
+          <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-6 h-6 rounded-md border border-[var(--color-text)]/15 bg-white"></div>
             <div>
-              <div className="font-bold text-[var(--color-text)] text-sm">Available</div>
+              <div className="font-bold text-[var(--color-text)] text-xs sm:text-sm">Available</div>
               <div className="text-xs text-[var(--color-text)]/70">Click to book</div>
             </div>
           </div>
           
-          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
-            <div className="w-8 h-8 bg-yellow-100 rounded-lg border-2 border-[#FACC15]"></div>
+          <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+            <div className="w-6 h-6 bg-yellow-100 rounded-md border border-[#FACC15]"></div>
             <div>
-              <div className="font-bold text-[#EAB308] text-sm">Fully Booked</div>
+              <div className="font-bold text-[#EAB308] text-xs sm:text-sm">Fully Booked</div>
               <div className="text-xs text-[#CA8A04]">All slots taken</div>
             </div>
           </div>
           
-          <div className="flex items-center gap-3 bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
+          <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
             <div
-              className="w-8 h-8 rounded-lg border border-[var(--color-text)]/25"
+              className="w-6 h-6 rounded-md border border-[var(--color-text)]/25"
               style={{ background: 'color-mix(in srgb,var(--color-text) 28%, var(--color-surface) 72%)' }}
             ></div>
             <div>
-              <div className="font-bold text-[var(--color-text)]/80 text-sm">Not Available</div>
+              <div className="font-bold text-[var(--color-text)]/80 text-xs sm:text-sm">Not Available</div>
               <div className="text-xs text-[var(--color-text)]/65">Cannot book</div>
             </div>
           </div>
         </div>
         
-        <div className="bg-[color-mix(in srgb,var(--color-background) 70%, var(--color-surface) 30%)]/60 border-l-4 border-[var(--color-primary)]/40 p-4 rounded-r-lg shadow-inner">
-          <p className="text-sm text-[var(--color-text)] font-semibold mb-3">
+        <div className="bg-[color-mix(in srgb,var(--color-background) 70%, var(--color-surface) 30%)]/60 border-l-4 border-[var(--color-primary)]/40 p-3 rounded-r-lg shadow-inner">
+          <p className="text-sm text-[var(--color-text)] font-semibold mb-2.5">
             📅 Available Booking Times:
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-[var(--color-text)]/85">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs sm:text-sm text-[var(--color-text)]/85">
             <div>
               <strong>Weekdays (Mon-Fri):</strong> {weekdaySlotSummary || 'No slots configured'}
             </div>

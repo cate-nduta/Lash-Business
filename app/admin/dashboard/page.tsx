@@ -151,6 +151,41 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Partner Onboarding',
+      description: 'Send agreements to salons, beauticians, and influencers',
+      href: '/admin/partner-onboarding',
+      icon: '📝',
+      ownerOnly: false,
+    },
+    {
+      title: 'Partner Referral Emails',
+      description: 'Customize partner-specific email copy and referral settings',
+      href: '/admin/partner-referral-emails',
+      icon: '✉️',
+      ownerOnly: false,
+    },
+    {
+      title: 'Client Photo Library',
+      description: 'Review booking eye photos and download them for lash mapping',
+      href: '/admin/picture-clients',
+      icon: '📷',
+      ownerOnly: false,
+    },
+    {
+      title: 'Client Policies',
+      description: 'Edit cancellation, deposit, and referral policies',
+      href: '/admin/policies',
+      icon: '📜',
+      ownerOnly: false,
+    },
+    {
+      title: 'Terms & Conditions',
+      description: 'Manage the client agreement shown before deposits',
+      href: '/admin/terms',
+      icon: '✅',
+      ownerOnly: false,
+    },
+    {
       title: 'Seasonal Themes',
       description: 'Change website colors for different seasons',
       href: '/admin/theme',
@@ -163,6 +198,13 @@ export default function AdminDashboard() {
       href: '/admin/manage-admins',
       icon: '👥',
       ownerOnly: true,
+    },
+    {
+      title: 'Referrals Tracking',
+      description: 'Review partner referral bookings and commission payouts',
+      href: '/admin/referrals-tracking',
+      icon: '💄',
+      ownerOnly: false,
     },
   ]
 

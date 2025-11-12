@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
+import { loadPolicies } from '@/lib/policies-utils'
 
 export const revalidate = 0
 
@@ -22,6 +23,12 @@ export async function POST(request: NextRequest) {
     const performedBy = currentUser?.username || 'owner'
     const discounts = await request.json()
     await writeDataFile('discounts.json', discounts)
+
+    try {
+      await loadPolicies()
+    } catch (error) {
+      console.warn('Failed to refresh policies after discount update:', error)
+    }
 
     await recordActivity({
       module: 'discounts',

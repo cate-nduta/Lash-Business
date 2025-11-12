@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { sendTestimonialRequestEmail } from '@/lib/email/send-testimonial-request'
+
 const EMAIL_DISABLED_MESSAGE = 'Email service is currently disabled. No email was sent.'
 
 export async function POST(request: NextRequest) {
@@ -21,6 +23,7 @@ export async function POST(request: NextRequest) {
     const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
     const bookings = bookingsData.bookings || []
     const bookingIndex = bookings.findIndex(b => b.id === bookingId)
+    const booking = bookingIndex !== -1 ? bookings[bookingIndex] : null
     
     if (bookingIndex !== -1) {
       bookings[bookingIndex].testimonialRequested = true
@@ -28,12 +31,39 @@ export async function POST(request: NextRequest) {
       await writeDataFile('bookings.json', { bookings })
     }
 
-    console.info('[send-testimonial-request] Email sending is disabled; skipping mail delivery.')
+    if (!booking) {
+      return NextResponse.json({
+        success: true,
+        emailSent: false,
+        message: 'Booking updated, but record was not found for email delivery.',
+      })
+    }
+
+    const emailResult = await sendTestimonialRequestEmail({
+      to: email,
+      name,
+      bookingId,
+      service: booking.service,
+      appointmentDate: booking.date,
+      appointmentTime: booking.timeSlot,
+    })
+
+    if (!emailResult.success) {
+      const errorMessage = emailResult.error || EMAIL_DISABLED_MESSAGE
+      console.warn('[send-testimonial-request] Email not sent:', errorMessage)
+      return NextResponse.json({
+        success: true,
+        emailSent: false,
+        provider: emailResult.provider,
+        message: errorMessage,
+      })
+    }
 
     return NextResponse.json({
       success: true,
-      emailSent: false,
-      message: EMAIL_DISABLED_MESSAGE,
+      emailSent: true,
+      provider: emailResult.provider,
+      message: 'Testimonial request email sent successfully.',
     })
   } catch (error) {
     console.error('Error handling testimonial request:', error)

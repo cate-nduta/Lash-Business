@@ -4,7 +4,7 @@ This guide will help you set up Google Calendar integration for your booking sys
 
 ## Prerequisites
 
-1. A Google account (catherinenkuria@gmail.com)
+1. A Google account (hello@lashdiary.co.ke)
 2. Node.js installed on your system
 3. Access to Google Cloud Console
 
@@ -69,8 +69,8 @@ GOOGLE_CLIENT_EMAIL=your-service-account-email@project-id.iam.gserviceaccount.co
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
 GOOGLE_PROJECT_ID=your-project-id
 GOOGLE_CALENDAR_ID=primary
-GOOGLE_CALENDAR_EMAIL=catherinenkuria@gmail.com
-NEXT_PUBLIC_CONTACT_EMAIL=catherinenkuria@gmail.com
+GOOGLE_CALENDAR_EMAIL=hello@lashdiary.co.ke
+NEXT_PUBLIC_CONTACT_EMAIL=hello@lashdiary.co.ke
 ```
 
 **Important Notes:**

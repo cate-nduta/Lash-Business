@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOwnerAuth } from '@/lib/admin-auth'
 import { loadRecentActivity } from '@/lib/activity-log'

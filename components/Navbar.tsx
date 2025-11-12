@@ -13,6 +13,7 @@ export default function Navbar() {
     { href: '/gallery', label: 'Gallery' },
     { href: '/booking', label: 'Booking' },
     { href: '/contact', label: 'Contact' },
+    { href: '/policies', label: 'Policies' },
   ]
 
   return (
@@ -20,7 +21,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link href="/" className="flex items-center space-x-2 hover:scale-105 transition-transform">
-            <Logo />
+            <Logo imageClassName="h-16 md:h-20 object-contain" />
           </Link>
 
           {/* Desktop Navigation */}

@@ -8,13 +8,12 @@ import Toast from '@/components/Toast'
 interface Testimonial {
   id: string
   name: string
-  email: string
-  photo?: string
+  email?: string
+  photoUrl?: string | null
   testimonial: string
   rating?: number
-  date: string
-  approved: boolean
-  service?: string
+  createdAt?: string
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -137,16 +136,23 @@ export default function AdminTestimonials() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) {
+      return ''
+    }
+    const parsed = new Date(dateString)
+    if (Number.isNaN(parsed.getTime())) {
+      return ''
+    }
+    return parsed.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     })
   }
 
-  const pendingTestimonials = testimonials.filter(t => !t.approved)
-  const approvedTestimonials = testimonials.filter(t => t.approved)
+  const pendingTestimonials = testimonials.filter((t) => (t.status ?? 'pending') !== 'approved')
+  const approvedTestimonials = testimonials.filter((t) => t.status === 'approved')
 
   if (loading) {
     return (
@@ -192,10 +198,10 @@ export default function AdminTestimonials() {
                 {pendingTestimonials.map((testimonial) => (
                   <div key={testimonial.id} className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
                     <div className="flex flex-col md:flex-row gap-6">
-                      {testimonial.photo && (
+                      {testimonial.photoUrl && (
                         <div className="flex-shrink-0">
                           <img
-                            src={testimonial.photo}
+                            src={testimonial.photoUrl}
                             alt={testimonial.name}
                             className="w-32 h-32 object-cover rounded-lg"
                             onError={(e) => {
@@ -207,8 +213,8 @@ export default function AdminTestimonials() {
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <h3 className="text-xl font-semibold text-brown-dark">{testimonial.name}</h3>
-                            <p className="text-sm text-brown">{testimonial.email}</p>
+                              <h3 className="text-xl font-semibold text-brown-dark">{testimonial.name}</h3>
+                            {testimonial.email && <p className="text-sm text-brown">{testimonial.email}</p>}
                             {testimonial.rating && (
                               <div className="flex gap-1 mt-1">
                                 {[1, 2, 3, 4, 5].map((star) => (
@@ -224,7 +230,9 @@ export default function AdminTestimonials() {
                               </div>
                             )}
                           </div>
-                          <div className="text-sm text-gray-600">{formatDate(testimonial.date)}</div>
+                          <div className="text-sm text-gray-600">
+                            {formatDate(testimonial.createdAt) || 'Date unavailable'}
+                          </div>
                         </div>
                         <p className="text-brown mb-4 leading-relaxed">{testimonial.testimonial}</p>
                         <div className="flex gap-3">
@@ -261,10 +269,10 @@ export default function AdminTestimonials() {
                 {approvedTestimonials.map((testimonial) => (
                   <div key={testimonial.id} className="bg-green-50 rounded-lg p-6 border-2 border-green-200">
                     <div className="flex flex-col md:flex-row gap-6">
-                      {testimonial.photo && (
+                      {testimonial.photoUrl && (
                         <div className="flex-shrink-0">
                           <img
-                            src={testimonial.photo}
+                            src={testimonial.photoUrl}
                             alt={testimonial.name}
                             className="w-32 h-32 object-cover rounded-lg"
                             onError={(e) => {
@@ -276,8 +284,25 @@ export default function AdminTestimonials() {
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <h3 className="text-xl font-semibold text-brown-dark">{testimonial.name}</h3>
-                            <p className="text-sm text-brown">{testimonial.email}</p>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-semibold text-brown-dark">{testimonial.name}</h3>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[#22c55e]/15 px-2.5 py-1 text-xs font-semibold text-[#16a34a] border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.25)]">
+                                <svg
+                                  className="h-3.5 w-3.5 text-[#16a34a]"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 011.414-1.414l2.543 2.543 6.543-6.543a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                <span>Verified</span>
+                              </span>
+                            </div>
+                            {testimonial.email && <p className="text-sm text-brown">{testimonial.email}</p>}
                             {testimonial.rating && (
                               <div className="flex gap-1 mt-1">
                                 {[1, 2, 3, 4, 5].map((star) => (
@@ -293,7 +318,9 @@ export default function AdminTestimonials() {
                               </div>
                             )}
                           </div>
-                          <div className="text-sm text-gray-600">{formatDate(testimonial.date)}</div>
+                          <div className="text-sm text-gray-600">
+                            {formatDate(testimonial.createdAt) || 'Date unavailable'}
+                          </div>
                         </div>
                         <p className="text-brown mb-4 leading-relaxed">{testimonial.testimonial}</p>
                         <button

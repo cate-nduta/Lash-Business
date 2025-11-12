@@ -81,15 +81,15 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
   try {
     const settings = await readDataFile<any>('settings.json', {})
     return settings?.business || {
-      phone: '0748 863 882',
-      email: 'catherinenkuria@gmail.com',
+      phone: '',
+      email: 'hello@lashdiary.co.ke',
       name: 'LashDiary',
       address: 'Nairobi, Kenya',
     }
   } catch {
     return {
-      phone: '0748 863 882',
-      email: 'catherinenkuria@gmail.com',
+      phone: '',
+      email: 'hello@lashdiary.co.ke',
       name: 'LashDiary',
       address: 'Nairobi, Kenya',
     }
@@ -215,7 +215,7 @@ export async function applyPersonalizationTokens(
   const tokenMap: Record<string, string> = {
     '{name}': subscriber.name || 'Beautiful Soul',
     '{email}': subscriber.email,
-    '{phone}': resolvedBusiness.phone || '+254 748 863 882',
+    '{phone}': resolvedBusiness.phone || '',
     '{businessName}': resolvedBusiness.name || 'LashDiary',
     '{lastVisit}': subscriber.lastBookingDate
       ? new Date(subscriber.lastBookingDate).toLocaleDateString('en-US', {
@@ -270,7 +270,6 @@ export async function createEmailTemplate(options: {
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${unsubscribeToken}`
   const brandName = resolvedBusiness.name || 'LashDiary'
   const brandTagline = resolvedBusiness.description || 'Luxury Lash Extensions & Beauty Services'
-  const businessPhone = resolvedBusiness.phone || '+254 748 863 882'
   const businessAddress = resolvedBusiness.address || 'Nairobi, Kenya'
   const displayUrl = baseUrl.replace(/^https?:\/\//, '')
 
@@ -396,7 +395,7 @@ export async function createEmailTemplate(options: {
                 </tr>
                 <tr>
                   <td style="background-color:#fbd3dc;padding:30px 28px 34px;text-align:center;">
-                    <p style="margin:0 0 10px;font-size:13px;color:#3b3a3c;">Questions or rescheduling? Reply directly or call us at <strong>${businessPhone}</strong>.</p>
+                    <p style="margin:0 0 10px;font-size:13px;color:#3b3a3c;">Questions or rescheduling? Reply directly to this email and we’ll take care of you.</p>
                     <p style="margin:0 0 10px;font-size:12px;color:#3f3e40;">
                       ${brandName} • ${businessAddress} • <a href="${baseUrl}" style="color:#3f3e40;text-decoration:underline;">${displayUrl}</a>
                     </p>

@@ -1,7 +1,14 @@
 {
   "firstTimeClientDiscount": {
     "enabled": true,
-    "percentage": 8
+    "percentage": 8,
+    "bannerEnabled": true,
+    "bannerMessage": "🎉 Special Offer: {{percentage}}% OFF for First-Time Clients! Book your appointment today and save! 🎉"
+  },
+  "returningClientDiscount": {
+    "enabled": true,
+    "tier30Percentage": 12,
+    "tier45Percentage": 6
   },
   "depositPercentage": 35
 }

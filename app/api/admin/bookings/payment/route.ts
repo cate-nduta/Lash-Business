@@ -27,7 +27,7 @@ interface Booking {
     date: string
     mpesaCheckoutRequestID?: string
   }>
-  status: 'confirmed' | 'cancelled' | 'completed'
+  status: 'confirmed' | 'cancelled' | 'completed' | 'paid'
   calendarEventId?: string | null
   cancelledAt?: string | null
   cancelledBy?: 'admin' | 'client' | null
@@ -46,6 +46,7 @@ interface Booking {
     rescheduledBy: 'admin' | 'client'
     notes?: string | null
   }>
+  paidInFullAt?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -110,6 +111,16 @@ export async function POST(request: NextRequest) {
 
     if (paymentMethod === 'cash' && amount > 0) {
       booking.deposit = (booking.deposit || 0) + amount
+    }
+
+    const totalPaid = booking.deposit || 0
+    if (totalPaid >= booking.finalPrice) {
+      if (!booking.paidInFullAt) {
+        booking.paidInFullAt = new Date().toISOString()
+      }
+      if (booking.status === 'confirmed' || booking.status === 'paid') {
+        booking.status = 'paid'
+      }
     }
 
     bookings[bookingIndex] = booking

@@ -19,7 +19,7 @@ export default function Gallery() {
 
   useEffect(() => {
     // Fetch gallery images from API
-    fetch('/api/gallery')
+    fetch('/api/gallery', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setGalleryImages(data.images || [])
@@ -98,25 +98,30 @@ export default function Gallery() {
       {/* Lightbox Modal */}
       {selectedImage && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center px-4 py-14 md:py-16 animate-fade-in backdrop-blur-sm"
           onClick={() => setSelectedImage(null)}
         >
-          <div className="relative max-w-3xl w-full">
+          <div className="absolute inset-0" aria-hidden onClick={() => setSelectedImage(null)} />
+          <div className="relative w-full max-w-4xl mx-auto" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setSelectedImage(null)}
-              className="absolute -top-3 -right-3 bg-white/90 text-brown-dark hover:bg-white hover:text-red transition-colors rounded-full w-10 h-10 flex items-center justify-center text-xl shadow-lg"
-              aria-label="Close"
+              className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 rounded-full bg-black/60 backdrop-blur p-2"
+              aria-label="Close image"
             >
-              ✕
+              <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
-            <div className="bg-white rounded-xl overflow-hidden shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="bg-black/95 rounded-xl overflow-hidden shadow-2xl border border-white/10"
+            >
               <img
                 src={selectedImage.url}
                 alt={selectedImage.name}
-                className="w-full h-full max-h-[70vh] object-contain bg-black"
+                className="w-full h-full max-h-[75vh] md:max-h-[80vh] object-contain bg-black"
               />
-              <div className="p-4 text-center text-brown-dark bg-white">
-                <h3 className="font-display text-xl font-semibold">
+              <div className="p-4 text-center text-white bg-black/85">
+                <h3 className="font-display text-lg md:text-xl font-semibold">
                   {selectedImage.name}
                 </h3>
               </div>

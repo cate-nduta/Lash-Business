@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "updatedAt": "2025-11-11T00:00:00.000Z",
+  "variables": {
+    "cancellationWindowHours": 72,
+    "depositPercentage": 35,
+    "referralDiscountPercent": 10,
+    "referralRewardPercent": 10,
+    "salonCommissionTotalPercent": 3.5
+  },
+  "sections": [
+    {
+      "id": "cancellations",
+      "title": "Cancellations",
+      "description": "",
+      "items": [
+        "Deposits are non-refundable because your appointment blocks the calendar just for you.",
+        "Cancel at least {{cancellationWindowHours}} hours before your appointment and we’re happy to move your deposit to a new date.",
+        "Need to cancel inside the window? You can transfer the appointment to a friend or reschedule the next available slot."
+      ]
+    },
+    {
+      "id": "rescheduling",
+      "title": "Rescheduling",
+      "description": "",
+      "items": [
+        "You can reschedule from your confirmation email up to {{cancellationWindowHours}} hours before the appointment.",
+        "Inside the {{cancellationWindowHours}}-hour window, kindly contact LashDiary directly so we can review availability.",
+        "Each reschedule is subject to the same deposit and cancellation conditions."
+      ]
+    },
+    {
+      "id": "deposits-payments",
+      "title": "Deposits & Payments",
+      "description": "",
+      "items": [
+        "A {{depositPercentage}}% deposit secures every appointment. The balance is paid in-studio after your service.",
+        "Deposits are transferable to a new date when you reschedule within our policy window, but they aren’t refundable.",
+        "If you can’t make it, gift the slot to someone you love—just let us know so we can greet them properly."
+      ]
+    },
+    {
+      "id": "referral-rewards",
+      "title": "Referral Rewards",
+      "description": "",
+      "items": [
+        "Existing clients can share their LashDiary referral code for {{referralDiscountPercent}}% off with friends.",
+        "When your friend attends, you receive {{referralRewardPercent}}% off your next appointment automatically—no need to request it.",
+        "Each referral code is single-use per friend to keep rewards meaningful for everyone."
+      ]
+    },
+    {
+      "id": "returning-clients",
+      "title": "Returning Clients & Rebooking",
+      "description": "",
+      "items": [
+        "Rebook within 30 days of your last completed, paid appointment to receive a 12% loyalty discount on your next service.",
+        "Rebook between 31 and 45 days after your last paid appointment to receive a 6% loyalty discount.",
+        "Loyalty discounts apply only to full sets—fill/infills are excluded from rebooking rewards.",
+        "Bookings placed 46 days or more after your last paid appointment do not include a loyalty discount, but once that service is completed and paid we reset the clock for future rewards.",
+        "Loyalty discounts apply only to services that have been completed and marked paid in full, and they cannot be combined with promo codes or referral offers."
+      ]
+    },
+    {
+      "id": "salon-beautician-partners",
+      "title": "Partner Referrals",
+      "description": "",
+      "items": [
+        "Partners enjoy a commission of {{salonCommissionTotalPercent}}% on each referral after the service is completed and paid in full.",
+        "Payouts are processed during the next bi-weekly cycle once the client has been successfully serviced.",
+        "You’ll receive automatic updates whenever a client books, completes a service, or when your code needs refreshing."
+      ]
+    }
+  ]
+}
+

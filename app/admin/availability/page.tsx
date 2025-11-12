@@ -20,6 +20,23 @@ interface TimeSlot {
   label: string
 }
 
+interface BookingWindowSection {
+  startDate?: string
+  endDate?: string
+  label?: string
+  opensAt?: string
+  emailSubject?: string
+}
+
+interface BookingWindowState {
+  current: BookingWindowSection
+  next: BookingWindowSection
+  bookingLink?: string
+  note?: string
+  bannerMessage?: string
+  bannerEnabled?: boolean | null
+}
+
 interface AvailabilityData {
   businessHours: BusinessHours
   timeSlots: {
@@ -27,19 +44,30 @@ interface AvailabilityData {
     saturday?: TimeSlot[]
     sunday: TimeSlot[]
   }
+  bookingWindow: BookingWindowState
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
 
 export default function AdminAvailability() {
+  const createDefaultBookingWindow = (): BookingWindowState => ({
+    current: {},
+    next: {},
+    bookingLink: '',
+    note: '',
+    bannerMessage: '',
+  bannerEnabled: null,
+  })
   const [availability, setAvailability] = useState<AvailabilityData>({
     businessHours: {},
     timeSlots: { weekdays: [], saturday: [], sunday: [] },
+    bookingWindow: createDefaultBookingWindow(),
   })
   const [originalAvailability, setOriginalAvailability] = useState<AvailabilityData>({
     businessHours: {},
     timeSlots: { weekdays: [], saturday: [], sunday: [] },
+    bookingWindow: createDefaultBookingWindow(),
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -85,12 +113,32 @@ export default function AdminAvailability() {
       const response = await authorizedFetch('/api/admin/availability')
       if (response.ok) {
         const data = await response.json()
-        // Ensure saturday time slots array exists
-        if (!data.timeSlots.saturday) {
-          data.timeSlots.saturday = []
+        const businessHours: BusinessHours = data.businessHours || {}
+        const timeSlots = {
+          weekdays: Array.isArray(data?.timeSlots?.weekdays) ? data.timeSlots.weekdays : [],
+          saturday: Array.isArray(data?.timeSlots?.saturday) ? data.timeSlots.saturday : [],
+          sunday: Array.isArray(data?.timeSlots?.sunday) ? data.timeSlots.sunday : [],
         }
-        setAvailability(data)
-        setOriginalAvailability(data)
+        const bookingWindow: BookingWindowState = {
+          current: { ...(data?.bookingWindow?.current ?? {}) },
+          next: { ...(data?.bookingWindow?.next ?? {}) },
+          bookingLink: data?.bookingWindow?.bookingLink ?? '',
+          note: data?.bookingWindow?.note ?? '',
+          bannerMessage: data?.bookingWindow?.bannerMessage ?? '',
+          bannerEnabled:
+            typeof data?.bookingWindow?.bannerEnabled === 'boolean'
+              ? data.bookingWindow.bannerEnabled
+              : null,
+        }
+
+        const normalized: AvailabilityData = {
+          businessHours,
+          timeSlots,
+          bookingWindow,
+        }
+
+        setAvailability(normalized)
+        setOriginalAvailability(normalized)
       }
     } catch (error) {
       console.error('Error loading availability:', error)
@@ -224,6 +272,100 @@ export default function AdminAvailability() {
     }))
   }
 
+  const updateBookingWindowField = (
+    section: 'current' | 'next',
+    field: keyof BookingWindowSection,
+    value: string,
+  ) => {
+    setAvailability((prev) => {
+      const windowState: BookingWindowState = {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+      }
+      if (value && value.trim().length > 0) {
+        windowState[section][field] = value
+      } else {
+        delete windowState[section][field]
+      }
+      return {
+        ...prev,
+        bookingWindow: windowState,
+      }
+    })
+  }
+
+  const updateBookingWindowLink = (value: string) => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: value,
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+      },
+    }))
+  }
+
+  const updateBookingWindowNote = (value: string) => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: value,
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+      },
+    }))
+  }
+
+  const updateBannerMessage = (value: string) => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: value,
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+      },
+    }))
+  }
+
+  const updateBannerEnabled = (value: 'enabled' | 'disabled' | 'auto') => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled: value === 'enabled' ? true : value === 'disabled' ? false : null,
+      },
+    }))
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
@@ -265,6 +407,164 @@ export default function AdminAvailability() {
             onClose={() => setMessage(null)}
           />
         )}
+
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+          <h1 className="text-4xl font-display text-brown-dark mb-8">Monthly Booking Window</h1>
+          <p className="text-sm text-brown-dark/70 mb-6">
+            Control how far in advance clients can book. Set the current month’s open dates, and optionally prepare the
+            next release so you can send your announcement email when ready.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="p-5 bg-pink-light rounded-lg border border-brown-light/60">
+              <h3 className="text-lg font-semibold text-brown-dark mb-4">Current window</h3>
+              <label className="block text-sm font-medium text-brown-dark mb-2">Booking window label</label>
+              <input
+                type="text"
+                value={availability.bookingWindow.current.label || ''}
+                onChange={(e) => updateBookingWindowField('current', 'label', e.target.value)}
+                placeholder="e.g., November 3 – November 30"
+                className="w-full px-3 py-2 border border-brown-light rounded bg-white mb-4"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Open from</label>
+                  <input
+                    type="date"
+                    value={availability.bookingWindow.current.startDate || ''}
+                    onChange={(e) => updateBookingWindowField('current', 'startDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Close on</label>
+                  <input
+                    type="date"
+                    value={availability.bookingWindow.current.endDate || ''}
+                    onChange={(e) => updateBookingWindowField('current', 'endDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-brown-dark/60 mt-3">
+                Clients will only see available dates between these two values.
+              </p>
+            </div>
+            <div className="p-5 bg-pink-light rounded-lg border border-brown-light/60">
+              <h3 className="text-lg font-semibold text-brown-dark mb-4">Next window (optional)</h3>
+              <label className="block text-sm font-medium text-brown-dark mb-2">Next window label</label>
+              <input
+                type="text"
+                value={availability.bookingWindow.next.label || ''}
+                onChange={(e) => updateBookingWindowField('next', 'label', e.target.value)}
+                placeholder="e.g., December 3 – December 31"
+                className="w-full px-3 py-2 border border-brown-light rounded bg-white mb-4"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Opens for booking on</label>
+                  <input
+                    type="date"
+                    value={availability.bookingWindow.next.opensAt || ''}
+                    onChange={(e) => updateBookingWindowField('next', 'opensAt', e.target.value)}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Email subject</label>
+                  <input
+                    type="text"
+                    value={availability.bookingWindow.next.emailSubject || ''}
+                    onChange={(e) => updateBookingWindowField('next', 'emailSubject', e.target.value)}
+                    placeholder="✨ December Bookings Are Now Open!"
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Next window start</label>
+                  <input
+                    type="date"
+                    value={availability.bookingWindow.next.startDate || ''}
+                    onChange={(e) => updateBookingWindowField('next', 'startDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Next window end</label>
+                  <input
+                    type="date"
+                    value={availability.bookingWindow.next.endDate || ''}
+                    onChange={(e) => updateBookingWindowField('next', 'endDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 bg-pink-light/60 rounded-lg border border-brown-light/60">
+            <label className="block text-sm font-medium text-brown-dark mb-2">Booking link to include in emails</label>
+            <input
+              type="text"
+              value={availability.bookingWindow.bookingLink || ''}
+              onChange={(e) => updateBookingWindowLink(e.target.value)}
+              placeholder="https://lashdiary.com/booking"
+              className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+            />
+            <p className="text-xs text-brown-dark/60 mt-3">
+              This URL is sent in your “Bookings are open” email. If left blank, we’ll use your default booking page.
+            </p>
+          </div>
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-brown-dark mb-2">Banner note (optional)</label>
+            <textarea
+              value={availability.bookingWindow.note || ''}
+              onChange={(e) => updateBookingWindowNote(e.target.value)}
+              rows={3}
+              placeholder='e.g., "VIP waitlist opens November 20th. Clients with referrals get 24-hour early access."'
+              className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+            />
+            <p className="text-xs text-brown-dark/60 mt-2">
+              This note appears under the booking banner on the public site so you can add reminders or special launch perks.
+            </p>
+          </div>
+          <div className="mt-6 space-y-4">
+            <label className="block text-sm font-medium text-brown-dark mb-2">Banner headline</label>
+            <textarea
+              value={availability.bookingWindow.bannerMessage || ''}
+              onChange={(e) => updateBannerMessage(e.target.value)}
+              rows={2}
+              placeholder='e.g., "Bookings open monthly. Current calendar: November 1 – November 27. November 29 – December 29 opens November 28."'
+              className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+            />
+            <p className="text-xs text-brown-dark/60 mt-2">
+              Leave blank to use the automatic message. You can include any copy you’d like clients to see before the deposit reminder.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-2">Banner visibility</label>
+              <select
+                value={
+                  typeof availability.bookingWindow.bannerEnabled === 'boolean'
+                    ? availability.bookingWindow.bannerEnabled
+                      ? 'enabled'
+                      : 'disabled'
+                    : 'auto'
+                }
+                onChange={(event) =>
+                  updateBannerEnabled(event.target.value as 'enabled' | 'disabled' | 'auto')
+                }
+                className="w-full sm:w-72 px-3 py-2 border border-brown-light rounded bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition"
+              >
+                <option value="auto">Auto (show when message exists)</option>
+                <option value="enabled">Always show banner</option>
+                <option value="disabled">Hide banner</option>
+              </select>
+              <p className="text-xs text-brown-dark/60 mt-2">
+                Choose “Hide banner” to remove it from the booking page, or force it on even when the message is blank.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
           <h1 className="text-4xl font-display text-brown-dark mb-8">Business Hours</h1>

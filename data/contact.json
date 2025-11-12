@@ -1,7 +1,11 @@
 {
-  "phone": "+254 488 638 882",
-  "email": "catherinenkuria@gmail.com",
-  "instagram": "@lashdiary",
-  "instagramUrl": "https://instagram.com/lashdiary",
-  "location": "LashDiary Studio, Nairobi, Kenya"
+  "phone": "",
+  "email": "hello@lashdiary.co.ke",
+  "instagram": "@thelashdiary.ke",
+  "instagramUrl": "https://instagram.com/thelashdiary.ke",
+  "location": "LashDiary Studio, Nairobi, Kenya",
+  "showPhone": false,
+  "showEmail": true,
+  "showInstagram": true,
+  "showLocation": true
 }

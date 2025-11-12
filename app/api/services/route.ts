@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { normalizeServiceCatalog } from '@/lib/services-utils'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const services = await readDataFile('services.json', [])
-    return NextResponse.json(services, {
+    const raw = await readDataFile('services.json', {})
+    const { catalog, changed } = normalizeServiceCatalog(raw)
+
+    if (changed) {
+      await writeDataFile('services.json', catalog)
+    }
+
+    return NextResponse.json(catalog, {
       headers: {
         'Cache-Control': 'no-store, max-age=0',
       },

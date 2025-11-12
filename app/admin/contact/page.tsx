@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
@@ -10,20 +10,30 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
 
 export default function AdminContact() {
-  const [contact, setContact] = useState({
+  const defaultContactState = {
     phone: '',
     email: '',
     instagram: '',
     instagramUrl: '',
     location: '',
-  })
-  const [originalContact, setOriginalContact] = useState({
-    phone: '',
-    email: '',
-    instagram: '',
-    instagramUrl: '',
-    location: '',
-  })
+    showPhone: true,
+    showEmail: true,
+    showInstagram: true,
+    showLocation: true,
+  }
+  type ContactState = typeof defaultContactState
+
+  const coerceBoolean = (value: unknown, defaultValue: boolean) => {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      if (value.toLowerCase() === 'true') return true
+      if (value.toLowerCase() === 'false') return false
+    }
+    return defaultValue
+  }
+
+  const [contact, setContact] = useState<ContactState>(defaultContactState)
+  const [originalContact, setOriginalContact] = useState<ContactState>(defaultContactState)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -67,8 +77,16 @@ export default function AdminContact() {
       if (response.ok) {
         const data = await response.json()
         const { mobileServiceNote, ...rest } = data || {}
-        setContact(rest)
-        setOriginalContact(rest)
+        const sanitizedContact = {
+          ...defaultContactState,
+          ...rest,
+          showPhone: coerceBoolean(rest?.showPhone, defaultContactState.showPhone),
+          showEmail: coerceBoolean(rest?.showEmail, defaultContactState.showEmail),
+          showInstagram: coerceBoolean(rest?.showInstagram, defaultContactState.showInstagram),
+          showLocation: coerceBoolean(rest?.showLocation, defaultContactState.showLocation),
+        }
+        setContact(sanitizedContact)
+        setOriginalContact(sanitizedContact)
       }
     } catch (error) {
       console.error('Error loading contact:', error)
@@ -125,6 +143,24 @@ export default function AdminContact() {
     setPendingNavigation(null)
   }
 
+  const handleToggleVisibility = (
+    key: 'showPhone' | 'showEmail' | 'showInstagram' | 'showLocation'
+  ) => {
+    setContact((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }
+
+  const visibilityButtonStyles = (active: boolean) =>
+    `ml-4 px-4 py-1 rounded-full border-2 text-sm font-medium transition-all ${
+      active
+        ? 'bg-green-50 border-green-400 text-green-700 hover:bg-green-100'
+        : 'bg-gray-100 border-gray-300 text-gray-500 hover:bg-gray-200'
+    }`
+
+  const visibilityLabel = (active: boolean) => (active ? 'Visible on website' : 'Hidden on website')
+
   const handleSave = async () => {
     setSaving(true)
     setMessage(null)
@@ -138,7 +174,7 @@ export default function AdminContact() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Contact information updated successfully!' })
-        setOriginalContact(contact) // Update original to clear unsaved changes flag
+        setOriginalContact({ ...contact }) // Update original to clear unsaved changes flag
         setShowDialog(false) // Close dialog if open
       } else {
         setMessage({ type: 'error', text: 'Failed to save contact information' })
@@ -197,22 +233,40 @@ export default function AdminContact() {
           
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Phone Number
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-brown-dark">
+                  Phone Number
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleToggleVisibility('showPhone')}
+                  className={visibilityButtonStyles(contact.showPhone)}
+                >
+                  {visibilityLabel(contact.showPhone)}
+                </button>
+              </div>
               <input
                 type="text"
                 value={contact.phone}
                 onChange={(e) => setContact({ ...contact, phone: e.target.value })}
-                placeholder="+254 712 345 678"
+                placeholder="e.g. +254 7XX XXX XXX"
                 className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Email Address
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-brown-dark">
+                  Email Address
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleToggleVisibility('showEmail')}
+                  className={visibilityButtonStyles(contact.showEmail)}
+                >
+                  {visibilityLabel(contact.showEmail)}
+                </button>
+              </div>
               <input
                 type="email"
                 value={contact.email}
@@ -223,9 +277,18 @@ export default function AdminContact() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Instagram Handle
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-brown-dark">
+                  Instagram Handle
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleToggleVisibility('showInstagram')}
+                  className={visibilityButtonStyles(contact.showInstagram)}
+                >
+                  {visibilityLabel(contact.showInstagram)}
+                </button>
+              </div>
               <input
                 type="text"
                 value={contact.instagram}
@@ -250,9 +313,18 @@ export default function AdminContact() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Studio Location
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-brown-dark">
+                  Studio Location
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleToggleVisibility('showLocation')}
+                  className={visibilityButtonStyles(contact.showLocation)}
+                >
+                  {visibilityLabel(contact.showLocation)}
+                </button>
+              </div>
               <input
                 type="text"
                 value={contact.location}

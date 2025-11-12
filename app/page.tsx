@@ -41,6 +41,7 @@ interface Testimonial {
   date: string
   approved: boolean
   service?: string
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 export default function Home() {
@@ -61,7 +62,7 @@ export default function Home() {
       })
 
     // Load testimonials
-    fetch('/api/testimonials')
+    fetch('/api/testimonials', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setTestimonials(data.testimonials || [])
@@ -315,6 +316,18 @@ export default function Home() {
                       </div>
                     )}
                     <p className="text-[var(--color-text)]/80 mb-6 leading-relaxed italic">
+                      {testimonial.status === 'approved' && (
+                        <span className="mr-2 inline-flex items-center gap-1 rounded-full bg-[#22c55e]/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#15803d] border border-[#22c55e]/40 shadow-[0_0_6px_rgba(34,197,94,0.2)]">
+                          <svg className="h-2.5 w-2.5 text-[#16a34a]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path
+                              fillRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 011.414-1.414l2.543 2.543 6.543-6.543a1 1 0 011.414 0z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>Verified</span>
+                        </span>
+                      )}
                       “{testimonial.testimonial}”
                     </p>
                     <div className="flex items-center justify-between">
@@ -323,10 +336,16 @@ export default function Home() {
                           {testimonial.name}
                         </p>
                         <p className="text-xs text-[var(--color-text)]/60">
-                          {new Date(testimonial.date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {(() => {
+                            const dateString = (testimonial as any).createdAt ?? (testimonial as any).date
+                            if (!dateString) return ''
+                            const parsed = new Date(dateString)
+                            if (Number.isNaN(parsed.getTime())) return ''
+                            return parsed.toLocaleDateString('en-US', {
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          })()}
                         </p>
                       </div>
                     </div>

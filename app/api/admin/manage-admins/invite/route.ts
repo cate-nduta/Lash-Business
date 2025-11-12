@@ -128,7 +128,7 @@ async function sendInviteEmail(invite: AdminInvite, token: string, request: Next
     const response = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'Lash Diary Admin <no-reply@lashdiary.com>',
       to: invite.email,
-      replyTo: process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'catherinenkuria@gmail.com',
+      replyTo: process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke',
       subject,
       html: emailHtml,
     })

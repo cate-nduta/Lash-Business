@@ -65,8 +65,8 @@ GOOGLE_PROJECT_ID=your-project-id
 GOOGLE_CALENDAR_ID=primary
 
 # Your email for receiving bookings
-GOOGLE_CALENDAR_EMAIL=catherinenkuria@gmail.com
-CALENDAR_EMAIL=catherinenkuria@gmail.com
+GOOGLE_CALENDAR_EMAIL=hello@lashdiary.co.ke
+CALENDAR_EMAIL=hello@lashdiary.co.ke
 
 # Supabase (optional – enables the hosted data layer)
 SUPABASE_URL=https://your-project-ref.supabase.co

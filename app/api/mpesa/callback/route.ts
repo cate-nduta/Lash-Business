@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
             // Update deposit (add the payment amount)
             booking.deposit = (booking.deposit || 0) + amountInKSH
 
+            if ((booking.deposit || 0) >= booking.finalPrice) {
+              if (!booking.paidInFullAt) {
+                booking.paidInFullAt = new Date().toISOString()
+              }
+            }
+
             // Save updated booking
             bookings[bookingIndex] = booking
             await writeDataFile('bookings.json', { bookings })

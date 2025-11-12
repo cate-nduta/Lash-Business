@@ -1,14 +1,16 @@
 {
   "business": {
     "name": "LashDiary",
-    "phone": "0748 863 882",
-    "email": "catherinenkuria@gmail.com",
+    "phone": "",
+    "email": "hello@lashdiary.co.ke",
     "address": "Nairobi, Kenya",
     "description": "Luxury Lash Extensions & Beauty Services",
-    "logoType": "text",
+    "logoType": "image",
     "logoUrl": "/uploads/logo/logo-1762499904344.png",
-    "logoText": "LashDiary",
-    "faviconUrl": "/favicon.svg"
+    "logoText": "",
+    "logoColor": "#733D26",
+    "faviconUrl": "/uploads/favicon/favicon-1762848620060.svg",
+    "faviconVersion": 1762848620060
   },
   "social": {
     "instagram": "",

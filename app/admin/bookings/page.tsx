@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
@@ -25,7 +25,7 @@ interface Booking {
   createdAt: string
   testimonialRequested?: boolean
   testimonialRequestedAt?: string
-  status: 'confirmed' | 'cancelled' | 'completed'
+  status: 'confirmed' | 'cancelled' | 'completed' | 'paid'
   calendarEventId?: string | null
   cancelledAt?: string | null
   cancelledBy?: 'admin' | 'client' | null
@@ -44,6 +44,14 @@ interface Booking {
     rescheduledBy: 'admin' | 'client'
     notes?: string | null
   }>
+  manageToken?: string | null
+  manageTokenGeneratedAt?: string | null
+  manageTokenLastUsedAt?: string | null
+  cancellationWindowHours?: number
+  cancellationCutoffAt?: string | null
+  lastClientManageActionAt?: string | null
+  clientManageDisabled?: boolean
+  paidInFullAt?: string | null
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -63,12 +71,8 @@ export default function AdminBookings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellationReason, setCancellationReason] = useState('')
-  const [refundOption, setRefundOption] = useState<'retain' | 'refund_now' | 'refund_pending'>('retain')
-  const [refundAmountInput, setRefundAmountInput] = useState('0')
-  const [refundNotes, setRefundNotes] = useState('')
   const [processingCancellation, setProcessingCancellation] = useState(false)
   const [hoursUntilAppointment, setHoursUntilAppointment] = useState<number | null>(null)
-  const [recommendedRefundOption, setRecommendedRefundOption] = useState<'retain' | 'refund_now'>('retain')
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleSlots, setRescheduleSlots] = useState<Array<{ value: string; label: string }>>([])
@@ -78,13 +82,73 @@ export default function AdminBookings() {
   const [rescheduleError, setRescheduleError] = useState<string | null>(null)
   const [processingReschedule, setProcessingReschedule] = useState(false)
   const [rescheduleInfo, setRescheduleInfo] = useState<string | null>(null)
+  const [availabilityData, setAvailabilityData] = useState<any | null>(null)
+  const [loadingAvailability, setLoadingAvailability] = useState(true)
+  const [fullyBookedDatesAdmin, setFullyBookedDatesAdmin] = useState<string[]>([])
+  const [pendingFullyBookedDates, setPendingFullyBookedDates] = useState<string[]>([])
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    today.setDate(1)
+    return today
+  })
+  const [managementMonth, setManagementMonth] = useState(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    today.setDate(1)
+    return today
+  })
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0])
+  const [updatingFullyBooked, setUpdatingFullyBooked] = useState(false)
   const router = useRouter()
+  const hasFullyBookedChanges = useMemo(() => {
+    if (pendingFullyBookedDates.length !== fullyBookedDatesAdmin.length) return true
+    const savedSet = new Set(fullyBookedDatesAdmin)
+    return pendingFullyBookedDates.some((date) => !savedSet.has(date))
+  }, [pendingFullyBookedDates, fullyBookedDatesAdmin])
+
+  const bookingsByDate = useMemo(() => {
+    const map = new Map<string, Booking[]>()
+    bookings.forEach((booking) => {
+      const dateKey = booking.date || booking.timeSlot?.split('T')[0]
+      if (!dateKey) return
+      if (!map.has(dateKey)) {
+        map.set(dateKey, [])
+      }
+      map.get(dateKey)!.push(booking)
+    })
+    return map
+  }, [bookings])
+
+  const filteredBookings = useMemo(() => {
+    if (!selectedDate) return bookings
+    return bookings.filter((booking) => (booking.date || booking.timeSlot?.split('T')[0]) === selectedDate)
+  }, [bookings, selectedDate])
 
   const normalizeBooking = (booking: any): Booking => {
     const depositValue = Number.isFinite(booking.deposit) ? Number(booking.deposit) : 0
+    const finalPriceValue = Number.isFinite(booking.finalPrice) ? Number(booking.finalPrice) : 0
+    const existingStatus = (booking.status || '').toLowerCase()
+    const normalizedStatus =
+      existingStatus === 'cancelled'
+        ? 'cancelled'
+        : existingStatus === 'completed'
+          ? 'completed'
+          : existingStatus === 'paid'
+            ? 'paid'
+            : finalPriceValue > 0 && depositValue >= finalPriceValue
+              ? 'paid'
+              : 'confirmed'
+
     return {
       ...booking,
-      status: booking.status || 'confirmed',
+      createdAt:
+        typeof booking.createdAt === 'string'
+          ? booking.createdAt
+          : booking.createdAt instanceof Date
+            ? booking.createdAt.toISOString()
+            : new Date().toISOString(),
+      status: normalizedStatus,
       calendarEventId: booking.calendarEventId ?? null,
       cancelledAt: booking.cancelledAt ?? null,
       cancelledBy: booking.cancelledBy ?? null,
@@ -110,6 +174,25 @@ export default function AdminBookings() {
             notes: entry.notes ?? null,
           }))
         : [],
+      manageToken:
+        typeof booking.manageToken === 'string' && booking.manageToken.trim().length > 0
+          ? booking.manageToken
+          : null,
+      manageTokenGeneratedAt:
+        typeof booking.manageTokenGeneratedAt === 'string' ? booking.manageTokenGeneratedAt : null,
+      manageTokenLastUsedAt:
+        typeof booking.manageTokenLastUsedAt === 'string' ? booking.manageTokenLastUsedAt : null,
+      cancellationWindowHours:
+        typeof booking.cancellationWindowHours === 'number' && !Number.isNaN(booking.cancellationWindowHours)
+          ? booking.cancellationWindowHours
+          : 72,
+      cancellationCutoffAt:
+        typeof booking.cancellationCutoffAt === 'string' ? booking.cancellationCutoffAt : null,
+      lastClientManageActionAt:
+        typeof booking.lastClientManageActionAt === 'string' ? booking.lastClientManageActionAt : null,
+      clientManageDisabled: Boolean(booking.clientManageDisabled),
+      paidInFullAt:
+        typeof booking.paidInFullAt === 'string' ? booking.paidInFullAt : null,
     }
   }
 
@@ -128,7 +211,7 @@ export default function AdminBookings() {
           router.replace('/admin/login')
           return
         }
-        loadBookings()
+        await Promise.all([loadBookings(), loadAvailability()])
       } catch (error) {
         if (!isMounted) return
         router.replace('/admin/login')
@@ -161,12 +244,356 @@ export default function AdminBookings() {
       console.error('Error loading bookings:', error)
     } finally {
       setLoading(false)
+      loadAvailability()
     }
   }
 
+  const loadAvailability = async () => {
+    setLoadingAvailability(true)
+    try {
+      const response = await authorizedFetch('/api/admin/availability')
+      if (response.ok) {
+        const data = await response.json()
+        setAvailabilityData(data)
+        const fullyBooked = Array.isArray(data?.fullyBookedDates) ? data.fullyBookedDates : []
+        setFullyBookedDatesAdmin(fullyBooked)
+        setPendingFullyBookedDates(fullyBooked)
+      }
+    } catch (error) {
+      console.error('Error loading availability:', error)
+    } finally {
+      setLoadingAvailability(false)
+    }
+  }
+
+  const goToPreviousMonth = () => {
+    const newMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    today.setDate(1)
+    if (newMonth < today) return
+    setCalendarMonth(newMonth)
+  }
+
+  const goToNextMonth = () => {
+    setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))
+  }
+
+  const goToPreviousManagementMonth = () => {
+    const newMonth = new Date(managementMonth.getFullYear(), managementMonth.getMonth() - 1, 1)
+    const earliest = new Date()
+    earliest.setHours(0, 0, 0, 0)
+    earliest.setDate(1)
+    if (newMonth < earliest) return
+    setManagementMonth(newMonth)
+  }
+
+  const goToNextManagementMonth = () => {
+    setManagementMonth(new Date(managementMonth.getFullYear(), managementMonth.getMonth() + 1, 1))
+  }
+
+  const handleToggleFullyBooked = (dateStr: string, nextState: boolean) => {
+    setPendingFullyBookedDates((prev) => {
+      const currentSet = new Set(prev)
+      if (nextState) {
+        currentSet.add(dateStr)
+      } else {
+        currentSet.delete(dateStr)
+      }
+      return Array.from(currentSet).sort()
+    })
+    setMessage(null)
+  }
+
+  const handleSaveFullyBooked = async () => {
+    if (!availabilityData) return
+    setUpdatingFullyBooked(true)
+    setMessage(null)
+
+    const normalized = Array.from(new Set(pendingFullyBookedDates)).sort()
+
+    const payload = {
+      ...availabilityData,
+      fullyBookedDates: normalized,
+    }
+
+    try {
+      const response = await authorizedFetch('/api/admin/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update availability')
+      }
+
+      setAvailabilityData(payload)
+      setFullyBookedDatesAdmin(normalized)
+      setPendingFullyBookedDates(normalized)
+      setMessage({
+        type: 'success',
+        text: 'Calendar availability updated successfully.',
+      })
+    } catch (error) {
+      console.error('Error saving fully booked dates:', error)
+      setMessage({ type: 'error', text: 'Failed to save availability changes.' })
+    } finally {
+      setUpdatingFullyBooked(false)
+    }
+  }
+
+  const renderFullyBookedCalendar = () => {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
+    const monthEnd = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0)
+    const startingDay = monthStart.getDay()
+    const calendarDays: Array<Date | null> = []
+
+    for (let i = 0; i < startingDay; i++) {
+      calendarDays.push(null)
+    }
+    for (let day = 1; day <= monthEnd.getDate(); day++) {
+      calendarDays.push(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day))
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const fullyBookedSet = new Set(pendingFullyBookedDates)
+    const businessHours = availabilityData?.businessHours || {}
+    const defaultEnabled: Record<string, boolean> = {
+      sunday: true,
+      monday: true,
+      tuesday: true,
+      wednesday: true,
+      thursday: true,
+      friday: true,
+      saturday: false,
+    }
+
+    return (
+      <div className="border border-brown-light/40 rounded-2xl p-5 shadow-soft bg-[var(--color-surface,#fff)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold uppercase tracking-wide text-brown-dark">
+              Fully booked dates
+            </span>
+            {hasFullyBookedChanges && (
+              <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-3 py-1 rounded-full">
+                Unsaved changes
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveFullyBooked}
+            disabled={!hasFullyBookedChanges || updatingFullyBooked}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-md border border-emerald-700 hover:bg-emerald-700 hover:shadow-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none"
+          >
+            {updatingFullyBooked ? 'Saving…' : 'Save availability'}
+          </button>
+        </div>
+        <div className="flex items-center justify-between mb-3">
+          <button
+            type="button"
+            onClick={goToPreviousMonth}
+            disabled={
+              new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1) <=
+              new Date(today.getFullYear(), today.getMonth(), 1)
+            }
+            className="px-3 py-2 rounded-lg border border-brown-light text-brown-dark text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brown-light/20 transition-colors"
+          >
+            ←
+          </button>
+          <h3 className="text-lg font-semibold text-brown-dark">
+            {calendarMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+          </h3>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            className="px-3 py-2 rounded-lg border border-brown-light text-brown-dark text-sm font-semibold hover:bg-brown-light/20 transition-colors"
+          >
+            →
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-2 mb-1.5">
+          {dayNames.map((day) => (
+            <div key={day} className="text-center text-xs font-semibold text-brown-dark uppercase tracking-wide">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {calendarDays.map((dayDate, index) => {
+            if (!dayDate) {
+              return <div key={`empty-${index}`} className="aspect-square" />
+            }
+
+            const year = dayDate.getFullYear()
+            const month = String(dayDate.getMonth() + 1).padStart(2, '0')
+            const day = String(dayDate.getDate()).padStart(2, '0')
+            const dateStr = `${year}-${month}-${day}`
+            const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayDate.getDay()]
+            const isBusinessEnabled =
+              typeof businessHours?.[dayKey]?.enabled === 'boolean'
+                ? businessHours[dayKey].enabled
+                : defaultEnabled[dayKey]
+            const isFullyBooked = fullyBookedSet.has(dateStr)
+            const isPast = dayDate < today
+            const isToday = dayDate.toDateString() === today.toDateString()
+
+            let cellClasses =
+              'relative aspect-square flex items-center justify-center rounded-xl text-sm font-semibold transition-all border '
+
+            if (!isBusinessEnabled) {
+              cellClasses += 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+            } else if (isPast) {
+              cellClasses += 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+            } else if (isFullyBooked) {
+              cellClasses +=
+                'bg-orange-400 text-white border-orange-500 shadow-[0_8px_18px_rgba(251,146,60,0.35)] hover:brightness-105'
+            } else {
+              cellClasses +=
+                'bg-white text-brown-dark border-brown-light hover:bg-brown-light/20 hover:border-brown-dark cursor-pointer'
+            }
+
+            if (isToday && !isFullyBooked) {
+              cellClasses += ' ring-2 ring-brown-dark/40'
+            }
+
+            const handleClick = () => {
+              if (updatingFullyBooked || isPast || !isBusinessEnabled) return
+              handleToggleFullyBooked(dateStr, !isFullyBooked)
+            }
+
+            return (
+              <button
+                key={dateStr}
+                type="button"
+                onClick={handleClick}
+                disabled={updatingFullyBooked || isPast || !isBusinessEnabled}
+                className={cellClasses}
+              >
+                {day}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const renderBookingsManagementCalendar = () => {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const monthStart = new Date(managementMonth.getFullYear(), managementMonth.getMonth(), 1)
+    const monthEnd = new Date(managementMonth.getFullYear(), managementMonth.getMonth() + 1, 0)
+    const startingDay = monthStart.getDay()
+    const calendarDays: Array<Date | null> = []
+
+    for (let i = 0; i < startingDay; i++) {
+      calendarDays.push(null)
+    }
+    for (let day = 1; day <= monthEnd.getDate(); day++) {
+      calendarDays.push(new Date(managementMonth.getFullYear(), managementMonth.getMonth(), day))
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const selectedDateObj = selectedDate ? new Date(selectedDate) : null
+
+    return (
+      <div className="border border-brown-light/40 rounded-2xl p-4 shadow-soft bg-[var(--color-surface,#fff)] max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-3">
+          <button
+            type="button"
+            onClick={goToPreviousManagementMonth}
+            disabled={
+              new Date(managementMonth.getFullYear(), managementMonth.getMonth(), 1) <=
+              new Date(today.getFullYear(), today.getMonth(), 1)
+            }
+            className="px-3 py-2 rounded-lg border border-brown-light text-brown-dark text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brown-light/20 transition-colors"
+            aria-label="Previous month"
+          >
+            ←
+          </button>
+          <h3 className="text-lg font-semibold text-brown-dark">
+            {managementMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+          </h3>
+          <button
+            type="button"
+            onClick={goToNextManagementMonth}
+            className="px-3 py-2 rounded-lg border border-brown-light text-brown-dark text-sm font-semibold hover:bg-brown-light/20 transition-colors"
+            aria-label="Next month"
+          >
+            →
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1.5 mb-1.5 text-xs font-semibold text-brown-dark uppercase tracking-wide">
+          {dayNames.map((day) => (
+            <div key={day} className="text-center">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5 text-sm">
+          {calendarDays.map((dayDate, index) => {
+            if (!dayDate) {
+              return <div key={`empty-${index}`} className="aspect-square" />
+            }
+
+            const year = dayDate.getFullYear()
+            const month = String(dayDate.getMonth() + 1).padStart(2, '0')
+            const day = String(dayDate.getDate()).padStart(2, '0')
+            const dateStr = `${year}-${month}-${day}`
+            const bookingsForDay = bookingsByDate.get(dateStr) || []
+            const hasBookings = bookingsForDay.length > 0
+            const isSelected = selectedDate === dateStr
+            const isToday = dayDate.toDateString() === today.toDateString()
+
+            let cellClasses =
+              'relative aspect-square flex flex-col items-center justify-center gap-1 rounded-xl border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brown-dark'
+
+            if (isSelected) {
+              cellClasses += hasBookings
+                ? ' bg-brown-600 text-white border-brown-700 shadow-[0_10px_22px_rgba(92,51,34,0.4)]'
+                : ' bg-brown-500 text-white border-brown-600 shadow-[0_10px_22px_rgba(92,51,34,0.35)]'
+            } else if (hasBookings) {
+              cellClasses += ' bg-brown-700 text-white border-brown-800 hover:bg-brown-800 shadow-[0_8px_18px_rgba(88,44,29,0.35)]'
+            } else {
+              cellClasses += ' bg-white text-brown-900 border-brown-light hover:bg-brown-light/20 hover:border-brown-dark'
+            }
+
+            if (isSelected) {
+              cellClasses += ' ring-2 ring-brown-dark ring-offset-2'
+            } else if (isToday) {
+              cellClasses += ' ring-1 ring-brown-dark/30'
+            }
+
+            return (
+              <button
+                key={dateStr}
+                type="button"
+                onClick={() => setSelectedDate((prev) => (prev === dateStr ? '' : dateStr))}
+                className={cellClasses}
+                aria-pressed={isSelected}
+                aria-label={`${formatDate(dateStr)} (${bookingsForDay.length} ${bookingsForDay.length === 1 ? 'booking' : 'bookings'})`}
+              >
+                <span className="text-base font-semibold leading-none">{day}</span>
+                <span className={`text-xs font-medium ${hasBookings || isSelected ? 'text-white/90' : 'text-gray-500'}`}>
+                  {bookingsForDay.length} {bookingsForDay.length === 1 ? 'booking' : 'bookings'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const sendTestimonialRequest = async (booking: Booking) => {
-    if (booking.status !== 'confirmed') {
-      setMessage({ type: 'error', text: 'Only confirmed bookings can receive testimonial requests.' })
+    if (!['confirmed', 'paid'].includes(booking.status)) {
+      setMessage({ type: 'error', text: 'Only active bookings can receive testimonial requests.' })
       return
     }
 
@@ -243,12 +670,24 @@ export default function AdminBookings() {
       if (response.ok && data.success) {
         setMessage({ type: 'success', text: `Cash payment of KSH ${amount.toLocaleString()} recorded successfully` })
         loadBookings()
-        // Update selected booking
-        const updatedBalance = booking.finalPrice - booking.deposit - amount
-        setSelectedBooking({
-          ...booking,
-          deposit: booking.deposit + amount,
-        })
+        if (data.booking) {
+          const updatedBooking = normalizeBooking(data.booking)
+          setSelectedBooking(updatedBooking)
+          setBookings((prev) => prev.map((bk) => (bk.id === updatedBooking.id ? updatedBooking : bk)))
+        } else {
+          const newDeposit = (booking.deposit || 0) + amount
+          const isPaidInFull = newDeposit >= booking.finalPrice
+          const paidTimestamp = isPaidInFull ? new Date().toISOString() : booking.paidInFullAt ?? null
+          const updatedStatus: Booking['status'] = isPaidInFull ? 'paid' : booking.status
+          const updatedBooking: Booking = {
+            ...booking,
+            deposit: newDeposit,
+            status: updatedStatus,
+            paidInFullAt: paidTimestamp,
+          }
+          setSelectedBooking(updatedBooking)
+          setBookings((prev) => prev.map((bk) => (bk.id === booking.id ? updatedBooking : bk)))
+        }
         setCashAmount('')
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to record payment' })
@@ -448,19 +887,7 @@ export default function AdminBookings() {
     const hours = getHoursUntilAppointmentValue(selectedBooking)
     setHoursUntilAppointment(hours)
 
-    const recommended = hours !== null && hours >= 10 ? 'refund_now' : 'retain'
-    setRecommendedRefundOption(recommended)
-
-    if ((selectedBooking.deposit || 0) > 0) {
-      setRefundOption(recommended)
-      setRefundAmountInput(selectedBooking.deposit.toString())
-    } else {
-      setRefundOption('retain')
-      setRefundAmountInput('0')
-    }
-
     setCancellationReason('')
-    setRefundNotes('')
     setShowCancelModal(true)
   }
 
@@ -473,21 +900,6 @@ export default function AdminBookings() {
   const handleCancelBookingConfirm = async () => {
     if (!selectedBooking) return
 
-    const depositAmount = selectedBooking.deposit || 0
-
-    if (depositAmount > 0 && refundOption !== 'retain') {
-      const parsedAmount = Number(refundAmountInput)
-      if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
-        setMessage({ type: 'error', text: 'Please enter a valid refund amount.' })
-        return
-      }
-
-      if (parsedAmount > depositAmount) {
-        setMessage({ type: 'error', text: 'Refund amount cannot exceed the deposit received.' })
-        return
-      }
-    }
-
     setProcessingCancellation(true)
     setMessage(null)
 
@@ -498,9 +910,6 @@ export default function AdminBookings() {
         body: JSON.stringify({
           bookingId: selectedBooking.id,
           reason: cancellationReason.trim() || undefined,
-          refundAction: refundOption,
-          refundAmount: refundOption === 'retain' ? 0 : Number(refundAmountInput) || 0,
-          refundNotes: refundNotes.trim() || undefined,
         }),
       })
 
@@ -674,6 +1083,8 @@ export default function AdminBookings() {
     switch (status) {
       case 'confirmed':
         return <span className={`${baseClasses} bg-green-100 text-green-700`}>Confirmed</span>
+      case 'paid':
+        return <span className={`${baseClasses} bg-emerald-100 text-emerald-700`}>Paid</span>
       case 'completed':
         return <span className={`${baseClasses} bg-blue-100 text-blue-700`}>Completed</span>
       case 'cancelled':
@@ -714,12 +1125,106 @@ export default function AdminBookings() {
           />
         )}
 
+        <div className="bg-white rounded-lg shadow-lg p-5 mb-8 max-w-3xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+            <div>
+              <h2 className="text-2xl font-display text-brown-dark">Fully Booked Calendar</h2>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Toggle a day to block or reopen it. Orange days are hidden from clients instantly.
+              </p>
+            </div>
+            {updatingFullyBooked && (
+              <span className="text-sm text-brown-dark font-semibold">Saving changes…</span>
+            )}
+          </div>
+          {loadingAvailability ? (
+            <div className="text-center text-brown py-8">Loading availability calendar…</div>
+          ) : (
+            <>
+              {renderFullyBookedCalendar()}
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm text-gray-600">
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-4 h-4 rounded bg-orange-400" />
+                  <span>Fully booked (clients see this day disabled in orange)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-4 h-4 rounded bg-gray-200" />
+                  <span>Unavailable via business hours</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="inline-block w-4 h-4 rounded border border-brown-light bg-white" />
+                  <span>Available day — click to mark as fully booked</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-5 mb-8">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-2xl font-display text-brown-dark">Bookings Calendar</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Click a date to view bookings for that day. Dark squares show days with confirmed appointments.
+                </p>
+              </div>
+              <div className="text-sm text-brown flex flex-col sm:items-end">
+                <span className="font-semibold">Selected date:</span>
+                <span className="text-brown-dark font-medium">
+                  {selectedDate ? formatDate(selectedDate) : 'All dates'}
+                </span>
+                {selectedDate && (
+                  <span className="text-xs text-gray-500">
+                    {filteredBookings.length} {filteredBookings.length === 1 ? 'booking' : 'bookings'} on this day
+                  </span>
+                )}
+              </div>
+            </div>
+            {bookings.length === 0 ? (
+              <div className="text-center text-brown py-8">No bookings yet — the calendar will activate once bookings arrive.</div>
+            ) : (
+              <>
+                {renderBookingsManagementCalendar()}
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm text-gray-600">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-block w-4 h-4 rounded bg-brown-700" />
+                    <span>Has bookings</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="inline-block w-4 h-4 rounded border border-brown-light bg-white" />
+                    <span>No bookings yet</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="inline-block w-4 h-4 rounded border border-brown-dark ring-2 ring-offset-2 ring-brown-dark" />
+                    <span>Selected day</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-display text-brown-dark mb-8">Bookings Management</h1>
-          
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+            <h1 className="text-4xl font-display text-brown-dark">Bookings Management</h1>
+            {bookings.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                className="self-start lg:self-auto px-4 py-2 rounded-lg border-2 border-brown-light text-sm font-semibold text-brown-dark hover:bg-brown-light/30 transition-colors"
+              >
+                Jump to today
+              </button>
+            )}
+          </div>
           {bookings.length === 0 ? (
             <div className="text-center text-brown py-8">
               No bookings yet.
+            </div>
+          ) : filteredBookings.length === 0 ? (
+            <div className="text-center text-brown py-8">
+              No bookings found for {selectedDate ? formatDate(selectedDate) : 'this selection'}.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -736,7 +1241,7 @@ export default function AdminBookings() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bookings.map((booking) => {
+                  {filteredBookings.map((booking) => {
                     const balance = booking.finalPrice - booking.deposit
                     return (
                     <tr 
@@ -744,7 +1249,14 @@ export default function AdminBookings() {
                       className={`border-b border-brown-light/30 hover:bg-pink-light/20 cursor-pointer transition-colors ${booking.status === 'cancelled' ? 'opacity-70' : ''}`}
                       onClick={() => setSelectedBooking(booking)}
                     >
-                      <td className="py-3 px-4 text-brown font-medium">{booking.name}</td>
+                      <td className="py-3 px-4 text-brown font-medium">
+                        <div className="font-semibold text-brown-dark">{booking.name}</div>
+                        {booking.createdAt && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Booked {formatDateTime(booking.createdAt)}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-brown">{booking.service || 'N/A'}</td>
                       <td className="py-3 px-4 text-brown">
                         <div className="font-medium">{formatDate(booking.date)}</div>
@@ -1060,7 +1572,7 @@ export default function AdminBookings() {
                           type="text"
                           value={mpesaPhone}
                           onChange={(e) => setMpesaPhone(e.target.value)}
-                          placeholder="254712345678"
+                          placeholder="2547XXXXXXXX"
                           className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                         />
                         <p className="text-xs text-gray-500 mt-1">
@@ -1087,7 +1599,7 @@ export default function AdminBookings() {
                 </div>
               )}
 
-              {balance <= 0 && selectedBooking.status === 'confirmed' && (
+              {balance <= 0 && (
                 <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 text-center">
                   <p className="text-green-700 font-semibold text-lg">✓ Fully Paid</p>
                 </div>
@@ -1095,7 +1607,7 @@ export default function AdminBookings() {
 
               {/* Actions */}
               <div className="pt-4 border-t-2 border-brown-light space-y-3">
-                {selectedBooking.status === 'confirmed' && (
+                {['confirmed', 'paid'].includes(selectedBooking.status) && (
                   <>
                     <button
                       onClick={openRescheduleModal}
@@ -1116,7 +1628,7 @@ export default function AdminBookings() {
                   disabled={
                     sendingRequest ||
                     selectedBooking.testimonialRequested ||
-                    selectedBooking.status !== 'confirmed'
+                    !['confirmed', 'paid'].includes(selectedBooking.status)
                   }
                   className={`w-full px-6 py-3 rounded-lg font-semibold transition-colors ${
                     selectedBooking.testimonialRequested || selectedBooking.status !== 'confirmed'
@@ -1182,97 +1694,25 @@ export default function AdminBookings() {
                 />
               </div>
 
-              {selectedBooking.deposit > 0 && (
-                <div className="bg-white border-2 border-brown-light/60 rounded-lg p-4">
-                  <h4 className="text-lg font-semibold text-brown-dark mb-3">Deposit Handling</h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Deposit received: <span className="font-semibold text-brown-dark">KSH {selectedBooking.deposit.toLocaleString()}</span>
-                  </p>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="refundOption"
-                        value="retain"
-                        checked={refundOption === 'retain'}
-                        onChange={(e) => setRefundOption(e.target.value as 'retain' | 'refund_now' | 'refund_pending')}
-                        className="mt-1"
-                      />
-                      <span className="text-sm text-brown-dark">
-                        Keep deposit ({recommendedRefundOption === 'retain' ? 'Recommended' : 'Allowed for last-minute cancellations'})
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="refundOption"
-                        value="refund_now"
-                        checked={refundOption === 'refund_now'}
-                        onChange={(e) => setRefundOption(e.target.value as 'retain' | 'refund_now' | 'refund_pending')}
-                        className="mt-1"
-                      />
-                      <span className="text-sm text-brown-dark">
-                        Refund now ({recommendedRefundOption === 'refund_now' ? 'Recommended for timely cancellations' : 'Optional'})
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="refundOption"
-                        value="refund_pending"
-                        checked={refundOption === 'refund_pending'}
-                        onChange={(e) => setRefundOption(e.target.value as 'retain' | 'refund_now' | 'refund_pending')}
-                        className="mt-1"
-                      />
-                      <span className="text-sm text-brown-dark">
-                        Will refund later (remind me to process the refund)
-                      </span>
-                    </label>
-                  </div>
-
-                  {refundOption !== 'retain' && (
-                    <div className="mt-4">
-                      <label className="block text-sm font-semibold text-brown-dark mb-2" htmlFor="refund-amount">
-                        Refund Amount (KSH)
-                      </label>
-                      <input
-                        id="refund-amount"
-                        type="number"
-                        min="0"
-                        max={selectedBooking.deposit}
-                        value={refundAmountInput}
-                        onChange={(e) => setRefundAmountInput(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Maximum refund: KSH {selectedBooking.deposit.toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedBooking.deposit <= 0 && (
-                <div className="bg-white border-2 border-brown-light/60 rounded-lg p-4">
-                  <h4 className="text-lg font-semibold text-brown-dark mb-2">Deposit Handling</h4>
+              <div className="bg-white border-2 border-brown-light/60 rounded-lg p-4 space-y-3">
+                <h4 className="text-lg font-semibold text-brown-dark">Deposits & Next Steps</h4>
+                <p className="text-sm text-gray-600">
+                  Deposits are non-refundable once a booking is confirmed. Offer to reschedule the appointment
+                  or invite the client to transfer their slot to another guest.
+                </p>
+                {selectedBooking.deposit > 0 && (
                   <p className="text-sm text-gray-600">
-                    No deposit was collected for this booking. You can cancel without tracking a refund.
+                    Deposit on file:{' '}
+                    <span className="font-semibold text-brown-dark">
+                      KSH {selectedBooking.deposit.toLocaleString()}
+                    </span>
                   </p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-semibold text-brown-dark mb-2" htmlFor="refund-notes">
-                  Internal Notes (optional)
-                </label>
-                <textarea
-                  id="refund-notes"
-                  value={refundNotes}
-                  onChange={(e) => setRefundNotes(e.target.value)}
-                  placeholder="Record refund reference numbers or follow-up reminders"
-                  rows={2}
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                />
+                )}
+                <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+                  <li>Suggest the next available date and encourage the client to pick a new slot.</li>
+                  <li>If they can’t make it, note who will come in their place so the experience stays seamless.</li>
+                  <li>Log any follow-up tasks in your own workflow to keep customer service tight.</li>
+                </ul>
               </div>
             </div>
 

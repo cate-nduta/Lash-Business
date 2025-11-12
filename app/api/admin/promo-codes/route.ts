@@ -2,14 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
+import { normalizePromoCatalog } from '@/lib/promo-utils'
 
 export async function GET() {
   try {
     await requireAdminAuth()
-    const promoCodes = await readDataFile('promo-codes.json', [])
-    return NextResponse.json(promoCodes)
+    const raw = await readDataFile('promo-codes.json', {})
+    const { catalog, changed, count } = normalizePromoCatalog(raw)
+
+    if (changed) {
+      await writeDataFile('promo-codes.json', catalog)
+    }
+
+    return NextResponse.json({ promoCodes: catalog.promoCodes, count })
   } catch (error) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    console.error('Error loading promo codes:', error)
+    return NextResponse.json({ error: 'Failed to load promo codes' }, { status: 500 })
   }
 }
 
@@ -18,23 +29,20 @@ export async function POST(request: NextRequest) {
     await requireAdminAuth()
     const currentUser = await getAdminUser()
     const performedBy = currentUser?.username || 'owner'
-    const promoCodes = await request.json()
-    await writeDataFile('promo-codes.json', promoCodes)
 
-    const count = Array.isArray((promoCodes as any)?.promoCodes)
-      ? (promoCodes as any).promoCodes.length
-      : Array.isArray(promoCodes)
-      ? (promoCodes as any[]).length
-      : undefined
+    const payload = await request.json()
+    const { catalog, count } = normalizePromoCatalog(payload)
+
+    await writeDataFile('promo-codes.json', catalog)
 
     await recordActivity({
       module: 'promo_codes',
       action: 'update',
       performedBy,
-      summary: `Updated promo codes${count !== undefined ? ` (${count} codes)` : ''}`,
+      summary: `Updated promo codes (${count} codes)`,
       targetId: 'promo-codes',
       targetType: 'promo_codes',
-      details: promoCodes,
+      details: catalog,
     })
 
     return NextResponse.json({ success: true })
@@ -42,7 +50,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.error('Error saving promo codes:', error)
     return NextResponse.json({ error: 'Failed to save promo codes' }, { status: 500 })
   }
 }
-

@@ -10,6 +10,13 @@ interface DiscountsData {
   firstTimeClientDiscount: {
     enabled: boolean
     percentage: number
+    bannerEnabled: 'auto' | 'enabled' | 'disabled'
+    bannerMessage: string
+  }
+  returningClientDiscount: {
+    enabled: boolean
+    tier30Percentage: number
+    tier45Percentage: number
   }
   depositPercentage: number
 }
@@ -19,11 +26,13 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
 
 export default function AdminDiscounts() {
   const [discounts, setDiscounts] = useState<DiscountsData>({
-    firstTimeClientDiscount: { enabled: true, percentage: 10 },
+    firstTimeClientDiscount: { enabled: true, percentage: 10, bannerEnabled: 'auto', bannerMessage: '' },
+    returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
     depositPercentage: 35,
   })
   const [originalDiscounts, setOriginalDiscounts] = useState<DiscountsData>({
-    firstTimeClientDiscount: { enabled: true, percentage: 10 },
+    firstTimeClientDiscount: { enabled: true, percentage: 10, bannerEnabled: 'auto', bannerMessage: '' },
+    returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
     depositPercentage: 35,
   })
   const [loading, setLoading] = useState(true)
@@ -68,8 +77,40 @@ export default function AdminDiscounts() {
       const response = await authorizedFetch('/api/admin/discounts')
       if (response.ok) {
         const data = await response.json()
-        setDiscounts(data)
-        setOriginalDiscounts(data)
+        const normalized: DiscountsData = {
+          firstTimeClientDiscount: {
+            enabled: Boolean(data?.firstTimeClientDiscount?.enabled),
+            percentage: Number(data?.firstTimeClientDiscount?.percentage ?? 0),
+            bannerEnabled:
+              data?.firstTimeClientDiscount?.bannerEnabled === false
+                ? 'disabled'
+                : data?.firstTimeClientDiscount?.bannerEnabled === true
+                ? 'enabled'
+                : 'auto',
+            bannerMessage:
+              typeof data?.firstTimeClientDiscount?.bannerMessage === 'string'
+                ? data.firstTimeClientDiscount.bannerMessage
+                : '',
+          },
+          returningClientDiscount: {
+            enabled: Boolean(data?.returningClientDiscount?.enabled),
+            tier30Percentage: Number(
+              data?.returningClientDiscount?.tier30Percentage ??
+                data?.returningClientDiscount?.within30DaysPercentage ??
+                data?.returningClientDiscount?.percentage ??
+                0,
+            ),
+            tier45Percentage: Number(
+              data?.returningClientDiscount?.tier45Percentage ??
+                data?.returningClientDiscount?.within31To45DaysPercentage ??
+                data?.returningClientDiscount?.percentage ??
+                0,
+            ),
+          },
+          depositPercentage: Number(data?.depositPercentage ?? 0),
+        }
+        setDiscounts(normalized)
+        setOriginalDiscounts(normalized)
       }
     } catch (error) {
       console.error('Error loading discounts:', error)
@@ -131,10 +172,30 @@ export default function AdminDiscounts() {
     setMessage(null)
 
     try {
+      const normalizedPayload = {
+        firstTimeClientDiscount: {
+          enabled: Boolean(discounts.firstTimeClientDiscount.enabled),
+          percentage: Number(discounts.firstTimeClientDiscount.percentage ?? 0),
+          bannerEnabled:
+            discounts.firstTimeClientDiscount.bannerEnabled === 'enabled'
+              ? true
+              : discounts.firstTimeClientDiscount.bannerEnabled === 'disabled'
+              ? false
+              : null,
+          bannerMessage: discounts.firstTimeClientDiscount.bannerMessage ?? '',
+        },
+        returningClientDiscount: {
+          enabled: Boolean(discounts.returningClientDiscount.enabled),
+          tier30Percentage: Number(discounts.returningClientDiscount.tier30Percentage ?? 0),
+          tier45Percentage: Number(discounts.returningClientDiscount.tier45Percentage ?? 0),
+        },
+        depositPercentage: Number(discounts.depositPercentage ?? 0),
+      }
+
       const response = await authorizedFetch('/api/admin/discounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(discounts),
+        body: JSON.stringify(normalizedPayload),
       })
 
       if (response.ok) {
@@ -237,7 +298,130 @@ export default function AdminDiscounts() {
                     max="100"
                     className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                   />
+                  <p className="text-sm text-brown mt-2">
+                    Applies only to full sets—fills/infills are automatically excluded at checkout.
+                  </p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Banner visibility</label>
+                  <select
+                    value={discounts.firstTimeClientDiscount.bannerEnabled}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        firstTimeClientDiscount: {
+                          ...prev.firstTimeClientDiscount,
+                          bannerEnabled: e.target.value as 'auto' | 'enabled' | 'disabled',
+                        },
+                      }))
+                    }
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown disabled:opacity-50"
+                  >
+                    <option value="auto">Auto (show when offer is enabled)</option>
+                    <option value="enabled">Always show</option>
+                    <option value="disabled">Hide banner</option>
+                  </select>
+                  <p className="text-xs text-brown mt-2">
+                    “Auto” shows the banner whenever the first-time discount is on. Choose “Hide” to remove it entirely, or “Always show” to keep it visible even if the offer is off.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Banner message</label>
+                  <textarea
+                    value={discounts.firstTimeClientDiscount.bannerMessage}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        firstTimeClientDiscount: {
+                          ...prev.firstTimeClientDiscount,
+                          bannerMessage: e.target.value,
+                        },
+                      }))
+                    }
+                    rows={2}
+                    placeholder="🎉 Special Offer: {{percentage}}% OFF for first-time clients!"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <p className="text-xs text-brown mt-2">
+                    Use {'{{percentage}}'} to insert the current first-time discount automatically. Leave blank to use the default message.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-pink-light rounded-lg p-6">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Returning Client Loyalty Discount</h2>
+              <div className="space-y-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={discounts.returningClientDiscount.enabled}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        returningClientDiscount: {
+                          ...prev.returningClientDiscount,
+                          enabled: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="mr-2"
+                  />
+                  <span className="text-brown-dark font-medium">Enable returning client loyalty discount</span>
+                </label>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Discount within 30 days (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={discounts.returningClientDiscount.tier30Percentage}
+                      onChange={(e) =>
+                        setDiscounts((prev) => ({
+                          ...prev,
+                          returningClientDiscount: {
+                            ...prev.returningClientDiscount,
+                            tier30Percentage: parseInt(e.target.value) || 0,
+                          },
+                        }))
+                      }
+                      min="0"
+                      max="100"
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    />
+                    <p className="text-xs text-brown mt-1">
+                      Applies when a returning client rebooks within 30 days of their last completed, paid appointment.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Discount within 31–45 days (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={discounts.returningClientDiscount.tier45Percentage}
+                      onChange={(e) =>
+                        setDiscounts((prev) => ({
+                          ...prev,
+                          returningClientDiscount: {
+                            ...prev.returningClientDiscount,
+                            tier45Percentage: parseInt(e.target.value) || 0,
+                          },
+                        }))
+                      }
+                      min="0"
+                      max="100"
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    />
+                    <p className="text-xs text-brown mt-1">
+                      Applies when a returning client rebooks between 31 and 45 days of their last paid appointment.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-brown">
+                  Loyalty discounts never apply to fills/infills and are skipped automatically if a promo code is used.
+                </p>
               </div>
             </div>
 

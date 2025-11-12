@@ -1,4 +1,22 @@
 {
+  "bookingWindow": {
+    "current": {
+      "startDate": "2025-11-03",
+      "endDate": "2025-11-30",
+      "label": "November 3 – November 30"
+    },
+    "next": {
+      "startDate": "2025-12-03",
+      "endDate": "2025-12-31",
+      "label": "December 3 – December 31",
+      "opensAt": "2025-11-29",
+      "emailSubject": "✨ December Bookings Are Now Open!"
+    },
+    "bookingLink": "https://lashdiary.com/booking",
+    "note": "VIP waitlist clients receive early access codes. Email us if you’d like to join.",
+    "bannerMessage": "Bookings open monthly.\nCurrent calendar: November 3 – November 30.\n\nDecember 3 – December 31 opens November 29.",
+    "bannerEnabled": null
+  },
   "businessHours": {
     "monday": {
       "open": "09:00",
@@ -78,5 +96,6 @@
         "label": "12:30 PM"
       }
     ]
-  }
+  },
+  "fullyBookedDates": []
 }

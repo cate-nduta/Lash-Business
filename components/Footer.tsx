@@ -10,7 +10,10 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <div className="mb-4">
-              <Logo className="text-xl font-display text-brown font-bold" />
+              <Logo
+                className="text-2xl font-display text-brown font-bold"
+                imageClassName="h-12 object-contain"
+              />
             </div>
             <p className="text-gray-600 text-sm">
               Premium lash extensions and beauty services. 
@@ -39,6 +42,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/terms" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                  Terms &amp; Conditions
+                </Link>
+              </li>
+              <li>
                 <Link href="/contact" className="text-gray-600 hover:text-brown transition-colors text-sm">
                   Contact Us
                 </Link>
@@ -62,8 +70,8 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="mailto:catherinenkuria@gmail.com" className="hover:text-brown transition-colors">
-                  catherinenkuria@gmail.com
+                <a href="mailto:hello@lashdiary.co.ke" className="hover:text-brown transition-colors">
+                  hello@lashdiary.co.ke
                 </a>
               </li>
             </ul>
@@ -73,7 +81,10 @@ export default function Footer() {
         <div className="mt-8 pt-8 border-t border-brown-light text-center text-sm text-gray-600">
           <div className="flex items-center justify-center gap-1">
             <span>&copy; {new Date().getFullYear()}</span>
-            <Logo className="inline text-sm font-display text-brown font-bold" />
+            <Logo
+              className="inline text-base font-display text-brown font-bold"
+              imageClassName="h-8 object-contain"
+            />
             <span>. All rights reserved.</span>
           </div>
         </div>

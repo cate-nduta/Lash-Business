@@ -23,7 +23,7 @@ import { recordActivity } from '@/lib/activity-log'
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'catherinenkuria@gmail.com'
+const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke'
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 

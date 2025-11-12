@@ -6,7 +6,23 @@ export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
-const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
+
+type BookingWindowConfig = {
+  current?: {
+    startDate?: string
+    endDate?: string
+    label?: string
+  }
+  next?: {
+    startDate?: string
+    endDate?: string
+    label?: string
+    opensAt?: string
+    emailSubject?: string
+  }
+  bookingLink?: string
+}
 
 type AvailabilityData = {
   businessHours?: {
@@ -17,6 +33,8 @@ type AvailabilityData = {
     saturday?: Array<{ hour: number; minute: number; label: string }>
     sunday?: Array<{ hour: number; minute: number; label: string }>
   }
+  fullyBookedDates?: string[]
+  bookingWindow?: BookingWindowConfig
 }
 
 async function loadAvailabilityData(): Promise<AvailabilityData | null> {
@@ -26,6 +44,39 @@ async function loadAvailabilityData(): Promise<AvailabilityData | null> {
     console.warn('Error loading availability data, using defaults:', error)
     return null
   }
+}
+
+async function loadLocalBookings(): Promise<Array<{ date?: string | null; timeSlot?: string | null; status?: string | null }>> {
+  try {
+    const data = await readDataFile<{ bookings?: Array<{ date?: string | null; timeSlot?: string | null; status?: string | null }> }>('bookings.json', { bookings: [] })
+    return Array.isArray(data.bookings) ? data.bookings : []
+  } catch (error) {
+    console.warn('Error loading local bookings:', error)
+    return []
+  }
+}
+
+function parseDateOnly(dateStr?: string | null) {
+  if (!dateStr || typeof dateStr !== 'string') return null
+  const parsed = new Date(`${dateStr}T00:00:00+03:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function deriveWindowRange(bookingWindow?: BookingWindowConfig) {
+  const start = parseDateOnly(bookingWindow?.current?.startDate)
+  const end = parseDateOnly(bookingWindow?.current?.endDate)
+  return { start, end }
+}
+
+function isDateWithinWindow(dateStr: string, bookingWindow?: BookingWindowConfig) {
+  if (!bookingWindow?.current) return true
+  const target = parseDateOnly(dateStr)
+  if (!target) return false
+  const start = parseDateOnly(bookingWindow.current.startDate)
+  const end = parseDateOnly(bookingWindow.current.endDate)
+  if (start && target < start) return false
+  if (end && target > end) return false
+  return true
 }
 
 // Initialize Google Calendar API
@@ -190,12 +241,7 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
 function normalizeSlotForComparison(slotString: string): string {
   // Parse the slot string and convert to a comparable format
   const date = new Date(slotString)
-  const year = date.getUTCFullYear()
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  const hour = date.getUTCHours()
-  const minute = date.getUTCMinutes()
-  return `${year}-${month}-${day}-${hour}-${minute}`
+  return Number.isNaN(date.getTime()) ? '' : date.getTime().toString()
 }
 
 export async function GET(request: NextRequest) {
@@ -204,25 +250,41 @@ export async function GET(request: NextRequest) {
     const dateParam = searchParams.get('date')
     const fullyBookedOnly = searchParams.get('fullyBookedOnly') === 'true'
     const availabilityData = await loadAvailabilityData()
+    const localBookings = await loadLocalBookings()
+    const bookingWindow = availabilityData?.bookingWindow
+    const { start: windowStartDate, end: windowEndDate } = deriveWindowRange(bookingWindow)
     
     // If only fully booked dates are requested, return them quickly
     if (fullyBookedOnly) {
-      const fullyBookedDates: string[] = []
+      const fullyBookedSet = new Set<string>(
+        Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
+      )
       const today = new Date()
-      const endDate = new Date()
-      endDate.setDate(endDate.getDate() + 30)
+      today.setHours(0, 0, 0, 0)
+      const defaultEnd = new Date(today)
+      defaultEnd.setDate(defaultEnd.getDate() + 30)
+      const rangeStart = windowStartDate && windowStartDate > today ? new Date(windowStartDate) : new Date(today)
+      const rangeEnd = windowEndDate ? new Date(windowEndDate) : defaultEnd
+
+      if (rangeEnd < rangeStart) {
+        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null })
+      }
       
       const calendar = getCalendarClient()
       if (!calendar) {
-        return NextResponse.json({ fullyBookedDates: [] })
+        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet) })
       }
       
       // Batch check dates (check multiple dates in one API call if possible)
-      const currentDate = new Date(today)
+      const currentDate = new Date(rangeStart)
       const datesToCheck: string[] = []
       
-      while (currentDate <= endDate) {
+      while (currentDate <= rangeEnd) {
         const dateStr = currentDate.toISOString().split('T')[0]
+        if (!isDateWithinWindow(dateStr, bookingWindow)) {
+          currentDate.setDate(currentDate.getDate() + 1)
+          continue
+        }
         const [year, month, day] = dateStr.split('-').map(Number)
         const dayOfWeek = getDayOfWeek(year, month, day)
         const isSaturday = dayOfWeek === 6
@@ -254,15 +316,29 @@ export async function GET(request: NextRequest) {
           const events = response.data.items || []
           const bookedSlotsByDate = new Map<string, Set<string>>()
           
+          const addBookedSlot = (slotIso: string | null | undefined) => {
+            if (!slotIso) return
+            const eventDate = new Date(slotIso)
+            const dateKey = eventDate.toISOString().split('T')[0]
+            if (!bookedSlotsByDate.has(dateKey)) {
+              bookedSlotsByDate.set(dateKey, new Set())
+            }
+            const normalized = normalizeSlotForComparison(eventDate.toISOString())
+            bookedSlotsByDate.get(dateKey)!.add(normalized)
+          }
+
           events.forEach((event) => {
             if (event.start?.dateTime) {
-              const eventDate = new Date(event.start.dateTime)
-              const dateStr = eventDate.toISOString().split('T')[0]
-              if (!bookedSlotsByDate.has(dateStr)) {
-                bookedSlotsByDate.set(dateStr, new Set())
-              }
-              const normalized = normalizeSlotForComparison(eventDate.toISOString())
-              bookedSlotsByDate.get(dateStr)!.add(normalized)
+              addBookedSlot(event.start.dateTime)
+            }
+          })
+          
+          localBookings.forEach((booking) => {
+            if (booking?.timeSlot && booking.status && booking.status !== 'cancelled') {
+              const slotDate = booking.date
+                ? `${booking.date}T${booking.timeSlot.split('T')[1]}`
+                : booking.timeSlot
+              addBookedSlot(slotDate)
             }
           })
           
@@ -277,7 +353,7 @@ export async function GET(request: NextRequest) {
             })
             
             if (availableSlots.length === 0 && allSlots.length > 0) {
-              fullyBookedDates.push(dateStr)
+              fullyBookedSet.add(dateStr)
             }
           }
         } catch (error) {
@@ -285,7 +361,7 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return NextResponse.json({ fullyBookedDates })
+      return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null })
     }
     
     // If no date provided, return available dates instead
@@ -293,17 +369,91 @@ export async function GET(request: NextRequest) {
       // Return available dates for the next 30 days (weekdays only)
       // Check which dates have all slots booked
       const availableDates: { value: string; label: string }[] = []
-      const fullyBookedDates: string[] = []
+      const fullyBookedSet = new Set<string>(
+        Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
+      )
       const today = new Date()
-      const endDate = new Date()
-      endDate.setDate(endDate.getDate() + 30)
-      
+      today.setHours(0, 0, 0, 0)
+      const defaultEnd = new Date(today)
+      defaultEnd.setDate(defaultEnd.getDate() + 30)
+      const windowStart = windowStartDate && windowStartDate > today ? new Date(windowStartDate) : new Date(today)
+      const endDate = windowEndDate ? new Date(windowEndDate) : defaultEnd
+      if (endDate < windowStart) {
+        return NextResponse.json({
+          dates: [],
+          fullyBookedDates: Array.from(fullyBookedSet),
+          bookingWindow: bookingWindow ?? null,
+        })
+      }
+      // Clone start for iteration
+      let currentDate = new Date(windowStart)
+
       const calendar = getCalendarClient()
+      const localBookedByDate = new Map<string, Set<string>>()
+      localBookings.forEach((booking) => {
+        if (!booking?.timeSlot || booking.status === 'cancelled') return
+        const normalized = normalizeSlotForComparison(booking.timeSlot)
+        const dateKey = booking.date ? booking.date : booking.timeSlot.split('T')[0]
+        if (!localBookedByDate.has(dateKey)) {
+          localBookedByDate.set(dateKey, new Set())
+        }
+        localBookedByDate.get(dateKey)!.add(normalized)
+      })
+
+      const calendarBookedByDate = new Map<string, Set<string>>()
+
+      if (calendar) {
+        const calendarStart = new Date(windowStart)
+        calendarStart.setHours(0, 0, 0, 0)
+        const calendarEnd = new Date(endDate)
+        calendarEnd.setHours(23, 59, 59, 999)
+
+        const addCalendarSlot = (slotIso: string | undefined | null) => {
+          if (!slotIso) return
+          const dateKey = slotIso.substring(0, 10)
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return
+          if (!calendarBookedByDate.has(dateKey)) {
+            calendarBookedByDate.set(dateKey, new Set())
+          }
+          const normalized = normalizeSlotForComparison(slotIso)
+          if (normalized) {
+            calendarBookedByDate.get(dateKey)!.add(normalized)
+          }
+        }
+
+        let pageToken: string | undefined
+        do {
+          const response = await calendar.events.list({
+            calendarId: CALENDAR_ID,
+            timeMin: calendarStart.toISOString(),
+            timeMax: calendarEnd.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+            pageToken,
+          })
+          const events = response.data.items || []
+          events.forEach((event) => {
+            if (event.start?.dateTime) {
+              addCalendarSlot(event.start.dateTime)
+            } else if (event.start?.date) {
+              // All-day event: mark entire day as blocked
+              addCalendarSlot(`${event.start.date}T00:00:00+03:00`)
+            }
+          })
+          pageToken = response.data.nextPageToken ?? undefined
+        } while (pageToken)
+      }
       
-      const currentDate = new Date(today)
+      const formatLocalDateKey = (date: Date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
       while (currentDate <= endDate) {
-        // Get date string in YYYY-MM-DD format
-        const dateStr = currentDate.toISOString().split('T')[0]
+        // Get date string in YYYY-MM-DD format using local calendar (avoid UTC shift)
+        const dateStr = formatLocalDateKey(currentDate)
+        if (!isDateWithinWindow(dateStr, bookingWindow)) {
+          currentDate.setDate(currentDate.getDate() + 1)
+          continue
+        }
         const [year, month, day] = dateStr.split('-').map(Number)
         
         // Calculate day of week using timezone-independent method
@@ -316,51 +466,30 @@ export async function GET(request: NextRequest) {
           continue
         }
           
-          // Check if this date has all slots booked
-          let isFullyBooked = false
-          if (calendar) {
-            try {
-              const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
-              const startOfDay = new Date(currentDate)
-              startOfDay.setHours(0, 0, 0, 0)
-              const endOfDay = new Date(currentDate)
-              endOfDay.setHours(23, 59, 59, 999)
-
-              const response = await calendar.events.list({
-                calendarId: CALENDAR_ID,
-                timeMin: startOfDay.toISOString(),
-                timeMax: endOfDay.toISOString(),
-                singleEvents: true,
-                orderBy: 'startTime',
-              })
-
-              const events = response.data.items || []
-              const bookedSlots = new Set<string>()
-              
-              events.forEach((event) => {
-                if (event.start?.dateTime) {
-                  const eventStart = new Date(event.start.dateTime)
-                  const normalized = normalizeSlotForComparison(eventStart.toISOString())
-                  bookedSlots.add(normalized)
-                }
-              })
-              
-              // Check if all slots are booked
-              const availableSlots = allSlots.filter(slot => {
-                const normalizedSlot = normalizeSlotForComparison(slot)
-                return !bookedSlots.has(normalizedSlot)
-              })
-              
-              // If no available slots, date is fully booked
-              isFullyBooked = availableSlots.length === 0
-            } catch (error) {
-              // If error checking calendar, assume date is available
-              console.warn(`Error checking date ${dateStr}:`, error)
-            }
+          const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
+          if (allSlots.length === 0) {
+            currentDate.setDate(currentDate.getDate() + 1)
+            continue
           }
+
+          const bookedSlots = new Set<string>()
+          const calendarBooked = calendarBookedByDate.get(dateStr)
+          if (calendarBooked) {
+            calendarBooked.forEach((slot) => bookedSlots.add(slot))
+          }
+          const localBooked = localBookedByDate.get(dateStr)
+          if (localBooked) {
+            localBooked.forEach((slot) => bookedSlots.add(slot))
+          }
+
+          const availableSlotsForDay = allSlots.filter((slot) => {
+            const normalizedSlot = normalizeSlotForComparison(slot)
+            return !bookedSlots.has(normalizedSlot)
+          })
+          const isFullyBooked = availableSlotsForDay.length === 0
           
         if (isFullyBooked) {
-          fullyBookedDates.push(dateStr)
+          fullyBookedSet.add(dateStr)
         } else {
           availableDates.push({
             value: dateStr,
@@ -377,7 +506,8 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({ 
         dates: availableDates,
-        fullyBookedDates: fullyBookedDates 
+        fullyBookedDates: Array.from(fullyBookedSet),
+        bookingWindow: bookingWindow ?? null,
       })
     }
 
@@ -387,6 +517,10 @@ export async function GET(request: NextRequest) {
         { error: 'Invalid date format. Expected YYYY-MM-DD' },
         { status: 400 }
       )
+    }
+
+    if (!isDateWithinWindow(dateParam, bookingWindow)) {
+      return NextResponse.json({ slots: [] })
     }
 
     // Parse the date string to get year, month, day
@@ -408,6 +542,11 @@ export async function GET(request: NextRequest) {
     const isSaturday = dayOfWeek === 6
     console.log(`[DEBUG GET] Calculated day of week: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
     
+    if (Array.isArray(availabilityData?.fullyBookedDates) && availabilityData!.fullyBookedDates.includes(dateParam)) {
+      console.log(`[DEBUG GET] Date ${dateParam} is manually marked as fully booked.`)
+      return NextResponse.json({ slots: [] })
+    }
+
     if (isSaturday) {
       const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
       if (!saturdayEnabled) {
@@ -482,6 +621,19 @@ export async function GET(request: NextRequest) {
     console.log(`[DEBUG] Filtering: Today=${todayStr}, Selected=${selectedDateStr}, Now=${now.toISOString()}`)
     console.log(`[DEBUG] All slots before filtering:`, allSlots)
     
+    localBookings.forEach((booking) => {
+      if (booking?.timeSlot && booking.status !== 'cancelled') {
+        const bookingDate = booking.date
+          ? booking.date
+          : booking.timeSlot.split('T')[0]
+        if (bookingDate === dateParam) {
+          const normalized = normalizeSlotForComparison(booking.timeSlot)
+          bookedSlots.add(normalized)
+          console.log(`[DEBUG] Local booking slot filtered: ${booking.timeSlot} -> ${normalized}`)
+        }
+      }
+    })
+    
     const availableSlots = allSlots
       .filter(slot => {
         // Check if slot is booked (normalize for comparison)
@@ -537,7 +689,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`[DEBUG] Final result: ${availableSlots.length} available slots out of ${allSlots.length} total`)
     console.log(`[DEBUG] Available slots array:`, JSON.stringify(availableSlots, null, 2))
-    return NextResponse.json({ slots: availableSlots })
+    return NextResponse.json({ slots: availableSlots, bookingWindow: bookingWindow ?? null })
   } catch (error) {
     console.error('Error fetching available slots:', error)
     return NextResponse.json(

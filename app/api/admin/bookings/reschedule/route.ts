@@ -4,8 +4,8 @@ import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailNotification } from '../../../booking/email/utils'
 import { recordActivity } from '@/lib/activity-log'
-
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
 
 function getCalendarClient() {
   if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
             timeZone: 'Africa/Nairobi',
           },
           attendees: [
-            { email: process.env.GOOGLE_CALENDAR_EMAIL || 'catherinenkuria@gmail.com' },
+            { email: process.env.GOOGLE_CALENDAR_EMAIL || 'hello@lashdiary.co.ke' },
             { email: booking.email },
           ],
         }
@@ -205,6 +205,10 @@ export async function POST(request: NextRequest) {
     booking.rescheduledAt = nowISO
     booking.rescheduledBy = performedBy
     booking.rescheduleHistory = rescheduleHistory
+    const policyWindowHours = typeof booking.cancellationWindowHours === 'number' ? Math.max(booking.cancellationWindowHours, 1) : CLIENT_MANAGE_WINDOW_HOURS
+    booking.cancellationWindowHours = policyWindowHours
+    const updatedCutoff = new Date(newStart.getTime() - policyWindowHours * 60 * 60 * 1000)
+    booking.cancellationCutoffAt = updatedCutoff.toISOString()
 
     bookings[bookingIndex] = booking
     await writeDataFile('bookings.json', { bookings })
@@ -224,6 +228,10 @@ export async function POST(request: NextRequest) {
           discount: booking.discount,
           finalPrice: booking.finalPrice,
           deposit: booking.deposit,
+          bookingId: booking.id,
+          manageToken: booking.manageToken || undefined,
+          policyWindowHours: booking.cancellationWindowHours || CLIENT_MANAGE_WINDOW_HOURS,
+          notes: typeof booking.notes === 'string' ? booking.notes : undefined,
         })
 
         if (!emailResult?.success) {

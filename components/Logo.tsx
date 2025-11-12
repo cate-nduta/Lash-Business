@@ -1,53 +1,101 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type CSSProperties } from 'react'
+
+interface LogoSettings {
+  logoType: 'text' | 'image'
+  logoUrl: string
+  logoText: string
+  logoColor: string
+}
 
 interface LogoProps {
   className?: string
+  style?: CSSProperties
+  imageClassName?: string
 }
 
-export default function Logo({ className = "text-2xl font-display text-brown font-bold" }: LogoProps) {
-  const [logoSettings, setLogoSettings] = useState<{
-    logoType: 'text' | 'image'
-    logoUrl: string
-    logoText: string
-  }>({
-    logoType: 'text',
-    logoUrl: '',
-    logoText: 'LashDiary',
-  })
+const DEFAULT_SETTINGS: LogoSettings = {
+  logoType: 'text',
+  logoUrl: '',
+  logoText: '',
+  logoColor: '#733D26',
+}
+
+export default function Logo({
+  className = 'text-3xl md:text-4xl font-display font-bold',
+  style,
+  imageClassName,
+}: LogoProps) {
+  const [logoSettings, setLogoSettings] = useState<LogoSettings | null>(null)
 
   useEffect(() => {
-    // Fetch logo settings
-    fetch('/api/admin/settings')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.settings?.business) {
-          setLogoSettings({
-            logoType: data.settings.business.logoType || 'text',
-            logoUrl: data.settings.business.logoUrl || '',
-            logoText: data.settings.business.logoText || 'LashDiary',
-          })
+    let isMounted = true
+
+    const loadLogoSettings = async () => {
+      try {
+        const response = await fetch(`/api/settings?ts=${Date.now()}`, {
+          cache: 'no-store',
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to load settings: ${response.status}`)
         }
-      })
-      .catch((error) => {
+
+        const data = await response.json()
+        const business = data?.business ?? {}
+
+        const updatedSettings: LogoSettings = {
+          logoType: business.logoType === 'image' ? 'image' : 'text',
+          logoUrl: business.logoUrl || '',
+          logoText: typeof business.logoText === 'string' ? business.logoText : '',
+          logoColor: business.logoColor || DEFAULT_SETTINGS.logoColor,
+        }
+
+        if (isMounted) {
+          setLogoSettings(updatedSettings)
+        }
+      } catch (error) {
         console.error('Error loading logo settings:', error)
-      })
+        if (isMounted) {
+          setLogoSettings(DEFAULT_SETTINGS)
+        }
+      }
+    }
+
+    loadLogoSettings()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
+
+  const mergedStyle = useMemo(() => {
+    if (!logoSettings) {
+      return style
+    }
+    return {
+      color: logoSettings.logoColor || DEFAULT_SETTINGS.logoColor,
+      ...(style || {}),
+    }
+  }, [logoSettings, style])
+
+  if (!logoSettings) {
+    return null
+  }
 
   if (logoSettings.logoType === 'image' && logoSettings.logoUrl) {
     return (
-      <img 
-        src={logoSettings.logoUrl} 
-        alt={logoSettings.logoText || 'Logo'} 
-        className="h-10 md:h-12 object-contain"
+      <img
+        src={logoSettings.logoUrl}
+        alt={logoSettings.logoText || 'Logo'}
+        className={imageClassName || 'h-16 md:h-20 object-contain'}
       />
     )
   }
 
   return (
-    <h1 className={className}>
-      {logoSettings.logoText || 'LashDiary'}
+    <h1 className={className} style={mergedStyle}>
+      {logoSettings.logoText}
     </h1>
   )
 }

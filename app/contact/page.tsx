@@ -9,6 +9,10 @@ interface ContactData {
   instagram: string
   instagramUrl: string
   location: string
+  showPhone?: boolean | string
+  showEmail?: boolean | string
+  showInstagram?: boolean | string
+  showLocation?: boolean | string
 }
 
 interface AvailabilityData {
@@ -58,13 +62,31 @@ export default function Contact() {
     threshold: 0.1,
   })
 
+  const coerceBoolean = (value: unknown, fallback: boolean) => {
+    if (typeof value === 'boolean') return value
+    if (value === undefined || value === null) return fallback
+    if (typeof value === 'string') {
+      const lower = value.trim().toLowerCase()
+      if (lower === 'true' || lower === '1' || lower === 'yes') return true
+      if (lower === 'false' || lower === '0' || lower === 'no') return false
+    }
+    return fallback
+  }
+
   // Fallback data if API fails
-  const contact = contactData || {
-    phone: '+254 712 345 678',
-    email: 'catherinenkuria@gmail.com',
-    instagram: '@lashdiary',
-    instagramUrl: 'https://instagram.com/lashdiary',
-    location: 'LashDiary Studio, Nairobi, Kenya',
+  const contact = {
+    phone: contactData?.phone ?? '',
+    email: contactData?.email ?? '',
+    instagram: contactData?.instagram ?? '',
+    instagramUrl: contactData?.instagramUrl ?? '',
+    location: contactData?.location ?? '',
+    showPhone: coerceBoolean(contactData?.showPhone, Boolean(contactData?.phone)),
+    showEmail: coerceBoolean(contactData?.showEmail, Boolean(contactData?.email)),
+    showInstagram: coerceBoolean(
+      contactData?.showInstagram,
+      Boolean(contactData?.instagram || contactData?.instagramUrl),
+    ),
+    showLocation: coerceBoolean(contactData?.showLocation, Boolean(contactData?.location)),
   }
 
   const dayOrder = [
@@ -136,55 +158,53 @@ export default function Contact() {
             </div>
             
             <div className="space-y-5">
-              <div className="bg-pink-light/40 border-2 border-brown-light rounded-lg p-4">
-                <p className="text-brown-dark font-bold text-sm mb-1">
-                  📍 Studio Location
-                </p>
-                <p className="text-gray-700 text-xs">
-                  {contact.location}
-                </p>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                <div className="text-brown text-xl">📞</div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1 text-sm">Phone</h3>
-                  <a 
-                    href={`tel:${contact.phone.replace(/\s/g, '')}`}
-                    className="text-brown hover:text-brown-dark hover:underline font-medium"
-                  >
-                    {contact.phone}
-                  </a>
+              {contact.showLocation && contact.location ? (
+                <div className="bg-pink-light/40 border-2 border-brown-light rounded-lg p-4">
+                  <p className="text-brown-dark font-bold text-sm mb-1">
+                    📍 Studio Location
+                  </p>
+                  <p className="text-gray-700 text-xs">
+                    {contact.location}
+                  </p>
                 </div>
-              </div>
+              ) : null}
 
-              <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                <div className="text-brown text-xl">✉️</div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1 text-sm">Email</h3>
-                  <a 
-                    href={`mailto:${contact.email}`}
-                    className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all"
-                  >
-                    {contact.email}
-                  </a>
-                </div>
-              </div>
+              {}
 
-              <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                <div className="text-brown text-xl">📱</div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1 text-sm">Instagram</h3>
-                  <a 
-                    href={contact.instagramUrl}
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-brown hover:text-brown-dark hover:underline font-medium"
-                  >
-                    {contact.instagram}
-                  </a>
+              {contact.showEmail && contact.email ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
+                  <div className="text-brown text-xl">✉️</div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1 text-sm">Email</h3>
+                    <a 
+                    href="mailto:hello@lashdiary.co.ke"
+                      className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all"
+                    >
+                      hello@lashdiary.co.ke
+                    </a>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Emails are replied to in less than 6 hours.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : null}
+
+            {contact.showInstagram ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
+                  <div className="text-brown text-xl">📱</div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-1 text-sm">Instagram</h3>
+                    <a 
+                      href="https://instagram.com/thelashdiary.ke"
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-brown hover:text-brown-dark hover:underline font-medium"
+                    >
+                      @thelashdiary.ke
+                    </a>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -215,22 +235,24 @@ export default function Contact() {
           {/* Social Media & Booking Card */}
           <div className="space-y-6 md:col-span-2 lg:col-span-1">
             {/* Social Media */}
-            <div className="bg-gradient-to-br from-pink to-pink-dark rounded-xl shadow-soft-lg border-2 border-brown-light p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
-              <h2 className="text-2xl font-display text-white mb-3 font-bold">
-                Follow Us
-              </h2>
-              <p className="text-white/95 mb-6 text-sm">
-                Stay connected and see our latest work on social media
-              </p>
-              <a
-                href={contact.instagramUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block bg-white text-brown-dark font-bold px-6 py-3 rounded-full hover:bg-pink-light transition-all duration-300 hover:scale-105 shadow-md"
-              >
-                Visit Our Instagram
-              </a>
-            </div>
+            {contact.showInstagram && contact.instagramUrl ? (
+              <div className="bg-gradient-to-br from-pink to-pink-dark rounded-xl shadow-soft-lg border-2 border-brown-light p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
+                <h2 className="text-2xl font-display text-white mb-3 font-bold">
+                  Follow Us
+                </h2>
+                <p className="text-white/95 mb-6 text-sm">
+                  Stay connected and see our latest work on social media
+                </p>
+                <a
+                  href="https://instagram.com/thelashdiary.ke"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block bg-white text-brown-dark font-bold px-6 py-3 rounded-full hover:bg-pink-light transition-all duration-300 hover:scale-105 shadow-md"
+                >
+                  Visit Our Instagram
+                </a>
+              </div>
+            ) : null}
 
             {/* Booking CTA */}
             <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">

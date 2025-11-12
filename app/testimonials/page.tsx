@@ -3,21 +3,56 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import {
+  StarRatingInput,
+  StarRatingDisplay,
+  fetchAverageRatingSummary,
+  formatAverageRating,
+} from '@/components/StarRating'
 
 export default function Testimonials() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: emailParam,
     testimonial: '',
-    rating: 5,
+    rating: 0,
     photo: null as File | null,
   })
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [averageRating, setAverageRating] = useState<number | null>(null)
+  const [totalReviews, setTotalReviews] = useState<number>(0)
+  const [loadingAverage, setLoadingAverage] = useState<boolean>(false)
+  const [averageError, setAverageError] = useState<string | null>(null)
+
+  const updateAverageRating = async () => {
+    try {
+      const summary = await fetchAverageRatingSummary()
+      setAverageRating(summary.average)
+      setTotalReviews(summary.count)
+    } catch (error) {
+      console.error('Failed to refresh average rating:', error)
+    }
+  }
+
+  useEffect(() => {
+    const loadAverage = async () => {
+      setLoadingAverage(true)
+      try {
+        await updateAverageRating()
+      } catch (error) {
+        console.error('Failed to load average rating:', error)
+        setAverageError('Unable to load ratings right now.')
+      } finally {
+        setLoadingAverage(false)
+      }
+    }
+    loadAverage()
+  }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -38,6 +73,11 @@ export default function Testimonials() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (formData.rating < 1) {
+      setMessage({ type: 'error', text: 'Please tap a star rating before submitting.' })
+      return
+    }
+
     // Validate that at least one field is filled
     if (!formData.testimonial.trim() && !formData.photo) {
       setMessage({ type: 'error', text: 'Please provide either a testimonial text or a photo (or both)!' })
@@ -74,10 +114,12 @@ export default function Testimonials() {
           name: '',
           email: emailParam,
           testimonial: '',
-          rating: 5,
+          rating: 0,
           photo: null,
         })
         setPreviewUrl(null)
+        // refresh rating stats
+        updateAverageRating()
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to submit testimonial. Please try again.' })
       }
@@ -107,6 +149,30 @@ export default function Testimonials() {
           <p className="text-lg text-gray-600 mb-8 text-center">
             We'd love to hear about your experience with LashDiary! Your feedback helps us improve and helps others discover our services.
           </p>
+
+          <div className="mb-10">
+            {loadingAverage ? (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-2 text-gray-400">Loading rating…</div>
+              </div>
+            ) : averageError ? (
+              <div className="text-center text-sm text-red-500">{averageError}</div>
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <StarRatingDisplay rating={averageRating ?? 0} ariaLabel="Average customer rating" />
+                  <span className="text-sm font-semibold text-brown-dark">
+                    {formatAverageRating(averageRating)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {totalReviews > 0
+                    ? `${totalReviews} review${totalReviews === 1 ? '' : 's'}`
+                    : 'Be the first to leave a review'}
+                </p>
+              </div>
+            )}
+          </div>
 
           {message && (
             <div
@@ -155,20 +221,52 @@ export default function Testimonials() {
               <label htmlFor="rating" className="block text-sm font-semibold text-brown-dark mb-2">
                 Rating *
               </label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, rating: star })}
-                    className={`text-3xl ${
-                      star <= formData.rating ? 'text-yellow-400' : 'text-gray-300'
-                    } hover:text-yellow-400 transition-colors`}
-                  >
-                    ★
-                  </button>
-                ))}
-              </div>
+              <StarRatingInput
+                value={formData.rating}
+                onChange={(rating) => setFormData({ ...formData, rating })}
+                size="lg"
+                ariaLabelPrefix="Select "
+                className="gap-2 text-3xl"
+                allowReset={false}
+              />
+              <fieldset className="mt-4">
+                <legend className="text-xs text-gray-500 font-medium mb-2">
+                  Or tap a rating option below:
+                </legend>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  {[
+                    { value: 1, label: 'Needs improvement' },
+                    { value: 2, label: 'Fair' },
+                    { value: 3, label: 'Good' },
+                    { value: 4, label: 'Great' },
+                    { value: 5, label: 'Amazing' },
+                  ].map((option) => (
+                    <label
+                      key={option.value}
+                      className={`flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                        formData.rating === option.value
+                          ? 'border-yellow-400 bg-yellow-50 text-yellow-700'
+                          : 'border-brown-light bg-white text-brown-dark hover:border-yellow-300 hover:bg-yellow-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rating"
+                        value={option.value}
+                        checked={formData.rating === option.value}
+                        onChange={() => setFormData({ ...formData, rating: option.value })}
+                        className="sr-only"
+                      />
+                      <span>
+                        {option.value} ★ – {option.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <p className="text-xs text-gray-500 mt-1">
+                Tap the number of stars that matches your experience (1 = needs improvement, 5 = amazing).
+              </p>
             </div>
 
             <div className="bg-pink-light/30 p-4 rounded-lg mb-6 border-2 border-brown-light">
@@ -245,6 +343,14 @@ export default function Testimonials() {
               {submitting ? 'Submitting...' : 'Submit Testimonial'}
             </button>
           </form>
+        </div>
+        <div className="mt-12 text-center text-sm text-gray-500">
+          <p>
+            Want to see what others think?{' '}
+            <Link href="/testimonials-all" className="text-brown hover:text-brown-dark font-medium underline-offset-4 underline">
+              Browse all testimonials
+            </Link>
+          </p>
         </div>
       </div>
     </div>

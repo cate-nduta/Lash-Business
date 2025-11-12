@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { readDataFile } from '@/lib/data-utils'
 import { verifyPassword } from '@/lib/password-utils'
+import {
+  ADMIN_AUTH_COOKIE,
+  ADMIN_LAST_ACTIVE_COOKIE,
+  ADMIN_SESSION_MAX_IDLE_MS,
+  ADMIN_USER_COOKIE,
+} from '@/lib/admin-auth'
 
 // IMPORTANT: Set ADMIN_PASSWORD in .env.local file for security
 // Default password is only for development - CHANGE IT IN PRODUCTION!
@@ -10,6 +15,15 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'lashdiary2025'
 export async function POST(request: NextRequest) {
   try {
     const { password, username } = await request.json()
+    const now = Date.now()
+
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict' as const,
+      path: '/',
+      maxAge: Math.floor(ADMIN_SESSION_MAX_IDLE_MS / 1000),
+    }
 
     // Try multi-admin login first
     try {
@@ -37,23 +51,14 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        const response = NextResponse.json({ 
+        const response = NextResponse.json({
           success: true,
           username: admin.username,
-          role: admin.role 
+          role: admin.role,
         })
-        response.cookies.set('admin-auth', 'authenticated', {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        })
-        response.cookies.set('admin-user', admin.username, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        })
+        response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
+        response.cookies.set(ADMIN_USER_COOKIE, admin.username, cookieOptions)
+        response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
         return response
       }
     } catch (error) {
@@ -64,12 +69,9 @@ export async function POST(request: NextRequest) {
     // Fallback to original single password method (for backward compatibility)
     if (password === ADMIN_PASSWORD) {
       const response = NextResponse.json({ success: true })
-      response.cookies.set('admin-auth', 'authenticated', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      })
+      response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
+      response.cookies.set(ADMIN_USER_COOKIE, 'owner', cookieOptions)
+      response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
       return response
     } else {
       return NextResponse.json(

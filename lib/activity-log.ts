@@ -12,6 +12,7 @@ export type ActivityModule =
   | 'promo_codes'
   | 'discounts'
   | 'email_marketing'
+  | 'partner_onboarding'
   | 'general'
 
 export type ActivityAction =
@@ -26,6 +27,7 @@ export type ActivityAction =
   | 'apply'
   | 'send'
   | 'schedule'
+  | 'accept'
 
 export interface ActivityLogEntry {
   id: string

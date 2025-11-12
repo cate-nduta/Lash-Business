@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { readDataFile, writeDataFile } from '@/lib/data-utils'
 
 const MAX_SIZE = 1024 * 1024 // 1MB
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon']
@@ -36,12 +37,38 @@ export async function POST(request: NextRequest) {
     await writeFile(filepath, buffer)
 
     const faviconUrl = `/uploads/favicon/${filename}`
+    const faviconVersion = Date.now()
 
-    return NextResponse.json({
-      success: true,
-      faviconUrl,
-      message: 'Favicon uploaded successfully',
-    })
+    try {
+      const settings = await readDataFile<any>('settings.json', {})
+      const business = settings?.business ?? {}
+      const updatedSettings = {
+        ...settings,
+        business: {
+          ...business,
+          faviconUrl,
+          faviconVersion,
+        },
+      }
+      await writeDataFile('settings.json', updatedSettings)
+      return NextResponse.json({
+        success: true,
+        faviconUrl,
+        faviconVersion,
+        settings: updatedSettings,
+        message: 'Favicon uploaded successfully',
+      })
+    } catch (error) {
+      console.error('Error persisting favicon settings:', error)
+      // Even if persisting fails, still return upload result
+      return NextResponse.json({
+        success: true,
+        faviconUrl,
+        faviconVersion,
+        message: 'Favicon uploaded, but settings could not be updated automatically. Please save changes manually.',
+      })
+    }
+
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

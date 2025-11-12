@@ -24,25 +24,31 @@ const playfair = Playfair_Display({
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const settings = await readDataFile<any>('settings.json', {})
-    const faviconUrl = settings?.business?.faviconUrl || '/favicon.svg'
+    const faviconUrl = typeof settings?.business?.faviconUrl === 'string' ? settings.business.faviconUrl : ''
+    const faviconVersion =
+      typeof settings?.business?.faviconVersion === 'number'
+        ? settings.business.faviconVersion
+        : Date.now()
+    const versionedFavicon =
+      faviconUrl && faviconUrl.length > 0
+        ? `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${faviconVersion}`
+        : undefined
     return {
       title: settings?.business?.name ? `${settings.business.name} - Luxury Lash Services` : 'LashDiary - Luxury Lash Services',
       description: settings?.business?.description || 'Premium lash extensions and beauty services',
-      icons: {
-        icon: faviconUrl,
-        shortcut: faviconUrl,
-        apple: faviconUrl,
-      },
+      icons: versionedFavicon
+        ? {
+            icon: versionedFavicon,
+            shortcut: versionedFavicon,
+            apple: versionedFavicon,
+          }
+        : undefined,
     }
   } catch {
     return {
       title: 'LashDiary - Luxury Lash Services',
       description: 'Premium lash extensions and beauty services',
-      icons: {
-        icon: '/favicon.svg',
-        shortcut: '/favicon.svg',
-        apple: '/favicon.svg',
-      },
+      icons: undefined,
     }
   }
 }
@@ -81,29 +87,17 @@ export default async function RootLayout({
         <Script id="interaction-guard" strategy="afterInteractive">
           {`
             (function () {
-              const preventDefault = (event) => {
-                event.preventDefault();
-              };
-
-              const preventKeyActions = (event) => {
+              const handleKeydown = (event) => {
                 if (event.key === 'PrintScreen') {
                   event.preventDefault();
                   if (navigator.clipboard && navigator.clipboard.writeText) {
                     navigator.clipboard.writeText('Screenshots are disabled on this site.').catch(() => {});
                   }
                 }
-
-                if ((event.ctrlKey || event.metaKey) && ['c', 'x', 'p', 's'].includes(event.key.toLowerCase())) {
-                  event.preventDefault();
-                }
               };
 
               if (typeof document !== 'undefined') {
-                document.addEventListener('copy', preventDefault);
-                document.addEventListener('cut', preventDefault);
-                document.addEventListener('contextmenu', preventDefault);
-                document.addEventListener('dragstart', preventDefault);
-                document.addEventListener('keydown', preventKeyActions, true);
+                document.addEventListener('keydown', handleKeydown, true);
               }
             })();
           `}

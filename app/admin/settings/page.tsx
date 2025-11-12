@@ -16,7 +16,9 @@ interface Settings {
     logoType: 'text' | 'image'
     logoUrl: string
     logoText: string
+    logoColor: string
     faviconUrl: string
+    faviconVersion: number
   }
   social: {
     instagram: string
@@ -37,7 +39,9 @@ export default function AdminSettings() {
       logoType: 'text',
       logoUrl: '',
       logoText: '',
-      faviconUrl: '/favicon.svg',
+      logoColor: '#733D26',
+      faviconUrl: '',
+      faviconVersion: 0,
     },
     social: {
       instagram: '',
@@ -108,7 +112,13 @@ export default function AdminSettings() {
         const data = await response.json()
         const loaded = data as Settings
         if (!loaded.business.faviconUrl) {
-          loaded.business.faviconUrl = '/favicon.svg'
+          loaded.business.faviconUrl = ''
+        }
+        if (!loaded.business.logoColor) {
+          loaded.business.logoColor = '#733D26'
+        }
+        if (!loaded.business.faviconVersion) {
+          loaded.business.faviconVersion = Date.now()
         }
         setSettings(loaded)
       }
@@ -143,7 +153,8 @@ export default function AdminSettings() {
           ...settings,
           business: {
             ...settings.business,
-            faviconUrl: settings.business.faviconUrl || '/favicon.svg',
+            faviconUrl: settings.business.faviconUrl || '',
+            logoColor: settings.business.logoColor || '#733D26',
           },
         }),
         credentials: 'include',
@@ -223,13 +234,18 @@ export default function AdminSettings() {
       if (!response.ok) {
         throw new Error(data.error || 'Failed to upload favicon')
       }
-      setSettings((prev) => ({
-        ...prev,
-        business: {
-          ...prev.business,
-          faviconUrl: data.faviconUrl,
-        },
-      }))
+      if (data.settings?.business) {
+        setSettings(data.settings as Settings)
+      } else {
+        setSettings((prev) => ({
+          ...prev,
+          business: {
+            ...prev.business,
+            faviconUrl: data.faviconUrl,
+            faviconVersion: data.faviconVersion || Date.now(),
+          },
+        }))
+      }
       setHasUnsavedChanges(true)
       setMessage({ type: 'success', text: 'Favicon uploaded! Remember to save changes.' })
     } catch (error: any) {
@@ -322,7 +338,7 @@ export default function AdminSettings() {
                   value={settings.business.phone}
                   onChange={(e) => handleInputChange('business', 'phone', e.target.value)}
                   className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                  placeholder="0748 863 882"
+                  placeholder="e.g. +254 7XX XXX XXX"
                 />
               </div>
 
@@ -424,10 +440,36 @@ export default function AdminSettings() {
                 <p className="text-xs text-gray-600 mt-2">
                   This text will appear in your navigation, footer, and emails in your brand font.
                 </p>
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Logo Text Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={settings.business.logoColor || '#733D26'}
+                      onChange={(e) => handleInputChange('business', 'logoColor', e.target.value)}
+                      className="h-12 w-16 cursor-pointer border-2 border-brown-light rounded-lg"
+                      aria-label="Select logo text color"
+                    />
+                    <input
+                      type="text"
+                      value={settings.business.logoColor || '#733D26'}
+                      onChange={(e) => handleInputChange('business', 'logoColor', e.target.value)}
+                      className="w-32 px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm uppercase"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Choose any HEX color (e.g. #733D26) to match your brand palette.
+                  </p>
+                </div>
                 {/* Logo Preview */}
                 <div className="mt-4 p-6 bg-baby-pink-light rounded-lg border-2 border-brown-light">
                   <p className="text-xs text-brown-dark mb-2 font-semibold">Preview:</p>
-                  <h1 className="text-3xl font-display text-brown font-bold">
+                  <h1
+                    className="text-3xl font-display font-bold"
+                    style={{ color: settings.business.logoColor || '#733D26' }}
+                  >
                     {settings.business.logoText || 'LashDiary'}
                   </h1>
                 </div>
@@ -462,6 +504,7 @@ export default function AdminSettings() {
                         
                         if (response.ok && data.logoUrl) {
                           handleInputChange('business', 'logoUrl', data.logoUrl)
+                          handleInputChange('business', 'logoType', 'image')
                           setMessage({ type: 'success', text: 'Logo uploaded! Remember to save changes.' })
                         } else {
                           setMessage({ type: 'error', text: data.error || 'Failed to upload logo' })
@@ -507,12 +550,18 @@ export default function AdminSettings() {
             </p>
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 rounded-xl border-2 border-brown-light flex items-center justify-center bg-white overflow-hidden">
-                  <img
-                    src={settings.business.faviconUrl || '/favicon.svg'}
-                    alt="Favicon preview"
-                    className="w-12 h-12 object-contain"
-                  />
+                <div className="w-16 h-16 border-2 border-brown-light flex items-center justify-center bg-white overflow-hidden">
+                  {settings.business.faviconUrl ? (
+                    <img
+                      src={settings.business.faviconUrl}
+                      alt="Favicon preview"
+                      className="w-12 h-12 object-contain"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 flex items-center justify-center text-xs text-gray-400 text-center leading-tight px-1">
+                      No favicon
+                    </div>
+                  )}
                 </div>
                 <span className="text-xs text-gray-500">Preview</span>
               </div>
@@ -533,15 +582,16 @@ export default function AdminSettings() {
                         ...prev,
                         business: {
                           ...prev.business,
-                          faviconUrl: '/favicon.svg',
+                          faviconUrl: '',
+                          faviconVersion: Date.now(),
                         },
                       }))
                       setHasUnsavedChanges(true)
-                      setMessage({ type: 'success', text: 'Reverted to default favicon. Save to apply.' })
+                      setMessage({ type: 'success', text: 'Favicon removed. Save to apply.' })
                     }}
                     className="px-4 py-2 bg-white border-2 border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/70"
                   >
-                    Use Default
+                    Remove Favicon
                   </button>
                 </div>
                 <p className="text-xs text-gray-500">Tip: A simple 64x64 image with neutral colors works best.</p>

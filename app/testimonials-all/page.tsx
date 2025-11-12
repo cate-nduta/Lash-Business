@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { StarRatingDisplay } from '@/components/StarRating'
 
 interface Testimonial {
   id: string
   name: string
-  email: string
-  photo?: string
+  email?: string
+  photoUrl?: string | null
   testimonial: string
   rating?: number
-  date: string
-  approved: boolean
-  service?: string
+  createdAt?: string
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 export default function TestimonialsAll() {
@@ -20,7 +20,7 @@ export default function TestimonialsAll() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/testimonials')
+    fetch('/api/testimonials', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setTestimonials(data.testimonials || [])
@@ -32,8 +32,15 @@ export default function TestimonialsAll() {
       })
   }, [])
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) {
+      return ''
+    }
+    const parsed = new Date(dateString)
+    if (Number.isNaN(parsed.getTime())) {
+      return ''
+    }
+    return parsed.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -78,10 +85,25 @@ export default function TestimonialsAll() {
                   key={testimonial.id}
                   className="bg-white rounded-2xl shadow-soft p-6 hover:shadow-soft-lg transition-all duration-300 border-2 border-brown-light"
                 >
-                  {testimonial.photo && (
+                  {testimonial.status === 'approved' && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#22c55e]/15 px-3 py-1 text-xs font-semibold text-[#16a34a] border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.25)] mb-3">
+                      <svg className="h-3.5 w-3.5 text-[#16a34a]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3.25-3.25a1 1 0 011.414-1.414l2.543 2.543 6.543-6.543a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span>Verified Client</span>
+                    </span>
+                  )}
+                  {(() => {
+                    const photoSrc = testimonial.photoUrl || (testimonial as any).photo
+                    if (!photoSrc) return null
+                    return (
                     <div className="mb-4">
                       <img
-                        src={testimonial.photo}
+                        src={photoSrc}
                         alt={testimonial.name}
                         className="w-full h-64 object-cover rounded-lg"
                         onError={(e) => {
@@ -89,27 +111,19 @@ export default function TestimonialsAll() {
                         }}
                       />
                     </div>
-                  )}
-                  {testimonial.rating && (
-                    <div className="flex gap-1 mb-3">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <span
-                          key={star}
-                          className={`text-xl ${
-                            star <= testimonial.rating! ? 'text-yellow-400' : 'text-gray-300'
-                          }`}
-                        >
-                          ★
-                        </span>
-                      ))}
-                    </div>
+                    )
+                  })()}
+                  {typeof testimonial.rating === 'number' && testimonial.rating > 0 && (
+                    <StarRatingDisplay rating={testimonial.rating} size="md" className="mb-3" />
                   )}
                   <p className="text-gray-700 mb-4 leading-relaxed italic">
                     "{testimonial.testimonial}"
                   </p>
                   <div className="border-t border-brown-light pt-4">
                     <p className="font-semibold text-brown-dark">{testimonial.name}</p>
-                    <p className="text-sm text-gray-500">{formatDate(testimonial.date)}</p>
+                    <p className="text-sm text-gray-500">
+                      {formatDate(testimonial.createdAt) || 'Awaiting publish date'}
+                    </p>
                   </div>
                 </div>
               ))}

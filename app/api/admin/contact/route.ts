@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +24,7 @@ export async function POST(request: NextRequest) {
     await requireAdminAuth()
     const contact = await request.json()
     await writeDataFile('contact.json', contact)
+    revalidatePath('/contact')
     return NextResponse.json({ success: true })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

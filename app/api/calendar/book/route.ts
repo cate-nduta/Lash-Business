@@ -1,11 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { google } from 'googleapis'
+import { Resend } from 'resend'
 import { sendEmailNotification } from '../../booking/email/utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
-
+import { updateFullyBookedState } from '@/lib/availability-utils'
+import { getSalonCommissionSettings } from '@/lib/discount-utils'
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
-const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
 const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const FROM_EMAIL = process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL || 'onboarding@resend.dev'
+const OWNER_NOTIFICATION_EMAIL = BUSINESS_NOTIFICATION_EMAIL
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+
+const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
+
+const parseDateOnly = (value?: string | null) => {
+  if (!value || typeof value !== 'string') return null
+  const parsed = new Date(`${value}T00:00:00+03:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const isWithinBookingWindow = (dateStr: string, bookingWindow?: any) => {
+  if (!bookingWindow?.current) return true
+  const target = parseDateOnly(dateStr)
+  if (!target) return false
+  const start = parseDateOnly(bookingWindow.current.startDate)
+  const end = parseDateOnly(bookingWindow.current.endDate)
+  if (start && target < start) return false
+  if (end && target > end) return false
+  return true
+}
 
 // Initialize Google Calendar API with write access
 function getCalendarClient() {
@@ -29,10 +60,61 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth })
 }
 
+function formatFriendlyDate(dateStr: string) {
+  const date = new Date(`${dateStr}T12:00:00`)
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+async function sendFullyBookedEmail(dateStr: string) {
+  if (!resend) return
+  try {
+    const formattedDate = formatFriendlyDate(dateStr)
+    await resend.emails.send({
+      from: `LashDiary Alerts <${FROM_EMAIL}>`,
+      to: OWNER_NOTIFICATION_EMAIL,
+      subject: `Fully booked date: ${formattedDate}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 24px; background: #FFF8FB; color: #2F1A16;">
+          <h2 style="margin-top: 0; color: #733D26;">${formattedDate} is fully booked</h2>
+          <p>All client slots for ${formattedDate} have been taken.</p>
+          <p>You can reopen the day at any time from your admin bookings calendar.</p>
+          <p style="margin-top: 24px;">— LashDiary System</p>
+        </div>
+      `,
+    })
+  } catch (error) {
+    console.error('Failed to send fully booked email notification:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, phone, timeSlot, service, date, location, notes, isFirstTimeClient, originalPrice, discount, finalPrice, deposit, mpesaCheckoutRequestID } = body
+    const {
+      name,
+      email,
+      phone,
+      timeSlot,
+      service,
+      date,
+      location,
+      notes,
+      isFirstTimeClient,
+      originalPrice,
+      discount,
+      finalPrice,
+      deposit,
+      mpesaCheckoutRequestID,
+      promoCode,
+      promoCodeType,
+      salonReferral,
+      clientPhoto,
+    } = body
     const bookingLocation = location || STUDIO_LOCATION
 
     // Validate required fields
@@ -61,6 +143,23 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    const appointmentDateStr =
+      (typeof date === 'string' && date.trim().length > 0) ? date : timeSlot.split('T')[0]
+    if (!appointmentDateStr) {
+      return NextResponse.json(
+        { error: 'Missing booking date' },
+        { status: 400 },
+      )
+    }
+
+    const availability = await readDataFile<{ bookingWindow?: any }>('availability.json', {})
+    if (!isWithinBookingWindow(appointmentDateStr, availability.bookingWindow)) {
+      return NextResponse.json(
+        { error: 'Bookings for this date are not open yet. Please choose another date.' },
+        { status: 400 },
+      )
+    }
+
     const endTime = new Date(startTime)
     endTime.setHours(endTime.getHours() + 2) // 2-hour appointment default
 
@@ -116,9 +215,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const bookingId = `booking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const manageToken = randomBytes(24).toString('hex')
+    const policyWindowHours = CLIENT_MANAGE_WINDOW_HOURS
+    const salonCommissionSettings = await getSalonCommissionSettings()
+    const cancellationCutoff = new Date(startTime.getTime() - policyWindowHours * 60 * 60 * 1000)
+
     // Send email notifications via Resend
     let emailSent = false
     let emailError = null
+    let emailStatus = 'skipped'
     try {
       const emailResult = await sendEmailNotification({
         name,
@@ -133,8 +239,13 @@ export async function POST(request: NextRequest) {
         discount: discount || 0,
         finalPrice: finalPrice || originalPrice || 0,
         deposit: deposit || 0,
+        bookingId,
+        manageToken,
+        policyWindowHours,
+        notes: typeof notes === 'string' ? notes : undefined,
       })
       emailSent = emailResult.success === true && emailResult.ownerEmailSent === true
+      emailStatus = emailResult.status || (emailSent ? 'sent' : 'issue')
       if (emailSent) {
         console.log('Email notifications status:', {
           ownerEmailSent: emailResult.ownerEmailSent,
@@ -153,10 +264,12 @@ export async function POST(request: NextRequest) {
       } else {
         console.warn('Email notifications not sent:', emailResult.error)
         emailError = emailResult.error
+        emailStatus = emailResult.status || 'issue'
       }
     } catch (emailErr: any) {
       console.error('Error sending email notifications:', emailErr)
       emailError = emailErr.message || 'Email service error'
+      emailStatus = 'error'
       // Don't fail the booking if email fails
     }
 
@@ -164,9 +277,14 @@ export async function POST(request: NextRequest) {
     try {
       const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
       const bookings = bookingsData.bookings || []
-      
-      const bookingId = `booking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const hasDeposit = (deposit || 0) > 0
+      const createdAt = new Date().toISOString()
+      const originalServicePrice = Number(originalPrice || finalPrice || 0)
+      const salonCommissionTotal = Math.round(
+        originalServicePrice * (salonCommissionSettings.totalPercentage / 100),
+      )
+      const salonEarlyAmount = 0
+      const salonFinalAmount = salonCommissionTotal
 
       const newBooking = {
         id: bookingId,
@@ -183,9 +301,29 @@ export async function POST(request: NextRequest) {
         finalPrice: finalPrice || originalPrice || 0,
         deposit: deposit || 0,
         discountType: body.discountType || null,
-        promoCode: body.promoCode || null,
+        promoCode: promoCode || null,
+        referralType: promoCodeType || null,
+        salonReferral: salonReferral || null,
         mpesaCheckoutRequestID: mpesaCheckoutRequestID || null,
-        createdAt: new Date().toISOString(),
+        clientPhoto: clientPhoto?.url
+          ? {
+              url: clientPhoto.url.trim(),
+              filename:
+                typeof clientPhoto.filename === 'string' && clientPhoto.filename.trim().length > 0
+                  ? clientPhoto.filename.trim()
+                  : null,
+              originalName:
+                typeof clientPhoto.originalName === 'string' && clientPhoto.originalName.trim().length > 0
+                  ? clientPhoto.originalName.trim()
+                  : null,
+              mimeType:
+                typeof clientPhoto.mimeType === 'string' && clientPhoto.mimeType.trim().length > 0
+                  ? clientPhoto.mimeType.trim()
+                  : null,
+              size: typeof clientPhoto.size === 'number' ? clientPhoto.size : null,
+            }
+          : null,
+        createdAt,
         testimonialRequested: false,
         testimonialRequestedAt: null,
         status: 'confirmed',
@@ -199,11 +337,75 @@ export async function POST(request: NextRequest) {
         rescheduledAt: null,
         rescheduledBy: null,
         rescheduleHistory: [],
+        manageToken,
+        manageTokenGeneratedAt: createdAt,
+        manageTokenLastUsedAt: null,
+        cancellationWindowHours: policyWindowHours,
+        cancellationCutoffAt: cancellationCutoff.toISOString(),
+        lastClientManageActionAt: null,
+        clientManageDisabled: false,
+        salonReferralDetails:
+          body.isSalonReferral && body.promoCodeData
+            ? {
+                code: body.promoCodeData.code,
+                salonEmail: body.promoCodeData.salonEmail,
+                salonName: body.promoCodeData.salonName,
+                clientDiscountPercent: body.promoCodeData.clientDiscountPercent,
+                salonCommissionPercent: salonCommissionSettings.totalPercentage,
+                commissionAmount: salonCommissionTotal,
+                commissionTotalAmount: salonCommissionTotal,
+                commissionEarlyPercent: 0,
+                commissionFinalPercent: salonCommissionSettings.totalPercentage,
+                commissionEarlyAmount: salonEarlyAmount,
+                commissionFinalAmount: salonFinalAmount,
+                commissionEarlyStatus: 'pending',
+                commissionFinalStatus: 'pending',
+                commissionEarlyPaidAt: null,
+                commissionFinalPaidAt: null,
+                cancellationWindowHours: policyWindowHours,
+                cancellationCutoffAt: cancellationCutoff.toISOString(),
+                status: 'pending',
+              }
+            : null,
       }
 
       bookings.push(newBooking)
 
       await writeDataFile('bookings.json', { bookings })
+
+      if (clientPhoto?.url) {
+        try {
+          const existingPhotos = await readDataFile<{ entries?: any[] }>('client-photos.json', { entries: [] })
+          const photoEntries = Array.isArray(existingPhotos.entries) ? existingPhotos.entries : []
+          const photoEntry = {
+            id: `${bookingId}-photo`,
+            bookingId,
+            name,
+            email,
+            phone,
+            service: service || '',
+            appointmentDate: date,
+            uploadedAt: createdAt,
+            photoUrl: clientPhoto.url.trim(),
+            filename:
+              typeof clientPhoto.filename === 'string' && clientPhoto.filename.trim().length > 0
+                ? clientPhoto.filename.trim()
+                : null,
+          }
+          photoEntries.push(photoEntry)
+          await writeDataFile('client-photos.json', { entries: photoEntries })
+        } catch (photoError) {
+          console.error('Failed to persist client photo entry:', photoError)
+        }
+      }
+
+      try {
+        await updateFullyBookedState(date, bookings, {
+          onDayFullyBooked: sendFullyBookedEmail,
+        })
+      } catch (stateError) {
+        console.error('Failed to update fully booked tracking:', stateError)
+      }
 
       return NextResponse.json({
         success: true,
@@ -211,6 +413,7 @@ export async function POST(request: NextRequest) {
         calendarEventId: eventId,
         emailSent,
         emailError,
+        emailStatus,
         calendarConfigured,
       })
     } catch (fileError: any) {
@@ -228,6 +431,7 @@ export async function POST(request: NextRequest) {
         eventId: eventId,
         emailSent: emailSent,
         emailError: emailError,
+        emailStatus,
         message: calendarConfigured 
           ? 'Appointment booked successfully!'
           : 'Booking request received!',

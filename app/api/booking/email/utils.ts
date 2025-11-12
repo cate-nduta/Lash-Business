@@ -1,12 +1,60 @@
+import nodemailer from 'nodemailer'
 import { Resend } from 'resend'
 
-const OWNER_EMAIL = process.env.CALENDAR_EMAIL || 'catherinenkuria@gmail.com'
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
+const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev' // Default Resend email for testing
 const DEFAULT_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || '')
+  .replace(/\/$/, '')
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : 'onboarding@resend.dev') // Default Resend email for testing
+const RESEND_SANDBOX_FROM =
+  process.env.RESEND_SANDBOX_FROM ||
+  process.env.RESEND_DEFAULT_FROM ||
+  'onboarding@resend.dev'
+
+const EMAIL_STYLES = {
+  background: '#FDF9F4',
+  card: '#FFFFFF',
+  accent: '#F3E6DC',
+  textPrimary: '#3E2A20',
+  textSecondary: '#6B4A3B',
+  brand: '#7C4B31',
+}
 
 // Initialize Resend
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 // Service price mapping for deposit calculation
 const servicePrices: { [key: string]: number } = {
@@ -42,6 +90,26 @@ const serviceDurations: { [key: string]: number } = {
   'Lash Lift': 60,
 }
 
+type SendEmailPayload = {
+  name: string
+  email: string
+  phone: string
+  service: string
+  date: string
+  timeSlot: string
+  location: string
+  isFirstTimeClient?: boolean
+  originalPrice?: number
+  discount?: number
+  finalPrice?: number
+  deposit?: number
+  bookingId?: string
+  manageToken?: string
+  policyWindowHours?: number
+  transferFromName?: string
+  notes?: string
+}
+
 // Calculate deposit amount (35% of service price)
 function calculateDeposit(service: string): { amount: number; formatted: string; servicePrice: number } {
   if (!service || !servicePrices[service]) {
@@ -56,6 +124,182 @@ function calculateDeposit(service: string): { amount: number; formatted: string;
   }
 }
 
+function formatGoogleCalendarDate(date: Date) {
+  return date
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z')
+}
+
+function buildGoogleCalendarLink(options: {
+  summary: string
+  start: Date
+  end: Date
+  location: string
+  description: string
+}) {
+  const start = formatGoogleCalendarDate(options.start)
+  const end = formatGoogleCalendarDate(options.end)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: options.summary,
+    dates: `${start}/${end}`,
+    location: options.location,
+    details: options.description,
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+type ResendSendParams = {
+  to: string | string[]
+  subject: string
+  html: string
+  text?: string
+  replyTo?: string | string[]
+  cc?: string | string[]
+  bcc?: string | string[]
+  tags?: Array<{ name: string; value: string }>
+}
+
+type ResendSendOutcome = {
+  messageId: string | null
+  sender: string
+  rawResponse: any
+}
+
+function buildResendFromCandidates() {
+  const candidates: string[] = []
+
+  const pushCandidate = (email?: string | null) => {
+    if (!email) return
+    const trimmed = email.trim()
+    if (!trimmed || !trimmed.includes('@')) return
+    const formatted = `${EMAIL_FROM_NAME} <${trimmed}>`
+    if (!candidates.includes(formatted)) {
+      candidates.push(formatted)
+    }
+  }
+
+  pushCandidate(ZOHO_FROM_EMAIL)
+  pushCandidate(FROM_EMAIL)
+
+  if (RESEND_SANDBOX_FROM) {
+    pushCandidate(RESEND_SANDBOX_FROM)
+  } else {
+    pushCandidate('onboarding@resend.dev')
+  }
+
+  return candidates
+}
+
+function extractResendMessageId(result: any): string | null {
+  if (!result) return null
+  if (typeof result.id === 'string') return result.id
+  if (result.data && typeof result.data.id === 'string') return result.data.id
+  return null
+}
+
+function normaliseErrorMessage(error: any): string {
+  if (!error) return ''
+  if (typeof error === 'string') return error
+  if (error.message) return error.message
+  if (typeof error.error === 'string') return error.error
+  if (error.error?.message) return error.error.message
+  if (error.body?.message) return error.body.message
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return ''
+  }
+}
+
+function shouldRetryResendSender(error: any) {
+  if (!error) return false
+  const statusCode = error.statusCode ?? error.status ?? error.code
+  const message = normaliseErrorMessage(error).toLowerCase()
+
+  if (!message && typeof statusCode === 'number') {
+    return statusCode === 403
+  }
+
+  return (
+    statusCode === 403 ||
+    message.includes('sender identity') ||
+    message.includes('sender identity has not been verified') ||
+    message.includes('domain not found') ||
+    message.includes('domain is not verified') ||
+    message.includes('add and verify') ||
+    message.includes('not a verified domain') ||
+    message.includes('forbidden')
+  )
+}
+
+async function sendViaResendWithFallback(params: ResendSendParams): Promise<ResendSendOutcome> {
+  if (!resend) {
+    throw new Error('Resend client not configured')
+  }
+
+  const fromCandidates = buildResendFromCandidates()
+  if (fromCandidates.length === 0) {
+    throw new Error('No sender identity available for Resend emails')
+  }
+
+  let lastError: any = null
+
+  for (const from of fromCandidates) {
+    try {
+      const response = await resend.emails.send({ ...params, from })
+      if ((response as any)?.error) {
+        const payload = (response as any).error
+        lastError = payload
+        const shouldRetry = shouldRetryResendSender(payload)
+        console.warn(
+          `Resend responded with an error for sender ${from}${shouldRetry ? ', retrying with fallback sender...' : ''}`,
+          payload,
+        )
+        if (shouldRetry) {
+          continue
+        }
+        const errorMessage =
+          typeof payload === 'string'
+            ? payload
+            : payload?.message || JSON.stringify(payload)
+        throw new Error(errorMessage)
+      }
+
+      const messageId = extractResendMessageId(response)
+      return {
+        messageId,
+        sender: from,
+        rawResponse: response,
+      }
+    } catch (error: any) {
+      lastError = error
+      if (shouldRetryResendSender(error)) {
+        console.warn(
+          `Resend send failed for sender ${from}, attempting next fallback sender...`,
+          normaliseErrorMessage(error),
+        )
+        continue
+      }
+      throw error
+    }
+  }
+
+  if (lastError) {
+    if (lastError instanceof Error) {
+      throw lastError
+    }
+    const message =
+      typeof lastError === 'string'
+        ? lastError
+        : normaliseErrorMessage(lastError) || 'Resend send attempt failed'
+    throw new Error(message)
+  }
+
+  throw new Error('Failed to send email via Resend: no sender addresses were accepted.')
+}
+
 // Create HTML email template for customer
 function createCustomerEmailTemplate(bookingData: {
   name: string
@@ -67,116 +311,156 @@ function createCustomerEmailTemplate(bookingData: {
   location: string
   deposit: string
   servicePrice: string
+  manageLink?: string
+  addToCalendarLink?: string
+  icsLink?: string
+  policyWindowHours?: number
+  transferNote?: string
+  transferFinancialNote?: string
 }) {
-  const { name, email, service, formattedDate, formattedTime, formattedEndTime, location, deposit, servicePrice } = bookingData
+  const {
+    name,
+    email,
+    service,
+    formattedDate,
+    formattedTime,
+    formattedEndTime,
+    location,
+    deposit,
+    servicePrice,
+    manageLink,
+    addToCalendarLink,
+    icsLink: rawIcsLink,
+    policyWindowHours,
+    transferNote = '',
+    transferFinancialNote = '',
+  } = bookingData
+  const icsLink = rawIcsLink ?? undefined
   const appointmentLocation = location || DEFAULT_LOCATION
-  
+  const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
+  const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
+  const manageButtonHref = manageLink || `${BASE_URL}/booking`
+  const manageButtonLabel = manageLink ? 'Manage appointment' : 'View booking details'
+  const showAddToCalendar = Boolean(addToCalendarLink)
+
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Appointment Confirmation - LashDiary</title>
+  <title>Your LashDiary appointment</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #F9D0DE;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #F9D0DE; padding: 40px 20px;">
+<body style="margin:0; padding:0; background:${background}; font-family: 'Helvetica Neue', Arial, sans-serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
-          <!-- Header -->
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
-            <td style="background: #F9D0DE; padding: 40px 30px; text-align: center; border-bottom: 2px solid #733D26;">
-              <h1 style="color: #733D26; margin: 0; font-size: 32px; font-weight: bold;">LashDiary</h1>
+            <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment confirmed</p>
+              <h1 style="margin:12px 0 0 0; font-size:28px; color:${brand};">Thank you, ${friendlyName}!</h1>
             </td>
           </tr>
-          
-          <!-- Content -->
+
           <tr>
-            <td style="padding: 40px 30px;">
-              <h2 style="color: #733D26; margin: 0 0 20px 0; font-size: 24px;">Thank you for your booking, ${name}!</h2>
-              
-              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-                We're excited to have you! Your appointment has been received and we'll confirm it shortly.
+            <td style="padding:8px 32px 24px 32px;">
+              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
+                We’ve reserved your spot and will have everything ready for you. Here’s a quick summary you can keep handy.
               </p>
-              
-              <div style="background-color: #F9D0DE; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Appointment Details</h3>
-                <table width="100%" cellpadding="8" cellspacing="0">
+              ${
+                transferNote
+                  ? `<div style="margin:0 0 18px 0; border-left:4px solid ${brand}; padding:12px 16px; background:${background}; font-size:14px; line-height:1.6; color:${textPrimary};">
+                      ${transferNote}
+                      ${
+                        transferFinancialNote
+                          ? `<p style="margin:12px 0 0 0; font-weight:600;">${transferFinancialNote}</p>`
+                          : ''
+                      }
+                    </div>`
+                  : transferFinancialNote
+                  ? `<div style="margin:0 0 18px 0; border-left:4px solid ${brand}; padding:12px 16px; background:${background}; font-size:14px; line-height:1.6; color:${textPrimary}; font-weight:600;">
+                      ${transferFinancialNote}
+                    </div>`
+                  : ''
+              }
+
+              <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Appointment details</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Date:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${formattedDate}</td>
+                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">Date</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Time:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${formattedTime} - ${formattedEndTime}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime} – ${formattedEndTime}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Appointment ends:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">Your appointment will be over by ${formattedEndTime}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Service:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${service || 'Lash Service'}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Fee</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Service Price:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${servicePrice}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Deposit</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${deposit}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Location:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0;">${appointmentLocation}</td>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Studio</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
                   </tr>
                 </table>
               </div>
-              
-              <div style="background-color: #FFF0F7; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px; font-weight: bold;">💰 Payment Required</h3>
-                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
-                  <strong>Deposit Required (35%):</strong> <span style="color: #733D26; font-size: 16px; font-weight: bold;">${deposit}</span>
-                </p>
-                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 10px 0 0 0;">
-                  To secure your appointment, please pay the deposit amount. You will receive payment instructions separately. The remaining balance will be paid on the day of your appointment.
-                </p>
-              </div>
-              
-              <div style="background-color: #F9D0DE; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Before Your Appointment</h3>
-                <ul style="color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-                  <li>Arrive a few minutes early so you can settle in and relax before we begin.</li>
-                  <li>Please come with clean lashes (no eye makeup or mascara).</li>
-                  <li>Avoid caffeine right before your appointment so you can comfortably rest.</li>
-                  <li>Let us know ahead of time if you have any sensitivities or special requests.</li>
+
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Before you arrive</h2>
+                <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.7;">
+                  <li>Please arrive on time — late arrivals may shorten your session.</li>
+                  <li>Cancellations made within 72 hours of your appointment are non-refundable.</li>
+                  <li>Come with clean lashes/brows and no makeup, oils, or mascara.</li>
+                  <li>Avoid tweezing, waxing, or applying serums/retinol near the area for at least 48 hours before your appointment.</li>
+                  <li>If you have eye infections, cold sores, or skin irritation, please reschedule your visit.</li>
+                  <li>Your deposit secures your slot and goes toward your total balance.</li>
                 </ul>
               </div>
-              
-              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 30px 0 0 0;">
-                If you have any questions or need to make changes to your appointment, please contact us at 
-                <a href="mailto:${OWNER_EMAIL}" style="color: #733D26; text-decoration: none;">${OWNER_EMAIL}</a>.
+
+              <p style="margin:0 0 18px 0; font-size:14px; color:${textSecondary};">
+                Need to update anything? Reply to this email or email us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
               </p>
-              
-              <div style="background-color: #FFF0F7; border: 2px solid #733D26; padding: 25px; border-radius: 8px; margin: 30px 0; text-align: center;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Share Your Experience!</h3>
-                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
-                  After your appointment, we'd love to hear about your experience! Share your feedback and photos with us.
-                </p>
-                <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/testimonials?email=${encodeURIComponent(bookingData.email || '')}" 
-                   style="display: inline-block; background-color: #733D26; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; margin: 10px 0;">
-                  Leave a Testimonial
-                </a>
+
+              <div style="margin:28px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px;">
+                <a href="${manageButtonHref}" style="display:inline-block; padding:12px 28px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;">${manageButtonLabel}</a>
+                ${
+                  showAddToCalendar && addToCalendarLink
+                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:12px 24px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
+                    : ''
+                }
+                ${
+                  icsLink
+                    ? `<a href="${icsLink}" style="display:inline-block; padding:12px 24px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Apple / Outlook Calendar</a>`
+                    : ''
+                }
               </div>
-              
-              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0 0 0;">
-                We look forward to seeing you!
-              </p>
+
+              ${
+                icsLink
+                  ? `<p style="margin:18px 0 0 0; font-size:13px; color:${textSecondary}; text-align:center;">
+                Using another calendar? Download the Apple/Outlook link above and your device will add a reminder automatically.
+              </p>`
+                  : ''
+              }
             </td>
           </tr>
-          
-          <!-- Footer -->
+
           <tr>
-            <td style="background-color: #F9D0DE; padding: 30px; text-align: center; border-top: 2px solid #733D26;">
-              <p style="color: #733D26; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">Best regards,</p>
-              <p style="color: #733D26; font-size: 16px; font-weight: bold; margin: 0;">The LashDiary Team</p>
+            <td style="padding:22px 32px; background:${background}; text-align:center;">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">We’re so excited to see you soon.</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -203,139 +487,191 @@ function createOwnerEmailTemplate(bookingData: {
   originalPrice?: string
   discount?: string
   isFirstTimeClient?: boolean
+  manageLink?: string
+  policyWindowHours?: number
+  notes?: string
+  addToCalendarLink?: string
+  icsLink?: string
 }, customerEmailError?: string | null, customerEmail?: string) {
-  const { name, email, phone, service, formattedDate, formattedTime, formattedEndTime, location, deposit, servicePrice, originalPrice, discount, isFirstTimeClient } = bookingData
+  const {
+    name,
+    email,
+    phone,
+    service,
+    formattedDate,
+    formattedTime,
+    formattedEndTime,
+    location,
+    deposit,
+    servicePrice,
+    originalPrice,
+    discount,
+    isFirstTimeClient,
+    manageLink,
+    policyWindowHours,
+    notes,
+    addToCalendarLink,
+    icsLink: rawIcsLink,
+  } = bookingData
+  const icsLink = rawIcsLink ?? undefined
   const appointmentLocation = location || DEFAULT_LOCATION
-  
+  const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+  const hasNotes = typeof notes === 'string' && notes.trim().length > 0
+
+  const emailIssueBlock = customerEmailError && customerEmail
+    ? `
+      <div style="margin-top:24px; border:1px solid #FFDAC8; border-radius:14px; padding:18px 20px; background:#FFF4EF;">
+        <h3 style="margin:0 0 8px 0; font-size:16px; color:#C2410C;">Customer email needs attention</h3>
+        <p style="margin:0 0 12px 0; font-size:14px; color:${textSecondary}; line-height:1.6;">
+          We couldn’t send the confirmation email automatically. Please reach out manually at
+          <strong style="color:${brand};"> ${customerEmail}</strong>.
+        </p>
+        <div style="border-radius:10px; padding:14px 16px; background:#FFFFFF; border:1px dashed #F8B79B; font-size:13px; color:${textSecondary};">
+          <p style="margin:0 0 10px 0; font-weight:600; color:${brand};">Suggested message</p>
+          <p style="margin:0; white-space:pre-line;">
+Dear ${name},
+Thank you for booking with LashDiary!
+Your appointment is on ${formattedDate} at ${formattedTime}.
+Service: ${service || 'Lash service'}
+Fee: ${servicePrice}
+Deposit: ${deposit}
+Location: ${appointmentLocation}
+
+We’re excited to see you.
+The LashDiary Team
+          </p>
+        </div>
+        <p style="margin:14px 0 0 0; font-size:13px; color:${textSecondary};">Error details: ${customerEmailError}</p>
+      </div>
+    `
+    : ''
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Booking Request - LashDiary</title>
+  <title>New booking received</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #F9D0DE;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #F9D0DE; padding: 40px 20px;">
+<body style="margin:0; padding:0; background:${background}; font-family: 'Helvetica Neue', Arial, sans-serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);">
-          <!-- Header -->
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
-            <td style="background: #F9D0DE; padding: 40px 30px; text-align: center; border-bottom: 2px solid #733D26;">
-              <h1 style="color: #733D26; margin: 0; font-size: 32px; font-weight: bold;">You have a new appointment booking!</h1>
+            <td style="padding:28px 32px 16px 32px; background:${card};">
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">New booking</p>
+              <h1 style="margin:12px 0 0 0; font-size:26px; color:${brand};">${name} just booked an appointment</h1>
+              ${isFirstTimeClient ? `<p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary}; background:${background}; padding:10px 14px; border-radius:10px; display:inline-block;">First-time client</p>` : ''}
             </td>
           </tr>
-          
-          <!-- Content -->
+
           <tr>
-            <td style="padding: 40px 30px;">
-              <div style="background-color: #F9D0DE; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 15px 0; font-size: 18px;">Client Information</h3>
-                <table width="100%" cellpadding="8" cellspacing="0">
+            <td style="padding:8px 32px 32px 32px;">
+              <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:22px;">
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Client</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Name:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${name}</td>
+                    <td style="padding:6px 0; color:${textSecondary}; width:130px;">Name</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${name}</td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Email:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><a href="mailto:${email}" style="color: #733D26; text-decoration: none;">${email}</a></td>
+                    <td style="padding:6px 0; color:${textSecondary};">Email</td>
+                    <td style="padding:6px 0; color:${textPrimary};"><a href="mailto:${email}" style="color:${brand}; text-decoration:none;">${email}</a></td>
                   </tr>
                   <tr>
-                    <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Phone:</strong></td>
-                    <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><a href="tel:${phone}" style="color: #733D26; text-decoration: none;">${phone}</a></td>
+                    <td style="padding:6px 0; color:${textSecondary};">Phone</td>
+                    <td style="padding:6px 0; color:${textPrimary};"><a href="tel:${phone}" style="color:${brand}; text-decoration:none;">${phone}</a></td>
                   </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Service:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${service || 'Not specified'}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Service Price:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${servicePrice}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Date:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${formattedDate}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Time:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${formattedTime} - ${formattedEndTime}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Appointment ends:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">Appointment will be over by ${formattedEndTime}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;"><strong>Location:</strong></td>
-                        <td style="color: #333333; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #F9D0DE;">${appointmentLocation}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Deposit Required (35%):</strong></td>
-                        <td style="color: #733D26; font-size: 16px; font-weight: bold; padding: 8px 0;">${deposit}</td>
-                      </tr>
-                    </table>
-                  </div>
-                  
-                  <div style="background-color: #FFF0F7; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                    <h3 style="color: #733D26; margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">💰 Payment Information</h3>
-                    <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0;">
-                      The customer needs to pay a deposit of <strong>${deposit}</strong> to secure this booking. Please send payment instructions to the customer and confirm receipt of payment.
-                    </p>
-                  </div>
-              
-              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 30px 0 0 0;">
-                Please confirm this appointment and add it to your calendar if it hasn't been added automatically.
-              </p>
-              
-              ${customerEmailError && customerEmail ? `
-              <div style="background-color: #FFF0F7; border-left: 4px solid #733D26; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <h3 style="color: #733D26; margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">⚠️ Customer Email Not Sent Automatically</h3>
-                <p style="color: #333333; font-size: 14px; line-height: 1.6; margin: 0 0 15px 0;">
-                  The customer confirmation email could not be sent automatically. Please manually send a confirmation email to:
-                </p>
-                <p style="color: #733D26; font-size: 14px; font-weight: bold; margin: 0 0 15px 0;">
-                  ${customerEmail}
-                </p>
-                <div style="background-color: #F9D0DE; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                  <p style="color: #733D26; font-size: 13px; font-weight: bold; margin: 0 0 10px 0;">Suggested Email Content:</p>
-                  <p style="color: #333333; font-size: 12px; line-height: 1.6; margin: 0 0 5px 0;"><strong>Subject:</strong> Appointment Confirmation - LashDiary</p>
-                  <p style="color: #333333; font-size: 12px; line-height: 1.6; margin: 0; white-space: pre-wrap;">Dear ${name},
+                </table>
+              </div>
 
-Thank you for booking with LashDiary!
-
-Your appointment details:
-- Date: ${formattedDate}
-- Time: ${formattedTime}
-- Service: ${service || 'Lash Service'}
-- Service Price: ${servicePrice}
-- Deposit Required (35%): ${deposit}
-- Location: ${appointmentLocation}
-
-Before you arrive:
-- Please come with clean lashes (no mascara or eye makeup)
-- Avoid caffeine just before your appointment so you can comfortably relax
-- Let us know if you have any sensitivities or special requests
-- Plan to arrive a few minutes early so we can start on time
-
-If you have any questions, please contact us at ${OWNER_EMAIL}.
-
-We look forward to seeing you!
-
-Best regards,
-The LashDiary Team</p>
+              <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${card}; margin-bottom:22px;">
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Appointment</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; width:130px;">Service</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${service || 'Not specified'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Date</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime} – ${formattedEndTime}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Location</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
+                  </tr>
+                </table>
+                ${hasNotes ? `
+                <div style="margin-top:16px; padding:14px 16px; border-radius:12px; background:${background}; border:1px dashed ${accent};">
+                  <p style="margin:0 0 6px 0; font-size:14px; color:${textSecondary}; text-transform:uppercase; letter-spacing:1px;">Client notes</p>
+                  <p style="margin:0; font-size:15px; line-height:1.6; color:${textPrimary}; white-space:pre-line;">${notes?.trim()}</p>
                 </div>
-                <p style="color: #666666; font-size: 12px; margin: 15px 0 0 0;">
-                  <strong>Note:</strong> To enable automatic customer emails, verify your domain in Resend (resend.com/domains) and update the FROM_EMAIL in your .env.local file to use your verified domain email.
-                </p>
+                ` : ''}
+              </div>
+
+              <div style="border:1px solid ${accent}; border-radius:14px; padding:18px 22px; background:${background}; margin-bottom:10px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Payment summary</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px; line-height:1.6;">
+                  ${originalPrice ? `<tr><td style="padding:4px 0; color:${textSecondary}; width:140px;">Original price</td><td style="padding:4px 0; color:${textPrimary};">${originalPrice}</td></tr>` : ''}
+                  ${discount ? `<tr><td style="padding:4px 0; color:${textSecondary};">Discount</td><td style="padding:4px 0; color:${textPrimary};">${discount}</td></tr>` : ''}
+                  <tr>
+                    <td style="padding:4px 0; color:${textSecondary};">Final price</td>
+                    <td style="padding:4px 0; color:${textPrimary}; font-weight:600;">${servicePrice}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0; color:${textSecondary};">Deposit due</td>
+                    <td style="padding:4px 0; color:${brand}; font-weight:600;">${deposit}</td>
+                  </tr>
+                </table>
+              </div>
+
+              ${emailIssueBlock}
+
+              ${manageLink ? `
+              <div style="margin:24px 0 0 0; text-align:center;">
+                <a href="${manageLink}" style="display:inline-block; padding:10px 22px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;">Open client manage link</a>
               </div>
               ` : ''}
+
+              ${
+                addToCalendarLink || icsLink
+                  ? `
+              <div style="margin:18px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px;">
+                ${
+                  addToCalendarLink
+                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:10px 22px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
+                    : ''
+                }
+                ${
+                  icsLink
+                    ? `<a href="${icsLink}" style="display:inline-block; padding:10px 22px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Download .ics (Apple/Outlook)</a>`
+                    : ''
+                }
+              </div>
+              <p style="margin:12px 0 0 0; font-size:12px; color:${textSecondary}; text-align:center;">Need a device reminder? Use ${addToCalendarLink && icsLink ? 'either button' : addToCalendarLink ? 'the Google Calendar button' : 'the .ics download'} to add the appointment with a 24-hour alert.</p>
+              `
+                  : ''
+              }
+
+              ${
+                addToCalendarLink || icsLink
+                  ? ''
+                  : `<p style="margin:28px 0 0 0; font-size:14px; color:${textSecondary};"></p>`
+              }
             </td>
           </tr>
-          
-          <!-- Footer -->
+
           <tr>
-            <td style="background-color: #F9D0DE; padding: 30px; text-align: center; border-top: 2px solid #733D26;">
-              <p style="color: #733D26; font-size: 14px; margin: 0; font-weight: 600;">LashDiary Booking System</p>
+            <td style="padding:22px 32px; background:${background}; text-align:center;">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">LashDiary booking assistant</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">You’ve got this ✨</p>
             </td>
           </tr>
         </table>
@@ -348,41 +684,70 @@ The LashDiary Team</p>
 }
 
 // Send email notification using Resend
-export async function sendEmailNotification(bookingData: {
-  name: string
-  email: string
-  phone: string
-  service: string
-  date: string
-  timeSlot: string
-  location: string
-  isFirstTimeClient?: boolean
-  originalPrice?: number
-  discount?: number
-  finalPrice?: number
-  deposit?: number
-}) {
-  const { name, email, phone, service, date, timeSlot, location, isFirstTimeClient, originalPrice, discount, finalPrice, deposit } = bookingData
+export async function sendEmailNotification(bookingData: SendEmailPayload) {
+  const {
+    name,
+    email,
+    phone,
+    service,
+    date,
+    timeSlot,
+    location,
+    isFirstTimeClient,
+    originalPrice,
+    discount,
+    finalPrice,
+    deposit,
+    bookingId,
+    manageToken,
+    policyWindowHours,
+    notes,
+  } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
+  const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
+  const manageLink = manageToken ? `${BASE_URL}/booking/manage/${manageToken}` : undefined
+  const ownerNotes = typeof notes === 'string' && notes.trim().length > 0 ? notes.trim() : ''
   let customerEmailError: string | null = null
-  
+  let customerEmailStatus: 'sent' | 'pending' | 'error' | 'skipped' = 'skipped'
+  let customerEmailId: string | null = null
+
   // Use provided pricing or calculate from service
-  let servicePrice = originalPrice || 0
-  let discountAmount = discount || 0
-  let finalServicePrice = finalPrice || 0
-  let depositAmount = deposit || 0
+  let servicePrice =
+    typeof originalPrice === 'number' && originalPrice > 0 ? originalPrice : 0
+  let discountAmount =
+    typeof discount === 'number' && discount > 0 ? discount : 0
+  let finalServicePrice =
+    typeof finalPrice === 'number' && finalPrice > 0 ? finalPrice : 0
+  let depositAmount =
+    typeof deposit === 'number' && deposit > 0 ? deposit : 0
 
   // If pricing not provided, calculate from service
-  if (!originalPrice || !deposit) {
-    const depositInfo = calculateDeposit(service)
+  const depositInfo = calculateDeposit(service)
+  if (servicePrice <= 0) {
     servicePrice = depositInfo.servicePrice
-    finalServicePrice = servicePrice
-    if (isFirstTimeClient) {
-      discountAmount = Math.round(servicePrice * 0.10)
-      finalServicePrice = servicePrice - discountAmount
-    }
-    depositAmount = Math.round(finalServicePrice * 0.35)
   }
+
+  if (servicePrice > 0 && isFirstTimeClient && discountAmount <= 0) {
+    discountAmount = Math.round(servicePrice * 0.1)
+  }
+
+  if (finalServicePrice <= 0) {
+    finalServicePrice = Math.max(servicePrice - discountAmount, 0)
+  }
+  if (finalServicePrice <= 0 && servicePrice > 0) {
+    finalServicePrice = servicePrice
+  }
+
+  if (depositAmount <= 0) {
+    depositAmount =
+      finalServicePrice > 0
+        ? Math.round(finalServicePrice * 0.35)
+        : depositInfo.amount
+  }
+
+  const remainingAmount = Math.max(finalServicePrice - depositAmount, 0)
+  const remainingFormatted =
+    remainingAmount > 0 ? `KSH ${remainingAmount.toLocaleString()}` : 'KSH 0'
   
   // Format the date and time
   const appointmentDate = new Date(date)
@@ -423,8 +788,77 @@ export async function sendEmailNotification(bookingData: {
     ? `KSH ${depositAmount.toLocaleString()}`
     : 'N/A'
 
-  // If Resend is not configured, log and return
-  if (!resend) {
+  const transferNote =
+    typeof bookingData.transferFromName === 'string' && bookingData.transferFromName.trim().length > 0
+      ? `${bookingData.transferFromName.trim()} has transferred this LashDiary appointment to you. Please review the details below and feel free to reschedule if needed.`
+      : ''
+  const transferFinancialNote =
+    transferNote && depositAmount > 0
+      ? `A deposit of ${depositFormatted} is already on file for this service. The remaining balance of ${remainingFormatted} will be collected after your appointment.`
+      : transferNote
+      ? 'The remaining balance will be collected after your appointment.'
+      : ''
+
+  const eventSummary = `LashDiary Appointment – ${service || 'Lash Service'}`
+  const eventDescriptionLines = [
+    `Client: ${name}`,
+    `Service: ${service || 'Lash Service'}`,
+    `Time: ${formattedDate} at ${formattedTime}`,
+    `Deposit: ${depositFormatted}`,
+    manageLink ? `Manage or reschedule: ${manageLink}` : `Manage or reschedule: ${BASE_URL}/booking`,
+  ]
+  if (transferNote) {
+    eventDescriptionLines.push(`Transferred from: ${bookingData.transferFromName?.trim() || 'Previous guest'}`)
+  }
+  if (bookingId) {
+    eventDescriptionLines.push(`Booking ID: ${bookingId}`)
+  }
+  const eventDescription = eventDescriptionLines.join('\n')
+  const addToCalendarLink = buildGoogleCalendarLink({
+    summary: eventSummary,
+    start: appointmentTime,
+    end: endTime,
+    location: appointmentLocation,
+    description: eventDescription,
+  })
+  const calendarToken = manageToken || bookingId || null
+  const icsPath = calendarToken
+    ? `/api/booking/ics/${encodeURIComponent(calendarToken)}?format=ics`
+    : null
+  const icsLink =
+    icsPath != null
+      ? `${BASE_URL ? `${BASE_URL}${icsPath}` : icsPath}`
+      : null
+  const normalizedIcsLink = icsLink ?? undefined
+
+  const ownerEmailTemplateData = {
+    name,
+    email,
+    phone,
+    service: service || 'Not specified',
+    formattedDate,
+    formattedTime,
+    formattedEndTime,
+    location: appointmentLocation,
+    deposit: depositFormatted,
+    servicePrice: finalPriceFormatted,
+    originalPrice: servicePriceFormatted,
+    discount: discountFormatted,
+    isFirstTimeClient: isFirstTimeClient === true,
+    manageLink,
+    policyWindowHours: windowHours,
+    notes: ownerNotes,
+    addToCalendarLink,
+    icsLink: normalizedIcsLink,
+  }
+
+  const baseOwnerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData)
+  let ownerEmailHtml = baseOwnerEmailHtml
+
+  const hasZoho = Boolean(zohoTransporter)
+  const hasResend = Boolean(resend)
+
+  if (!hasZoho && !hasResend) {
     console.warn('⚠️ Resend API key not configured. Email notifications will not be sent.')
     console.warn('Please add RESEND_API_KEY to your .env.local file')
     console.log('=== NEW BOOKING REQUEST (Email not sent) ===')
@@ -433,159 +867,235 @@ export async function sendEmailNotification(bookingData: {
     console.log('Client:', name, email, phone)
     console.log('Date:', formattedDate, formattedTime)
     console.log('==========================================')
-    return { success: false, error: 'Email service not configured. Please add RESEND_API_KEY to .env.local' }
+    return {
+      success: false,
+      status: 'disabled',
+      error: 'Email service not configured. Please add RESEND_API_KEY to .env.local',
+    }
+  }
+
+  if (hasZoho) {
+    try {
+      console.log('📧 Attempting to send emails via Zoho SMTP...')
+      const transporter = zohoTransporter!
+      const zohoFromEmail = ZOHO_FROM_EMAIL || ZOHO_SMTP_USER || FROM_EMAIL
+      const fromAddress = `${EMAIL_FROM_NAME} <${zohoFromEmail}>`
+
+      if (email) {
+        try {
+          const customerResult = await transporter.sendMail({
+            from: fromAddress,
+            to: email,
+            replyTo: OWNER_EMAIL,
+            subject: 'Appointment Confirmation - LashDiary',
+            html: createCustomerEmailTemplate({
+              name,
+              email,
+              service: service || 'Lash Service',
+              formattedDate,
+              formattedTime,
+              formattedEndTime,
+              location: appointmentLocation,
+              deposit: depositFormatted,
+              servicePrice: finalPriceFormatted,
+              manageLink,
+              addToCalendarLink,
+              icsLink: normalizedIcsLink,
+              policyWindowHours: windowHours,
+              transferNote,
+              transferFinancialNote,
+            }),
+          })
+
+          customerEmailId = customerResult.messageId || null
+          const rejected = Array.isArray(customerResult.rejected) ? customerResult.rejected : []
+          if (rejected.length > 0) {
+            customerEmailError = `Zoho rejected recipients: ${rejected.join(', ')}`
+            customerEmailStatus = 'error'
+            console.error('❌ Zoho SMTP rejected customer email:', rejected)
+            ownerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData, customerEmailError, email)
+          } else if (customerEmailId || (Array.isArray(customerResult.accepted) && customerResult.accepted.length > 0)) {
+            customerEmailStatus = 'sent'
+            console.log('✅ Customer email sent via Zoho SMTP! ID:', customerEmailId)
+          } else {
+            customerEmailStatus = 'pending'
+            customerEmailError = 'Zoho SMTP accepted the message but did not return a delivery ID.'
+            console.warn('⚠️ Customer email status pending via Zoho SMTP.')
+          }
+        } catch (customerError: any) {
+          customerEmailError = customerError.message || 'Unknown Zoho SMTP error'
+          customerEmailStatus = 'error'
+          console.error('❌ Exception sending customer email via Zoho SMTP:', customerError)
+          ownerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData, customerEmailError, email)
+        }
+      }
+
+      const ownerResult = await transporter.sendMail({
+        from: fromAddress,
+        to: OWNER_EMAIL,
+        replyTo: email || OWNER_EMAIL,
+        subject: `New Booking Request - ${name}`,
+        html: ownerEmailHtml,
+      })
+
+      console.log('✅ Owner email sent via Zoho SMTP:', ownerResult.messageId)
+
+      const status =
+        customerEmailStatus === 'sent'
+          ? 'sent'
+          : customerEmailStatus === 'pending'
+          ? 'pending'
+          : customerEmailStatus === 'error'
+          ? 'customer_error'
+          : 'owner_only'
+
+      return {
+        success: true,
+        status,
+        ownerEmailId: ownerResult.messageId,
+        customerEmailId,
+        customerEmailError,
+        ownerEmailSent: true,
+        customerEmailSent: customerEmailStatus === 'sent',
+      }
+    } catch (zohoError: any) {
+      console.error('❌ Zoho SMTP error:', zohoError)
+      if (!hasResend) {
+        return {
+          success: false,
+          status: 'error',
+          error: zohoError.message || 'Zoho SMTP error',
+          details: zohoError.stack,
+        }
+      }
+      console.warn('⚠️ Zoho SMTP failed, falling back to Resend...')
+      customerEmailError = null
+      customerEmailStatus = 'skipped'
+      customerEmailId = null
+      ownerEmailHtml = baseOwnerEmailHtml
+    }
   }
 
   try {
-    console.log('📧 Attempting to send emails via Resend...')
-    console.log('From:', FROM_EMAIL)
-    console.log('To Owner:', OWNER_EMAIL)
-    console.log('To Customer:', email)
-    
-    // Send email to business owner (will include customer email details if customer email fails)
-    let ownerEmailHtml = createOwnerEmailTemplate({
-      name,
-      email,
-      phone,
-      service: service || 'Not specified',
-      formattedDate,
-      formattedTime,
-      formattedEndTime,
-      location: appointmentLocation,
-      deposit: depositFormatted,
-      servicePrice: finalPriceFormatted,
-      originalPrice: servicePriceFormatted,
-      discount: discountFormatted,
-      isFirstTimeClient: isFirstTimeClient === true,
-    })
-    
-    // Try to send customer email first to check if it will fail
-    let customerEmailId = null
-    try {
-      console.log('📧 Sending customer email to:', email)
-      const customerEmailResult = await resend.emails.send({
-        from: `LashDiary <${FROM_EMAIL}>`,
-        to: email,
-        replyTo: OWNER_EMAIL,
-        subject: 'Appointment Confirmation - LashDiary',
-        html: createCustomerEmailTemplate({
-          name,
-          email,
-          service: service || 'Lash Service',
-          formattedDate,
-          formattedTime,
-          formattedEndTime,
-          location: appointmentLocation,
-          deposit: depositFormatted,
-          servicePrice: finalPriceFormatted,
-        }),
-      })
-      
-      // Log the full response to debug
-      console.log('Customer email full response:', JSON.stringify(customerEmailResult, null, 2))
-      
-      // Check for error in response (Resend returns error as a property)
-      if ((customerEmailResult as any).error) {
-        customerEmailError = typeof (customerEmailResult as any).error === 'string' 
-          ? (customerEmailResult as any).error 
-          : JSON.stringify((customerEmailResult as any).error)
-        console.error('❌ Customer email error from Resend:', (customerEmailResult as any).error)
-        
-        // Update owner email to include customer email details
-        ownerEmailHtml = createOwnerEmailTemplate({
-          name,
-          email,
-          phone,
-          service: service || 'Not specified',
-          formattedDate,
-          formattedTime,
-          formattedEndTime,
-          location: appointmentLocation,
-          deposit: depositFormatted,
-          servicePrice: finalPriceFormatted,
-          originalPrice: servicePriceFormatted,
-          discount: discountFormatted,
-          isFirstTimeClient: isFirstTimeClient === true,
-        }, customerEmailError, email)
-      } 
-      // Check for data.id (success case)
-      else if (customerEmailResult.data?.id) {
-        customerEmailId = customerEmailResult.data.id
-        console.log('✅ Customer email sent successfully! ID:', customerEmailId)
-      } 
-      // Check if response has id directly (alternative response structure)
-      else if ((customerEmailResult as any).id) {
-        customerEmailId = (customerEmailResult as any).id
-        console.log('✅ Customer email sent successfully! ID (direct):', customerEmailId)
-      }
-      // No ID and no error - might be a silent failure
-      else {
-        const responseAny = customerEmailResult as any
-        console.warn('⚠️ Customer email response missing ID and no error:', {
-          hasData: !!customerEmailResult.data,
-          hasError: !!responseAny.error,
-          responseKeys: Object.keys(customerEmailResult),
-          fullResponse: responseAny,
+    console.log('📧 Attempting to send emails via Resend (fallback mode)...')
+    ownerEmailHtml = baseOwnerEmailHtml
+    customerEmailId = null
+    customerEmailStatus = 'skipped'
+    customerEmailError = null
+
+    const resendChannels: { customer?: string; owner?: string } = {}
+
+    if (email) {
+      try {
+        console.log('📧 Sending customer email via Resend to:', email)
+        const customerOutcome = await sendViaResendWithFallback({
+          to: email,
+          replyTo: OWNER_EMAIL,
+          subject: 'Appointment Confirmation - LashDiary',
+          html: createCustomerEmailTemplate({
+            name,
+            email,
+            service: service || 'Lash Service',
+            formattedDate,
+            formattedTime,
+            formattedEndTime,
+            location: appointmentLocation,
+            deposit: depositFormatted,
+            servicePrice: finalPriceFormatted,
+            manageLink,
+            addToCalendarLink,
+              icsLink: normalizedIcsLink,
+            policyWindowHours: windowHours,
+            transferNote,
+            transferFinancialNote,
+          }),
+          text: [
+            `Hi ${name},`,
+            '',
+            transferNote ? transferNote : null,
+            transferFinancialNote ? transferFinancialNote : null,
+            `Your appointment for ${service || 'Lash Service'} is confirmed.`,
+            `📅 ${formattedDate} at ${formattedTime}`,
+            `📍 ${appointmentLocation}`,
+            depositFormatted !== 'N/A' ? `Deposit on file: ${depositFormatted}` : null,
+            '',
+            manageLink ? `Manage or reschedule here: ${manageLink}` : `Manage or reschedule: ${BASE_URL}/booking`,
+            addToCalendarLink ? `Add to Google Calendar: ${addToCalendarLink}` : null,
+            normalizedIcsLink ? `Add to Apple/Outlook Calendar (.ics): ${normalizedIcsLink}` : null,
+            '',
+            `Need anything? Reply to this email and we’ll be right with you.`,
+          ]
+            .filter((line) => line !== null)
+            .join('\n'),
         })
-        customerEmailError = 'Email sent but no confirmation ID received. Email may be queued or failed silently. Check Resend dashboard for delivery status.'
+
+        customerEmailId = customerOutcome.messageId
+        customerEmailStatus = customerEmailId ? 'sent' : 'pending'
+        resendChannels.customer = customerOutcome.sender
+        console.log('✅ Customer email sent via Resend!', {
+          sender: customerOutcome.sender,
+          messageId: customerEmailId,
+        })
+      } catch (customerError: any) {
+        customerEmailError = customerError.message || 'Unknown Resend error'
+        customerEmailStatus = 'error'
+        console.error('❌ Failed to send customer email via Resend:', {
+          message: customerEmailError,
+          statusCode: customerError?.statusCode,
+          stack: customerError?.stack,
+        })
+        ownerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData, customerEmailError, email)
       }
-    } catch (customerError: any) {
-      customerEmailError = customerError.message || 'Unknown error'
-      console.error('❌ Exception sending customer email:', customerError)
-      console.error('Customer email error details:', {
-        message: customerError.message,
-        name: customerError.name,
-        statusCode: customerError.statusCode,
-        email: email,
-        stack: customerError.stack,
-      })
-      
-      // Update owner email to include customer email details
-      ownerEmailHtml = createOwnerEmailTemplate({
-        name,
-        email,
-        phone,
-        service: service || 'Not specified',
-        formattedDate,
-        formattedTime,
-        formattedEndTime,
-        location: appointmentLocation,
-        deposit: depositFormatted,
-        servicePrice: finalPriceFormatted,
-        originalPrice: servicePriceFormatted,
-        discount: discountFormatted,
-        isFirstTimeClient: isFirstTimeClient === true,
-      }, customerEmailError, email)
     }
-    
-    // Send email to business owner
-    const ownerEmailResult = await resend.emails.send({
-      from: `LashDiary <${FROM_EMAIL}>`,
+
+    console.log('📧 Sending owner notification via Resend...')
+    const ownerOutcome = await sendViaResendWithFallback({
       to: OWNER_EMAIL,
       replyTo: email || OWNER_EMAIL,
       subject: `New Booking Request - ${name}`,
       html: ownerEmailHtml,
+      text: [
+        `New booking for ${name}`,
+        `Service: ${service || 'Lash Service'}`,
+        `Date: ${formattedDate}`,
+        `Time: ${formattedTime} – ${formattedEndTime}`,
+        `Location: ${appointmentLocation}`,
+        ownerNotes ? `Notes: ${ownerNotes}` : null,
+        '',
+        addToCalendarLink ? `Add to Google Calendar: ${addToCalendarLink}` : null,
+        normalizedIcsLink ? `Download .ics for Apple/Outlook: ${normalizedIcsLink}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
     })
 
-    console.log('✅ Owner email sent:', ownerEmailResult.data?.id)
+    resendChannels.owner = ownerOutcome.sender
+    console.log('✅ Owner email sent via Resend!', {
+      sender: ownerOutcome.sender,
+      messageId: ownerOutcome.messageId,
+    })
 
-    console.log('🎉 Email sending completed!')
-    console.log('Owner email ID:', ownerEmailResult.data?.id)
-    console.log('Customer email ID:', customerEmailId)
-    if (customerEmailError) {
-      console.error('Customer email failed with error:', customerEmailError)
-    }
+    const status =
+      customerEmailStatus === 'sent'
+        ? 'sent'
+        : customerEmailStatus === 'pending'
+        ? 'pending'
+        : customerEmailStatus === 'error'
+        ? 'customer_error'
+        : 'owner_only'
 
-    return { 
-      success: true, 
-      ownerEmailId: ownerEmailResult.data?.id,
-      customerEmailId: customerEmailId,
-      customerEmailError: customerEmailError,
-      ownerEmailSent: !!ownerEmailResult.data?.id,
-      customerEmailSent: !!customerEmailId,
+    return {
+      success: true,
+      status,
+      ownerEmailId: ownerOutcome.messageId,
+      customerEmailId,
+      customerEmailError,
+      ownerEmailSent: true,
+      customerEmailSent: customerEmailStatus === 'sent',
+      resendChannels,
     }
   } catch (error: any) {
-    console.error('❌ Error sending emails:', error)
+    console.error('❌ Error sending emails via Resend fallback:', error)
     console.error('Error details:', {
       message: error.message,
       name: error.name,
@@ -595,6 +1105,7 @@ export async function sendEmailNotification(bookingData: {
     // Return more detailed error information
     return {
       success: false,
+      status: error.statusCode === 403 ? 'needs_sender_verification' : 'error',
       error: error.message || 'Failed to send emails',
       details: `Resend API error: ${error.message || 'Unknown error'}`,
     }

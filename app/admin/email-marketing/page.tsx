@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { FC, Ref } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -10,10 +11,13 @@ import type { ReactQuillProps } from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
 import type { CampaignAttachment, RecipientType } from '@/lib/email-campaign-utils'
 
-const ReactQuill = dynamic(() => import('react-quill'), {
+const ReactQuill = dynamic(
+  () => import('react-quill').then((mod) => mod.default),
+  {
   ssr: false,
   loading: () => <div className="p-4 text-brown-dark bg-white">Loading editor...</div>,
-}) as unknown as React.FC<ReactQuillProps & { ref?: React.Ref<any> }>
+  },
+) as FC<ReactQuillProps & { ref?: Ref<any> }>
 
 type Tab =
   | 'compose'
@@ -255,7 +259,7 @@ export default function AdminEmailMarketing() {
     const replacements: Record<string, string> = {
       '{name}': previewSubscriber.name || 'Beautiful Soul',
       '{email}': previewSubscriber.email,
-      '{phone}': '+254 748 863 882',
+      '{phone}': '',
       '{businessName}': 'LashDiary',
       '{lastVisit}': previewSubscriber.lastBookingDate
         ? new Date(previewSubscriber.lastBookingDate).toLocaleDateString('en-US', {

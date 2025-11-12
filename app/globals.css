@@ -193,6 +193,39 @@
     outline: 2px solid color-mix(in srgb, var(--color-primary) 75%, transparent 25%);
     outline-offset: 3px;
   }
+
+  /* Ensure buttons keep high-contrast text across themes */
+  button,
+  .button,
+  .btn,
+  [role='button'],
+  a[class*='inline-flex'],
+  input[type='submit'],
+  input[type='button'] {
+    color: var(--color-on-primary, #ffffff) !important;
+    background-color: var(--color-primary) !important;
+  }
+
+  /* File input button styling */
+  input[type='file']::file-selector-button {
+    background-color: var(--color-primary-dark);
+    color: #ffffff;
+    border: none;
+    border-radius: 9999px;
+    padding: 0.55rem 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  input[type='file']:hover::file-selector-button {
+    background-color: color-mix(in srgb, var(--color-primary-dark) 85%, #000 15%);
+  }
+
+  input[type='file']:focus-visible::file-selector-button {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 75%, transparent 25%);
+    outline-offset: 3px;
+  }
 }
 
 @layer utilities {

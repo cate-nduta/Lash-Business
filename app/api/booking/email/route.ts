@@ -4,7 +4,22 @@ import { sendEmailNotification } from './utils'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, phone, service, date, timeSlot, location } = body
+    const {
+      name,
+      email,
+      phone,
+      service,
+      date,
+      timeSlot,
+      location,
+      originalPrice,
+      discount,
+      finalPrice,
+      deposit,
+      manageToken,
+      bookingId,
+      policyWindowHours,
+    } = body
 
     // Validate required fields
     if (!name || !email || !phone || !timeSlot || !location) {
@@ -23,6 +38,14 @@ export async function POST(request: NextRequest) {
       date,
       timeSlot,
       location,
+      originalPrice,
+      discount,
+      finalPrice,
+      deposit,
+      manageToken,
+      bookingId,
+      policyWindowHours,
+      notes: typeof body.notes === 'string' ? body.notes : undefined,
     })
 
     return NextResponse.json({
