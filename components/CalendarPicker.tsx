@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 interface CalendarPickerProps {
   selectedDate: string
@@ -8,68 +8,23 @@ interface CalendarPickerProps {
   availableDates: string[] // Array of YYYY-MM-DD strings
   fullyBookedDates?: string[] // Array of YYYY-MM-DD strings that are fully booked
   loading?: boolean
+  minimumBookingDate?: string // Minimum date for bookings (YYYY-MM-DD format)
   availabilityData?: {
-    businessHours: {
+    businessHours?: {
       [key: string]: { open: string; close: string; enabled: boolean }
     }
     timeSlots?: {
       weekdays?: Array<{ hour: number; minute: number; label: string }>
+      friday?: Array<{ hour: number; minute: number; label: string }>
       saturday?: Array<{ hour: number; minute: number; label: string }>
       sunday?: Array<{ hour: number; minute: number; label: string }>
     }
   }
 }
 
-export default function CalendarPicker({ selectedDate, onDateSelect, availableDates, fullyBookedDates = [], loading = false, availabilityData }: CalendarPickerProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+export default function CalendarPicker({ selectedDate, onDateSelect, availableDates, fullyBookedDates = [], loading = false, minimumBookingDate, availabilityData }: CalendarPickerProps) {
   const [viewMonth, setViewMonth] = useState(new Date())
 
-  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
-  const defaultEnabled: Record<typeof dayKeys[number], boolean> = {
-    sunday: true,
-    monday: true,
-    tuesday: true,
-    wednesday: true,
-    thursday: true,
-    friday: true,
-    saturday: false,
-  }
-
-  const formatSlotList = (slots?: Array<{ label: string }> | null, fallback?: string[]) => {
-    const labels =
-      slots && slots.length > 0
-        ? slots.map((slot) => slot.label?.trim()).filter(Boolean)
-        : fallback ?? []
-    return labels.join(' • ')
-  }
-
-  const weekdaySlotSummary = formatSlotList(
-    availabilityData?.timeSlots?.weekdays ?? null,
-    ['9:30 AM', '12:00 PM', '2:30 PM', '4:30 PM']
-  )
-  const sundaySlotSummary = formatSlotList(
-    availabilityData?.timeSlots?.sunday ?? null,
-    ['12:30 PM', '3:00 PM']
-  )
-  const saturdaySlotSummary = formatSlotList(
-    availabilityData?.timeSlots?.saturday ?? null,
-    ['9:30 AM', '12:00 PM', '2:30 PM', '4:30 PM']
-  )
-  const sundayEnabled =
-    availabilityData?.businessHours?.sunday?.enabled ??
-    defaultEnabled.sunday
-  const saturdayEnabled =
-    availabilityData?.businessHours?.saturday?.enabled ??
-    defaultEnabled.saturday
-
-  const isDayEnabled = (date: Date) => {
-    const key = dayKeys[date.getDay()]
-    const configured = availabilityData?.businessHours?.[key]?.enabled
-    if (typeof configured === 'boolean') {
-      return configured
-    }
-    return defaultEnabled[key]
-  }
 
   // Get first day of month and number of days
   const firstDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
@@ -101,21 +56,27 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     return fullyBookedDates.includes(dateStr)
   }
 
+  // Check if date is before minimum booking date (dates that cannot be booked)
+  const isBeforeMinimumBookingDate = (date: Date): boolean => {
+    if (minimumBookingDate) {
+      const minDate = new Date(minimumBookingDate + 'T00:00:00')
+      minDate.setHours(0, 0, 0, 0)
+      const dateOnly = new Date(date)
+      dateOnly.setHours(0, 0, 0, 0)
+      return dateOnly < minDate
+    }
+    return false
+  }
+
   // Check if date is in the past
   const isPastDate = (date: Date): boolean => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    return date < today
+    const dateOnly = new Date(date)
+    dateOnly.setHours(0, 0, 0, 0)
+    return dateOnly < today
   }
 
-  // Check if date is Saturday (closed) or Sunday (available)
-  const isSaturday = (date: Date): boolean => {
-    return date.getDay() === 6
-  }
-  
-  const isSunday = (date: Date): boolean => {
-    return date.getDay() === 0
-  }
 
   // Handle date click
   const handleDateClick = (day: number) => {
@@ -128,8 +89,9 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
     
     const isFullyBookedDate = fullyBookedDates.includes(dateStr)
+    const isBeforeMinDate = isBeforeMinimumBookingDate(date)
 
-    if (!isPastDate(date) && !isFullyBookedDate && isDateAvailable(date)) {
+    if (!isPastDate(date) && !isBeforeMinDate && !isFullyBookedDate && isDateAvailable(date)) {
       onDateSelect(dateStr)
     }
   }
@@ -160,9 +122,16 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
   }
 
   return (
-    <div className="max-w-3xl mx-auto bg-[var(--color-surface)] rounded-2xl shadow-soft p-4 sm:p-5 border border-[var(--color-text)]/10">
-      {/* Month Navigation */}
-      <div className="flex items-center justify-between mb-5">
+    <>
+      <style dangerouslySetInnerHTML={{__html: `
+        button[data-not-available="true"] {
+          background-color: #e5e7eb !important;
+          color: #4b5563 !important;
+        }
+      `}} />
+      <div className="max-w-3xl mx-auto bg-[var(--color-surface)] rounded-2xl shadow-soft p-3 sm:p-4 md:p-5 border border-[var(--color-text)]/10">
+        {/* Month Navigation */}
+      <div className="flex items-center justify-between mb-3 sm:mb-4 md:mb-5">
         <button
           onClick={goToPreviousMonth}
           className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:-rotate-12"
@@ -172,7 +141,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h3 className="text-lg sm:text-xl font-display text-[var(--color-text)] font-semibold">
+        <h3 className="text-base sm:text-lg md:text-xl font-display text-[var(--color-text)] font-semibold px-2">
           {monthNames[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </h3>
         <button
@@ -187,16 +156,16 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
       </div>
 
       {/* Day Headers */}
-      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
         {dayNames.map((day) => (
-          <div key={day} className="text-center text-xs sm:text-sm font-semibold text-[var(--color-text)] py-1.5">
+          <div key={day} className="text-center text-[10px] sm:text-xs md:text-sm font-semibold text-[var(--color-text)] py-1 sm:py-1.5">
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
         {calendarDays.map((day, index) => {
           if (day === null) {
             return <div key={`empty-${index}`} className="aspect-square" />
@@ -209,41 +178,44 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
           const isSelected = selectedDate === dateStr
           const isPast = isPastDate(date)
-          const isSaturdayDay = isSaturday(date)
+          const isBeforeMinDate = isBeforeMinimumBookingDate(date)
           const isFullyBookedDate = isFullyBooked(date)
           const isToday = date.toDateString() === new Date().toDateString()
           const isAvailable = isDateAvailable(date)
-          const isDisabledSaturday = isSaturdayDay && (!saturdayEnabled || !isAvailable)
-          const isActuallyAvailable = !isPast && isAvailable && !isFullyBookedDate
-          const shouldFadeUnavailable = (isPast || !isAvailable) && !isFullyBookedDate
+          const isActuallyAvailable = !isPast && !isBeforeMinDate && isAvailable && !isFullyBookedDate
 
-          let cellClasses = 'relative aspect-square flex items-center justify-center rounded-lg transition-all cursor-pointer font-semibold text-[var(--color-text)] overflow-hidden text-sm sm:text-base '
+          // Determine if this is a non-available date (NOT selected, NOT fully booked)
+          const isNotAvailable = (isPast || isBeforeMinDate || !isAvailable) && !isSelected && !isFullyBookedDate
           
-          // Block past dates and unavailable dates
-          // Saturdays are only blocked if they're disabled
-          if (isPast || !isActuallyAvailable || isFullyBookedDate) {
-            if (isFullyBookedDate) {
-              cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 shadow-inner'
-            } else {
-              cellClasses += 'cursor-not-allowed border border-[var(--color-text)]/20 shadow-inner'
-
-              if (shouldFadeUnavailable) {
-                cellClasses += ' opacity-40 text-[var(--color-text)]/35 bg-[color-mix(in srgb,var(--color-surface) 90%, var(--color-background) 10%)]'
-              }
-
-              if (isDisabledSaturday && !isPast) {
-                cellClasses += ' ring-1 ring-inset ring-[var(--color-text)] ring-opacity-[0.15] backdrop-brightness-[0.95]'
-              }
-              
-              if (isPast) {
-                cellClasses += ' backdrop-brightness-[0.9]'
-              }
-            }
-          } else if (isSelected) {
+          let cellClasses = 'relative aspect-square flex items-center justify-center rounded-lg transition-all cursor-pointer font-semibold overflow-hidden text-xs sm:text-sm md:text-base touch-manipulation '
+          let cellStyle: React.CSSProperties = {}
+          
+          // Priority order for styling:
+          // 1. Selected date (highest priority - brown/primary color)
+          // 2. Fully Booked (orange/yellow)
+          // 3. Not Available - dates before Jan 15th or past dates (grey)
+          // 4. Available dates (white)
+          
+          if (isSelected) {
+            // Selected - Brown/Primary style (highest priority)
             cellClasses += 'bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-xl transform scale-[1.03] border border-[var(--color-primary-dark)] ring-2 ring-[var(--color-accent)]/40'
+          } else if (isFullyBookedDate) {
+            // Fully Booked - Orange/Yellow style (matches legend)
+            cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 shadow-inner'
+          } else if (isNotAvailable) {
+            // Not Available - Grey style (matches legend) - MUST be grey, not brown
+            // NO background color class - ONLY use inline style
+            cellClasses += 'cursor-not-allowed border border-gray-300 shadow-inner'
+            // Force grey background with inline style - explicit hex color
+            cellStyle = {
+              backgroundColor: '#e5e7eb', // Grey-200 - matches legend
+              color: '#4b5563' // Grey-700 for text
+            }
           } else if (isToday) {
+            // Today (if available)
             cellClasses += 'bg-[color-mix(in srgb,var(--color-accent) 55%, var(--color-surface) 45%)] text-[var(--color-on-primary)] border border-[var(--color-accent)]/70 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transform hover:scale-[1.03]'
           } else {
+            // Available - White style (click to book)
             cellClasses += 'bg-white text-[var(--color-primary-dark)] border border-[color-mix(in srgb,var(--color-primary) 35%, var(--color-surface) 65%)] hover:bg-[color-mix(in srgb,#ffffff 70%, var(--color-primary) 30%)] hover:border-[var(--color-primary)]/70 hover:text-[var(--color-primary-dark)] hover:shadow-[0_10px_18px_rgba(0,0,0,0.08)] transform hover:scale-[1.03]'
           }
 
@@ -251,17 +223,23 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
             <button
               key={day}
               onClick={() => handleDateClick(day)}
-              disabled={isPast || !isActuallyAvailable || isFullyBookedDate}
+              disabled={isPast || isBeforeMinDate || !isActuallyAvailable || isFullyBookedDate}
               className={cellClasses}
+              style={isNotAvailable ? cellStyle : undefined}
               type="button"
-              aria-disabled={isPast || !isActuallyAvailable || isFullyBookedDate}
+              data-not-available={isNotAvailable ? 'true' : undefined}
+              aria-disabled={isPast || isBeforeMinDate || !isActuallyAvailable || isFullyBookedDate}
               title={
                 isFullyBookedDate
                   ? 'All time slots booked for this date'
-                  : !isAvailable
-                  ? 'No booking slots available for this date'
+                  : isBeforeMinDate
+                  ? minimumBookingDate 
+                    ? `Bookings start from ${new Date(minimumBookingDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+                    : 'This date is not available for booking'
                   : isPast
                   ? 'Past dates are unavailable'
+                  : !isAvailable
+                  ? 'No booking slots available for this date'
                   : undefined
               }
             >
@@ -275,8 +253,8 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
       </div>
 
       {/* Legend */}
-      <div className="mt-4 mb-3">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-xs sm:text-sm">
+      <div className="mt-3 sm:mt-4 mb-2 sm:mb-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-2 sm:mb-3 text-[10px] sm:text-xs md:text-sm">
           <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
             <div className="w-6 h-6 bg-[var(--color-primary)] rounded-md shadow-inner border border-[var(--color-primary-dark)]/30"></div>
             <div>
@@ -303,8 +281,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           
           <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
             <div
-              className="w-6 h-6 rounded-md border border-[var(--color-text)]/25"
-              style={{ background: 'color-mix(in srgb,var(--color-text) 28%, var(--color-surface) 72%)' }}
+              className="w-6 h-6 rounded-md border border-[var(--color-text)]/25 bg-gray-200"
             ></div>
             <div>
               <div className="font-bold text-[var(--color-text)]/80 text-xs sm:text-sm">Not Available</div>
@@ -312,37 +289,9 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
             </div>
           </div>
         </div>
-        
-        <div className="bg-[color-mix(in srgb,var(--color-background) 70%, var(--color-surface) 30%)]/60 border-l-4 border-[var(--color-primary)]/40 p-3 rounded-r-lg shadow-inner">
-          <p className="text-sm text-[var(--color-text)] font-semibold mb-2.5">
-            📅 Available Booking Times:
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs sm:text-sm text-[var(--color-text)]/85">
-            <div>
-              <strong>Weekdays (Mon-Fri):</strong> {weekdaySlotSummary || 'No slots configured'}
-            </div>
-            {sundayEnabled ? (
-              <div>
-                <strong>Sundays:</strong> {sundaySlotSummary || 'No slots configured'}
-              </div>
-            ) : (
-              <div className="text-[var(--color-text)]/70">
-                <strong>Sundays:</strong> Closed
-              </div>
-            )}
-            {saturdayEnabled ? (
-              <div className="md:col-span-2">
-                <strong>Saturdays:</strong> {saturdaySlotSummary || 'No slots configured'}
-              </div>
-            ) : (
-              <div className="md:col-span-2 text-[var(--color-text)]/70">
-                <strong>Saturdays:</strong> Closed
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
+    </>
   )
 }
 

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, ChangeEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
 import CalendarPicker from '@/components/CalendarPicker'
 import Link from 'next/link'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +22,8 @@ interface AvailableDate {
 interface ServiceOption {
   id: string
   name: string
-  price: number
+  price: number // KES price
+  priceUSD?: number // USD price
   duration: number
   categoryId: string
   categoryName: string
@@ -30,6 +33,14 @@ interface ServiceOptionGroup {
   categoryId: string
   categoryName: string
   options: ServiceOption[]
+}
+
+interface LookOption {
+  id: string
+  label: string
+  imageUrl: string
+  description?: string | null
+  recommendedStyles: string[]
 }
 
 // Service price and duration mappings will be loaded from API
@@ -91,17 +102,23 @@ function isFillService(serviceName: string, categoryMap: Record<string, { id: st
   return /fill/i.test(serviceName)
 }
 
+const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
 export default function Booking() {
+  const { currency, setCurrency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   })
 
-const [servicePrices, setServicePrices] = useState<Record<string, number>>({})
+  const [servicePrices, setServicePrices] = useState<Record<string, number>>({})
+  const [servicePricesUSD, setServicePricesUSD] = useState<Record<string, number>>({})
   const [serviceDurations, setServiceDurations] = useState<Record<string, number>>({})
-const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
+  const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'none'>('none')
+  const [clientPhotoError, setClientPhotoError] = useState<string | null>(null)
 
   const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 
@@ -132,16 +149,18 @@ const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [bookingDetails, setBookingDetails] = useState<{
     name: string
+    email: string
     date: string
     time: string
     endTime: string
     service: string
+    eyeShape: string
+    recommendedStyles: string[]
     deposit: string
     originalPrice: string
     discount: string
     finalPrice: string
-  email: string
-  returningClientEligible: boolean
+    returningClientEligible: boolean
   } | null>(null)
   const [isFirstTimeClient, setIsFirstTimeClient] = useState<boolean | null>(null)
   const [checkingFirstTime, setCheckingFirstTime] = useState(false)
@@ -160,37 +179,20 @@ const [lastPaymentDate, setLastPaymentDate] = useState<string | null>(null)
 const [returningDaysSince, setReturningDaysSince] = useState<number | null>(null)
 const [loadingReturningDiscount, setLoadingReturningDiscount] = useState(false)
 const [returningInfoError, setReturningInfoError] = useState<string | null>(null)
-const [discounts, setDiscounts] = useState<{
-  firstTimeClientDiscount: { enabled: boolean; percentage: number }
-  returningClientDiscount: { enabled: boolean; tier30Percentage: number; tier45Percentage: number }
-  depositPercentage: number
-} | null>(null)
-const [discountsLoaded, setDiscountsLoaded] = useState(false)
-  const [clientPhotoUpload, setClientPhotoUpload] = useState<{
-    url: string
-    filename?: string | null
-    originalName?: string | null
-    mimeType?: string | null
-    size?: number | null
+  const [discounts, setDiscounts] = useState<{
+    firstTimeClientDiscount: { enabled: boolean; percentage: number }
+    returningClientDiscount: { enabled: boolean; tier30Percentage: number; tier45Percentage: number }
+    depositPercentage: number
+    fridayNightDepositPercentage?: number
   } | null>(null)
-  const [clientPhotoPreview, setClientPhotoPreview] = useState<string | null>(null)
-  const [clientPhotoUploading, setClientPhotoUploading] = useState(false)
-  const [clientPhotoError, setClientPhotoError] = useState<string | null>(null)
-  const [clientPhotoSuccessMessage, setClientPhotoSuccessMessage] = useState<string | null>(null)
-  const [clientPhotoSample, setClientPhotoSample] = useState<{ url: string | null; instructions: string | null }>({
-    url: null,
-    instructions: null,
-  })
-  const [photoInputKey, setPhotoInputKey] = useState(0)
+const [discountsLoaded, setDiscountsLoaded] = useState(false)
+const [eyeShapeOptions, setEyeShapeOptions] = useState<LookOption[]>([])
+const [loadingLookOptions, setLoadingLookOptions] = useState(true)
+const [lookOptionsError, setLookOptionsError] = useState<string | null>(null)
+const [selectedEyeShapeId, setSelectedEyeShapeId] = useState<string>('')
+const [eyeShapeError, setEyeShapeError] = useState<string | null>(null)
 const [termsAccepted, setTermsAccepted] = useState(false)
 const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false)
-
-  const defaultPhotoInstructions =
-    'Snap a clear, landscape photo of both eyes looking straight ahead in good lighting. It’s optional but helps us pre-map your custom look before you arrive.'
-  const displayPhotoInstructions =
-    typeof clientPhotoSample.instructions === 'string' && clientPhotoSample.instructions.trim().length > 0
-      ? clientPhotoSample.instructions.trim()
-      : defaultPhotoInstructions
 
   const handleCloseSuccessModal = () => {
     setShowSuccessModal(false)
@@ -200,79 +202,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       }
     }, 100)
   }
-
-  const handleRemoveClientPhoto = () => {
-    setClientPhotoUpload(null)
-    setClientPhotoPreview(null)
-    setClientPhotoSuccessMessage(null)
-    setClientPhotoError(null)
-    setPhotoInputKey((prev) => prev + 1)
-  }
-
-  const handleClientPhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) {
-      return
-    }
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setClientPhotoError('Please upload a JPG, PNG, or WebP image.')
-      setClientPhotoSuccessMessage(null)
-      setClientPhotoUpload(null)
-      setClientPhotoPreview(null)
-      setPhotoInputKey((prev) => prev + 1)
-      return
-    }
-
-    if (file.size > 6 * 1024 * 1024) {
-      setClientPhotoError('Please keep your photo under 6MB in size.')
-      setClientPhotoSuccessMessage(null)
-      setClientPhotoUpload(null)
-      setClientPhotoPreview(null)
-      setPhotoInputKey((prev) => prev + 1)
-      return
-    }
-
-    setClientPhotoError(null)
-    setClientPhotoSuccessMessage(null)
-    setClientPhotoUpload(null)
-    setClientPhotoPreview(null)
-
-    setClientPhotoUploading(true)
-
-    const formData = new FormData()
-    formData.append('file', file)
-
-    fetch('/api/booking/client-photo/upload', {
-      method: 'POST',
-      body: formData,
-    })
-      .then(async (response) => {
-        const data = await response.json()
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Could not upload your photo.')
-        }
-        setClientPhotoUpload({
-          url: data.url,
-          filename: data.filename || null,
-          originalName: data.originalName || file.name,
-          mimeType: data.mimeType || file.type,
-          size: typeof data.size === 'number' ? data.size : file.size,
-        })
-        setClientPhotoPreview(data.url)
-        setClientPhotoSuccessMessage('Photo uploaded! Thank you—we\'ll map your lashes before you arrive.')
-      })
-      .catch((error: any) => {
-        console.error('Client photo upload failed:', error)
-        setClientPhotoError(error?.message || 'We could not upload your photo. Please try again.')
-        setPhotoInputKey((prev) => prev + 1)
-      })
-      .finally(() => {
-        setClientPhotoUploading(false)
-      })
-  }
-
 
   // Check if email is a first-time client
   useEffect(() => {
@@ -287,11 +216,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}`, {
           cache: 'no-store',
         })
+        if (!response.ok) {
+          throw new Error(`Failed to check first-time client: ${response.status}`)
+        }
         const data = await response.json()
         setIsFirstTimeClient(data.isFirstTime === true)
       } catch (error) {
         console.error('Error checking first-time client:', error)
-        // Default to first-time client if check fails
+        // Default to first-time client if check fails (safer to give discount)
         setIsFirstTimeClient(true)
       } finally {
         setCheckingFirstTime(false)
@@ -304,33 +236,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   }, [formData.email])
 
   useEffect(() => {
-    let cancelled = false
-
-    const loadClientPhotoSample = async () => {
-      try {
-        const response = await fetch('/api/booking/client-photo/settings', { cache: 'no-store' })
-        if (!response.ok || cancelled) {
-          return
-        }
-        const data = await response.json()
-        if (cancelled) return
-        setClientPhotoSample({
-          url: typeof data?.sampleImageUrl === 'string' ? data.sampleImageUrl : null,
-          instructions: typeof data?.instructions === 'string' ? data.instructions : null,
-        })
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Failed to load client photo sample:', error)
-        }
-      }
+    if (selectedEyeShapeId && !eyeShapeOptions.some((option) => option.id === selectedEyeShapeId)) {
+      setSelectedEyeShapeId('')
     }
-
-    loadClientPhotoSample()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  }, [eyeShapeOptions, selectedEyeShapeId])
 
   useEffect(() => {
     if (!formData.email) {
@@ -439,7 +348,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   useEffect(() => {
     fetch('/api/discounts', { cache: 'no-store' })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to load discounts: ${res.status}`)
+        }
+        return res.json()
+      })
       .then((data) => {
         const normalized = {
           firstTimeClientDiscount: {
@@ -461,12 +375,20 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 0,
             ),
           },
-          depositPercentage: Number(data?.depositPercentage ?? 0),
+          depositPercentage: Number(data?.depositPercentage ?? 30),
+          fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
         }
         setDiscounts(normalized)
       })
       .catch((error) => {
         console.error('Error loading discounts:', error)
+        // Set default discounts on error
+        setDiscounts({
+          firstTimeClientDiscount: { enabled: false, percentage: 0 },
+          returningClientDiscount: { enabled: false, tier30Percentage: 0, tier45Percentage: 0 },
+          depositPercentage: 30,
+          fridayNightDepositPercentage: 50,
+        })
       })
       .finally(() => {
         setDiscountsLoaded(true)
@@ -475,7 +397,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   const firstTimeDiscountEnabled = discounts?.firstTimeClientDiscount?.enabled ?? false
   const firstTimeDiscountPercentage = discounts?.firstTimeClientDiscount?.percentage ?? 0
-  const depositPercentage = discounts?.depositPercentage ?? 0
+  const depositPercentage = discounts?.depositPercentage ?? 30
+  const fridayNightDepositPercentage = discounts?.fridayNightDepositPercentage ?? 50
   const returningClientDiscountConfig = discounts?.returningClientDiscount
   const returningClientDiscountEnabled = returningClientDiscountConfig?.enabled ?? false
   const returningTier30Percentage = returningClientDiscountConfig?.tier30Percentage ?? 0
@@ -516,6 +439,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       setReferralMode('none')
     }
   }, [selectedServiceIsFill])
+
   const lastPaymentDisplay = lastPaymentDate
     ? new Date(lastPaymentDate).toLocaleDateString('en-US', {
         month: 'long',
@@ -553,6 +477,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                         : `${categoryId}-${Math.random().toString(36).slice(2, 10)}`,
                     name: typeof service?.name === 'string' ? service.name : 'Service',
                     price: typeof service?.price === 'number' ? service.price : Number(service?.price) || 0,
+                    priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
                     duration:
                       typeof service?.duration === 'number' ? service.duration : Number(service?.duration) || 0,
                     categoryId,
@@ -569,6 +494,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           : []
 
         const prices: Record<string, number> = {}
+        const pricesUSD: Record<string, number> = {}
         const durations: Record<string, number> = {}
 
         const categoryMap: Record<string, { id: string; name: string }> = {}
@@ -576,12 +502,16 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         groups.forEach((group) => {
           group.options.forEach((option) => {
             prices[option.name] = option.price
+            if (option.priceUSD !== undefined) {
+              pricesUSD[option.name] = option.priceUSD
+            }
             durations[option.name] = option.duration
             categoryMap[option.name] = { id: option.categoryId, name: option.categoryName }
           })
         })
 
         setServicePrices(prices)
+        setServicePricesUSD(pricesUSD)
         setServiceDurations(durations)
         setServiceOptionGroups(groups)
         setServiceCategoryMap(categoryMap)
@@ -593,6 +523,87 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
 
     loadServices()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const mapLookOption = (option: any): LookOption | null => {
+      if (!option || typeof option !== 'object') return null
+      const id = typeof option.id === 'string' ? option.id.trim() : ''
+      const label = typeof option.label === 'string' ? option.label.trim() : ''
+      const imageUrl = typeof option.imageUrl === 'string' ? option.imageUrl.trim() : ''
+      if (!id || !label || !imageUrl) return null
+      return {
+        id,
+        label,
+        imageUrl,
+        description:
+          typeof option.description === 'string' && option.description.trim().length > 0
+            ? option.description.trim()
+            : null,
+        recommendedStyles: Array.isArray(option.recommendedStyles)
+          ? option.recommendedStyles
+              .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
+              .filter((entry: string) => entry.length > 0)
+          : [],
+      }
+    }
+
+    const loadLookOptions = async () => {
+      setLoadingLookOptions(true)
+      setLookOptionsError(null)
+      try {
+        // Add timestamp to prevent caching
+        const timestamp = Date.now()
+        const response = await fetch(`/api/booking/look-options?t=${timestamp}`, { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to load look options (status ${response.status})`)
+        }
+        const data = await response.json()
+        if (cancelled) return
+
+        console.log('Loaded eye shape options:', data)
+
+        const eyeShapes = Array.isArray(data?.eyeShapes)
+          ? data.eyeShapes
+              .map(mapLookOption)
+              .filter((option: LookOption | null): option is LookOption => Boolean(option))
+          : []
+
+        console.log('Mapped eye shapes:', eyeShapes)
+
+        setEyeShapeOptions(eyeShapes)
+
+        if (eyeShapes.length === 0) {
+          setLookOptionsError(
+            "We're refreshing our eye shape gallery. Please check back shortly or contact us to complete your booking.",
+          )
+        }
+      } catch (error: any) {
+        if (cancelled) return
+        console.error('Error loading look options:', error)
+        setEyeShapeOptions([])
+        setLookOptionsError(
+          "We couldn't load the eye shape references. Please refresh the page or reach out to us directly to finish your booking.",
+        )
+      } finally {
+        if (!cancelled) {
+          setLoadingLookOptions(false)
+        }
+      }
+    }
+
+    loadLookOptions()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Promo code state
@@ -629,6 +640,15 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   const salonReferralActive = referralMode === 'salon'
   const referralActive = referralMode !== 'none'
   const isReferralBasedBooking = referralActive
+
+  // Clear promo code when returning discount becomes active
+  useEffect(() => {
+    if (appliedReturningDiscountPercent > 0 && promoCodeData?.valid) {
+      setPromoCode('')
+      setPromoCodeData(null)
+      setPromoError('Automatic returning client discount applied. Promo codes cannot be used with automatic discounts.')
+    }
+  }, [appliedReturningDiscountPercent, promoCodeData])
 
   const toggleReferralMode = (mode: 'friend' | 'salon') => {
     setReferralMode((prev) => (prev === mode ? 'none' : mode))
@@ -680,6 +700,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             ? 'Please select "Referred by a salon/beautician" before entering this code.'
             : data.code === 'SALON_FIRST_TIME_BLOCKED'
             ? 'This salon referral code can only be used by new clients.'
+            : data.code === 'CARD_FIRST_TIME_BLOCKED'
+            ? 'This promo code cannot be used by first-time clients. Please book your first appointment to become eligible.'
+            : data.code === 'PROMO_ALREADY_USED'
+            ? 'You have already used this promo code. Each promo code can only be used once per email address.'
             : 'Promo code is not valid at this time.')
 
         setPromoCodeData(null)
@@ -809,19 +833,77 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }, [formData.email, referralMode])
 
+  const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([])
+  const [availabilityData, setAvailabilityData] = useState<{
+    minimumBookingDate?: string
+    businessHours?: {
+      [key: string]: { open: string; close: string; enabled: boolean }
+    }
+    timeSlots?: {
+      weekdays?: Array<{ hour: number; minute: number; label: string }>
+      friday?: Array<{ hour: number; minute: number; label: string }>
+      saturday?: Array<{ hour: number; minute: number; label: string }>
+      sunday?: Array<{ hour: number; minute: number; label: string }>
+    }
+    bookingWindow?: {
+      current?: { startDate?: string; endDate?: string; label?: string }
+      next?: { startDate?: string; endDate?: string; label?: string; opensAt?: string; emailSubject?: string }
+      bookingLink?: string
+      note?: string
+      bannerMessage?: string
+      bannerEnabled?: boolean | null
+    }
+  } | null>(null)
+  const bookingWindow = availabilityData?.bookingWindow
+
+  // Check if booking is a Friday night slot
+  const isFridayNightBooking = (): boolean => {
+    if (!formData.date || !formData.timeSlot) return false
+    
+    // Check if date is a Friday (day of week = 5)
+    const dateObj = new Date(formData.date + 'T12:00:00')
+    const dayOfWeek = dateObj.getDay()
+    if (dayOfWeek !== 5) return false // Not Friday
+    
+    // Check if Friday-specific time slots exist (meaning Friday night slots are activated)
+    const fridaySlots = availabilityData?.timeSlots?.friday
+    if (!Array.isArray(fridaySlots) || fridaySlots.length === 0) return false
+    
+    // If Friday-specific slots are configured, all Friday bookings are considered "night bookings"
+    // This means the business has activated Friday night slots
+    return true
+  }
+
   // Calculate pricing with discount (first-time OR promo code, not both)
   const calculatePricing = (service: string) => {
-    if (!service || !servicePrices[service]) {
+    // Get price in selected currency
+    const getServicePrice = (): number => {
+      if (!service) return 0
+      if (currency === 'USD' && servicePricesUSD[service] !== undefined) {
+        return servicePricesUSD[service]
+      }
+      if (currency === 'KES') {
+        return servicePrices[service] || 0
+      }
+      // Fallback: convert KES to USD if USD price not set
+      if (currency === 'USD' && servicePrices[service]) {
+        return convertCurrency(servicePrices[service], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      }
+      return servicePrices[service] || 0
+    }
+
+    const originalPrice = getServicePrice()
+    if (!service || originalPrice === 0) {
       return {
         originalPrice: 0,
         discount: 0,
         finalPrice: 0,
         deposit: 0,
         discountType: null as 'first-time' | 'promo' | 'returning' | null,
+        isFridayNight: false,
+        depositPercentage: depositPercentage,
       }
     }
-
-    const originalPrice = servicePrices[service]
     const isReferralPromo = Boolean(promoCodeData?.valid && promoCodeData?.isReferral)
     const isSalonReferralPromo = Boolean(promoCodeData?.valid && promoCodeData?.isSalonReferral)
     const referralPromoApplied = isReferralPromo || isSalonReferralPromo
@@ -833,9 +915,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       effectiveIsFirstTimeClient === true &&
       !referralPromoApplied
 
+    // Promo codes and automatic discounts are mutually exclusive
     const promoEligible = Boolean(
       promoCodeData?.valid &&
       !isFill &&
+      appliedReturningDiscountPercent === 0 && // Cannot use promo if returning discount is active
+      !firstTimeEligible && // Cannot use promo if first-time discount is active
       (
         effectiveIsReturningClient === true ||
         (effectiveIsFirstTimeClient === true &&
@@ -846,7 +931,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     const returningEligible =
       !isFill &&
       appliedReturningDiscountPercent > 0 &&
-      !promoEligible &&
+      !promoEligible && // Cannot use returning discount if promo is active
       !firstTimeEligible
 
     let discount = 0
@@ -875,7 +960,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
 
     const finalPrice = Math.max(0, originalPrice - discount)
-    const deposit = Math.round(finalPrice * (depositPercentage / 100))
+    
+    // Friday night bookings require configurable deposit percentage
+    const isFridayNight = isFridayNightBooking()
+    const effectiveDepositPercentage = isFridayNight ? fridayNightDepositPercentage : depositPercentage
+    const deposit = Math.round(finalPrice * (effectiveDepositPercentage / 100))
 
     return {
       originalPrice,
@@ -883,32 +972,13 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       finalPrice,
       deposit,
       discountType,
+      isFridayNight,
+      depositPercentage: effectiveDepositPercentage,
     }
   }
 
   const pricing = calculatePricing(formData.service)
   const depositAmount = pricing.deposit
-
-  const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([])
-  const [availabilityData, setAvailabilityData] = useState<{
-    businessHours: {
-      [key: string]: { open: string; close: string; enabled: boolean }
-    }
-    timeSlots?: {
-      weekdays?: Array<{ hour: number; minute: number; label: string }>
-      saturday?: Array<{ hour: number; minute: number; label: string }>
-      sunday?: Array<{ hour: number; minute: number; label: string }>
-    }
-    bookingWindow?: {
-      current?: { startDate?: string; endDate?: string; label?: string }
-      next?: { startDate?: string; endDate?: string; label?: string; opensAt?: string; emailSubject?: string }
-      bookingLink?: string
-      note?: string
-      bannerMessage?: string
-      bannerEnabled?: boolean | null
-    }
-  } | null>(null)
-  const bookingWindow = availabilityData?.bookingWindow
 
   const formatDateDisplay = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
     if (!value || typeof value !== 'string') return null
@@ -968,7 +1038,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   // Load availability data
   useEffect(() => {
     fetch('/api/availability', { cache: 'no-store' })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to load availability: ${res.status}`)
+        }
+        return res.json()
+      })
       .then((data) => {
         const normalized = {
           businessHours: data?.businessHours || {},
@@ -985,6 +1060,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       })
       .catch((error) => {
         console.error('Error loading availability:', error)
+        // Set default availability data on error
+        setAvailabilityData({
+          businessHours: {},
+          timeSlots: {},
+          bookingWindow: {},
+        })
       })
   }, [])
 
@@ -1004,6 +1085,13 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setAvailableDates(dates)
         setAvailableDateStrings(dateStrings)
         setFullyBookedDates(Array.isArray(data?.fullyBookedDates) ? data.fullyBookedDates : [])
+        // Store minimum booking date in availabilityData for CalendarPicker
+        if (data?.minimumBookingDate) {
+          setAvailabilityData((prev) => ({
+            ...prev,
+            minimumBookingDate: data.minimumBookingDate,
+          }))
+        }
         if (data?.bookingWindow) {
           setAvailabilityData((prev) => {
             const previous = prev ?? { businessHours: {}, timeSlots: {}, bookingWindow: {} }
@@ -1108,6 +1196,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     setSubmitStatus({ type: null, message: '' })
   }
 
+  const handleSelectEyeShape = (optionId: string) => {
+    setSelectedEyeShapeId(optionId)
+    setEyeShapeError(null)
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     if (e.target.name === 'phone') {
       return
@@ -1156,7 +1249,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   // Initiate M-Pesa payment
   const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string) => {
-    setMpesaStatus({ loading: true, success: null, message: `Initiating M-Pesa payment for KSH ${amount.toLocaleString()}...` })
+    const formattedAmount = formatCurrencyContext(amount)
+    setMpesaStatus({ loading: true, success: null, message: `Initiating M-Pesa payment for ${formattedAmount}...` })
     
     try {
       const response = await fetch('/api/mpesa/stk-push', {
@@ -1178,7 +1272,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setMpesaStatus({
           loading: false,
           success: true,
-          message: `M-Pesa prompt sent! Check your phone - you'll be asked to pay exactly KSH ${amount.toLocaleString()}. Enter your M-Pesa PIN to complete the payment.`,
+          message: `M-Pesa prompt sent! Check your phone - you'll be asked to pay exactly ${formattedAmount}. Enter your M-Pesa PIN to complete the payment.`,
           checkoutRequestID: data.checkoutRequestID,
         })
         return { success: true, checkoutRequestID: data.checkoutRequestID }
@@ -1200,6 +1294,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitStatus({ type: null, message: '' })
@@ -1216,10 +1311,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
     setLoading(true)
 
-    if (clientPhotoUploading) {
+    const selectedEyeShape = eyeShapeOptions.find((option) => option.id === selectedEyeShapeId)
+    if (!selectedEyeShape) {
       setLoading(false)
-      setClientPhotoError('We are still uploading your photo. Please wait a moment and try again.')
-      document.getElementById('client-photo-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setEyeShapeError('Please select the eye shape that best matches you.')
+      document.getElementById('eye-shape-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -1255,18 +1351,22 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       
       const bookingReference = `LashDiary-${Date.now()}-${formData.name.substring(0, 3).toUpperCase()}`
 
-      // Demo override: skip payment requirement so bookings can be captured without M-Pesa
-      const mpesaResult = {
-        success: true,
-        checkoutRequestID: null as string | null,
-      }
-      setMpesaStatus({
-        loading: false,
-        success: true,
-        message: 'Demo mode: payment step skipped. Booking captured without M-Pesa.',
-      })
+      // Initiate payment based on selected method (or skip if 'none')
+      let paymentResult: { success: boolean; checkoutRequestID?: string | null; orderTrackingId?: string | null; error?: string } = { success: true }
 
-      if (mpesaResult.success) {
+      if (paymentMethod === 'mpesa') {
+        // M-Pesa payment
+        const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
+        const mpesaResult = await initiateMpesaPayment(fullPhone, pricingDetails.deposit, bookingReference)
+        paymentResult = mpesaResult
+      } else {
+        // No payment - booking will be created without payment
+        // User will be notified to pay later
+        paymentResult = { success: true }
+      }
+
+      // Proceed with booking creation (with or without payment)
+      if (paymentResult.success || paymentMethod === 'none') {
         // Proceed with booking creation
         const response = await fetch('/api/calendar/book', {
           method: 'POST',
@@ -1285,8 +1385,18 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
             salonReferral: salonReferralContext,
-            mpesaCheckoutRequestID: mpesaResult.checkoutRequestID,
-            clientPhoto: clientPhotoUpload,
+            mpesaCheckoutRequestID: paymentResult.checkoutRequestID || null,
+            currency: currency,
+            eyeShapeSelection: {
+              id: selectedEyeShape.id,
+              label: selectedEyeShape.label,
+              imageUrl: selectedEyeShape.imageUrl,
+              description: selectedEyeShape.description ?? null,
+              recommendedStyles: selectedEyeShape.recommendedStyles ?? [],
+            },
+            desiredLook: selectedEyeShape.recommendedStyles.length > 0 
+              ? selectedEyeShape.recommendedStyles[0] 
+              : 'Custom',
           }),
         })
 
@@ -1320,10 +1430,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         
         // Calculate pricing for display
         const summaryPricing = pricingDetails
-        const depositFormatted = summaryPricing.deposit > 0 ? `KSH ${summaryPricing.deposit.toLocaleString()}` : 'N/A'
-        const originalPriceFormatted = `KSH ${summaryPricing.originalPrice.toLocaleString()}`
-        const discountFormatted = summaryPricing.discount > 0 ? `KSH ${summaryPricing.discount.toLocaleString()}` : 'KSH 0'
-        const finalPriceFormatted = `KSH ${summaryPricing.finalPrice.toLocaleString()}`
+        const depositFormatted = summaryPricing.deposit > 0 ? formatCurrencyContext(summaryPricing.deposit) : 'N/A'
+        const originalPriceFormatted = formatCurrencyContext(summaryPricing.originalPrice)
+        const discountFormatted = summaryPricing.discount > 0 ? formatCurrencyContext(summaryPricing.discount) : formatCurrencyContext(0)
+        const finalPriceFormatted = formatCurrencyContext(summaryPricing.finalPrice)
         
         const bookingSummary = {
           name: formData.name,
@@ -1332,6 +1442,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           time: formattedTime,
           endTime: formattedEndTime,
           service: formData.service || 'Lash Service',
+          eyeShape: selectedEyeShape.label,
+          recommendedStyles: selectedEyeShape.recommendedStyles ?? [],
           deposit: depositFormatted,
           originalPrice: originalPriceFormatted,
           discount: discountFormatted,
@@ -1343,11 +1455,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         
         // Store booking details for modal
         setBookingDetails(bookingSummary)
-        
-        if (clientPhotoUpload) {
-          handleRemoveClientPhoto()
-        }
-
         if (
           bookingSummary.returningClientEligible &&
           (!referralDetails || referralDetails.code === '')
@@ -1394,10 +1501,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           emailStatus = 'Note: Email notifications may not be configured. Please check your email or contact us directly.'
         }
         
+        const paymentNotice = paymentMethod === 'none' 
+          ? ' ⚠️ Payment Required: Please note that payment is required to secure your appointment. We will contact you shortly with payment instructions.'
+          : ''
+        
         setSubmitStatus({
           type: 'success',
           message: '🎉 Appointment Booked Successfully!',
-          details: `${data.message || 'Your appointment has been confirmed.'} ${emailStatus} If the email isn't in your inbox within a few minutes, please check your spam or promotions folder and mark it as not spam.`,
+          details: `${data.message || 'Your appointment has been confirmed.'}${paymentNotice} ${emailStatus} If the email isn't in your inbox within a few minutes, please check your spam or promotions folder and mark it as not spam.`,
         })
 
         if (promoCodeData?.valid && promoCodeData.code) {
@@ -1451,6 +1562,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setTimeSlots([])
         setTermsAccepted(false)
         setTermsAcknowledgementError(false)
+        setSelectedEyeShapeId('')
+        setEyeShapeError(null)
         
         // Refresh available dates and time slots after booking
         // This ensures the booked slot disappears and dates update if fully booked
@@ -1489,19 +1602,19 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   };
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-20">
+    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div
           ref={ref}
-          className={`text-center mb-12 ${
+          className={`text-center mb-8 sm:mb-12 ${
             inView ? 'animate-fade-in-up' : 'opacity-0'
           }`}
         >
-          <h1 className="text-5xl md:text-6xl font-display text-brown-dark mb-6">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-brown-dark mb-4 sm:mb-6">
             Book Your Appointment
           </h1>
-          <p className="text-xl text-gray-700 max-w-2xl mx-auto leading-relaxed mb-4">
+          <p className="text-base sm:text-lg md:text-xl text-gray-700 max-w-2xl mx-auto leading-relaxed mb-4 px-2">
             Schedule your luxury studio appointment with ease. Select a date and time below, share your contact details, and we'll prepare a bespoke lash experience waiting for you at {STUDIO_LOCATION}.
           </p>
           <div className="mt-6 mb-8" />
@@ -1520,7 +1633,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               )}
             </div>
           )}
-          {discountsLoaded && depositPercentage > 0 && (
+          {discountsLoaded && (depositPercentage > 0 || pricing.isFridayNight) && (
             <div className="bg-white border-l-4 border-[var(--color-accent)]/80 p-5 max-w-2xl mx-auto mb-6 rounded-r-xl shadow-md">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
@@ -1530,7 +1643,16 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </div>
                 <div className="ml-3">
                   <p className="text-base font-semibold text-black">
-                    A {depositPercentage}% non-refundable deposit is required to secure your booking.
+                    {pricing.isFridayNight ? (
+                      <>A <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> non-refundable deposit is required to secure your Friday night booking.</>
+                    ) : (
+                      <>
+                        A {depositPercentage}% non-refundable deposit is required to secure your booking.
+                        {fridayNightDepositPercentage !== depositPercentage && (
+                          <> Friday night bookings require a <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> deposit.</>
+                        )}
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1546,13 +1668,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             availableDates={availableDateStrings}
             fullyBookedDates={fullyBookedDates}
             loading={loadingDates}
+            minimumBookingDate={availabilityData?.minimumBookingDate}
             availabilityData={availabilityData || undefined}
           />
         </div>
 
         {/* Booking Form */}
-        <div className="bg-white border-2 border-brown-light rounded-lg shadow-soft p-8 md:p-10">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white border-2 border-brown-light rounded-lg shadow-soft p-4 sm:p-6 md:p-8 lg:p-10">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             {/* Time Slot Field */}
             {formData.date && (
               <div>
@@ -1577,7 +1700,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     required
                     value={formData.timeSlot}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all"
+                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation"
                   >
                     <option value="">Select a time</option>
                     {timeSlots.map((slot) => (
@@ -1605,7 +1728,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
                 placeholder="Enter your full name"
               />
             </div>
@@ -1625,7 +1748,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
                 placeholder="your.email@example.com"
               />
             </div>
@@ -1662,7 +1785,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     const value = event.target.value.replace(/[^\d\s\-]/g, '')
                     setPhoneLocalNumber(value)
                   }}
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
                   placeholder="700 000 000"
                   inputMode="tel"
                 />
@@ -1672,84 +1795,97 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </p>
             </div>
 
-            {/* Client Photo Upload */}
+            {lookOptionsError && (
+              <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 px-5 py-4 text-sm text-orange-800">
+                {lookOptionsError}
+              </div>
+            )}
+
+            {/* Eye Shape Selection */}
             <div
-              id="client-photo-upload"
+              id="eye-shape-section"
               className="rounded-2xl border-2 border-brown-light/60 bg-white px-5 py-6 space-y-4"
             >
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1">
-                  <label className="block text-sm font-semibold text-brown-dark mb-2">
-                    Upload a photo of your eyes (optional)
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">
+                    Eye Shape *
                   </label>
-                  <div className="text-sm text-brown-dark/80 space-y-2">
-                    {displayPhotoInstructions.split('\n').map((line, index) => (
-                      <p key={index}>{line}</p>
-                    ))}
-                  </div>
-                  {clientPhotoSample.instructions && (
-                    <p className="mt-3 text-xs text-brown-dark/80 bg-brown-light/20 px-3 py-2 rounded-lg">
-                      {clientPhotoSample.instructions}
-                    </p>
-                  )}
+                  <p className="text-sm text-brown-dark/70">
+                    Choose the eye shape that most closely matches your features so we can plan a custom lash map before you arrive.
+                  </p>
                 </div>
-                {clientPhotoSample.url && (
-                  <div className="sm:w-56">
-                    <p className="text-xs uppercase tracking-widest text-brown-dark/60 mb-2">Example photo</p>
-                    <div className="rounded-xl overflow-hidden border border-brown-light/60 shadow-sm bg-white">
-                      <img
-                        src={clientPhotoSample.url}
-                        alt="Sample eye photo reference"
-                        className="w-full h-40 object-contain"
-                        loading="lazy"
-                      />
-                    </div>
-                  </div>
+                {loadingLookOptions && (
+                  <span className="text-sm text-brown-dark/60">Loading references...</span>
                 )}
               </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                  key={photoInputKey}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleClientPhotoChange}
-                  disabled={clientPhotoUploading}
-                  className="w-full sm:flex-1 text-sm text-brown-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-primary)] file:text-white hover:file:bg-[color-mix(in_srgb,var(--color-primary) 85%,#000 15%)] focus-visible:file:outline focus-visible:file:outline-2 focus-visible:file:outline-offset-2 focus-visible:file:outline-[color-mix(in_srgb,var(--color-primary) 70%,transparent 30%)] transition"
-                />
-                {clientPhotoUpload && (
-                  <button
-                    type="button"
-                    onClick={handleRemoveClientPhoto}
-                    className="inline-flex items-center px-4 py-2 rounded-full border border-brown-dark text-sm font-semibold text-brown-dark hover:bg-brown-dark hover:text-white transition"
-                  >
-                    Remove photo
-                  </button>
-                )}
-              </div>
-
-              {clientPhotoUploading && (
-                <p className="text-sm text-brown-dark/70">Uploading… hang tight.</p>
-              )}
-              {clientPhotoError && (
-                <p className="text-sm text-red-600 font-medium">{clientPhotoError}</p>
-              )}
-              {clientPhotoSuccessMessage && (
-                <p className="text-sm text-green-600 font-medium">{clientPhotoSuccessMessage}</p>
-              )}
-
-              {clientPhotoPreview && (
-                <div className="mt-2">
-                  <p className="text-xs uppercase tracking-widest text-brown-dark/60 mb-2">Your photo</p>
-                  <div className="rounded-xl overflow-hidden border border-brown-light/60 shadow-sm bg-white">
-                    <img
-                      src={clientPhotoPreview}
-                      alt="Uploaded reference photo preview"
-                      className="w-full h-40 object-contain"
-                      loading="lazy"
-                    />
-                  </div>
+              {!loadingLookOptions && eyeShapeOptions.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {eyeShapeOptions.map((option) => {
+                    const selected = selectedEyeShapeId === option.id
+                    return (
+                      <div
+                        key={option.id}
+                        className={`rounded-2xl border-2 bg-white shadow-sm transition-all ${
+                          selected
+                            ? 'border-brown-dark shadow-lg'
+                            : 'border-brown-light hover:border-brown-dark/50 hover:shadow-md'
+                        }`}
+                      >
+                        <label htmlFor={`eye-shape-${option.id}`} className="block cursor-pointer">
+                          <div className="w-full aspect-[8/3] overflow-hidden rounded-t-2xl bg-brown-light/10">
+                            <img
+                              src={option.imageUrl}
+                              alt={`Eye shape option: ${option.label}`}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="space-y-2 px-4 py-3">
+                            <p className="text-sm font-semibold text-brown-dark">{option.label}</p>
+                            {option.description && (
+                              <p className="text-xs leading-relaxed text-brown-dark/70">{option.description}</p>
+                            )}
+                            {option.recommendedStyles.length > 0 && (
+                              <div className="text-xs text-brown-dark/70 leading-relaxed space-y-1">
+                                <p className="font-semibold text-brown-dark/80">Recommended lash styles</p>
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  {option.recommendedStyles.map((style) => (
+                                    <li key={`${option.id}-style-${style}`} className="text-brown-dark/70">
+                                      {style}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 pt-2">
+                              <input
+                                id={`eye-shape-${option.id}`}
+                                type="radio"
+                                name="eyeShape"
+                                value={option.id}
+                                checked={selected}
+                                onChange={() => handleSelectEyeShape(option.id)}
+                                className="h-4 w-4 accent-brown-dark"
+                              />
+                              <span className="text-xs font-medium text-brown-dark">
+                                Select this eye shape
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    )
+                  })}
                 </div>
+              ) : null}
+              {!loadingLookOptions && eyeShapeOptions.length === 0 && (
+                <div className="rounded-lg border border-brown-light bg-brown-light/30 p-4 text-sm text-brown-dark/80">
+                  Eye shape references are not available right now. Please contact us directly to complete your booking.
+                </div>
+              )}
+              {eyeShapeError && (
+                <p className="text-sm font-semibold text-red-600">{eyeShapeError}</p>
               )}
             </div>
 
@@ -1767,7 +1903,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 rows={4}
                 value={formData.notes}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation resize-y"
                 placeholder="Any special preferences, sensitivity notes, or other information you'd like us to know..."
               />
               <p className="mt-2 text-sm text-brown-dark/70">
@@ -1798,22 +1934,29 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   required
                   value={formData.service}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all"
+                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation"
                 >
                   <option value="">Select a service</option>
                   {serviceOptionGroups.map((group) => (
                     <optgroup key={group.categoryId} label={group.categoryName}>
-                      {group.options.map((option) => (
-                        <option key={option.id} value={option.name}>
-                          {option.name} — KSH {servicePrices[option.name]?.toLocaleString() || 'N/A'}
-                        </option>
-                      ))}
+                      {group.options.map((option) => {
+                        const price = currency === 'USD' && servicePricesUSD[option.name] !== undefined
+                          ? servicePricesUSD[option.name]
+                          : currency === 'USD' && servicePrices[option.name]
+                          ? convertCurrency(servicePrices[option.name], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+                          : servicePrices[option.name] || 0
+                        return (
+                          <option key={option.id} value={option.name}>
+                            {option.name} — {formatCurrencyContext(price)}
+                          </option>
+                        )
+                      })}
                     </optgroup>
                   ))}
                 </select>
               )}
               {/* Promo Code / Referral Code Field */}
-              {formData.service && (isFirstTimeClient === false || isReferralBasedBooking) && (
+              {formData.service && (
                 <div className="mt-4">
                   <label
                     htmlFor="promoCode"
@@ -1836,11 +1979,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                         }
                       }}
                       onBlur={() => {
-                        if (promoCode.trim()) {
+                        if (promoCode.trim() && appliedReturningDiscountPercent === 0) {
                           validatePromoCode(promoCode)
                         }
                       }}
-              disabled={selectedServiceIsFill}
+              disabled={selectedServiceIsFill || appliedReturningDiscountPercent > 0}
                       placeholder={
                 referralMode === 'friend'
                   ? 'Enter friend referral code'
@@ -1853,21 +1996,31 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     <button
                       type="button"
                       onClick={() => validatePromoCode(promoCode)}
-              disabled={selectedServiceIsFill || validatingPromo || !promoCode.trim()}
+              disabled={selectedServiceIsFill || validatingPromo || !promoCode.trim() || appliedReturningDiscountPercent > 0}
                       className="bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {validatingPromo ? 'Checking...' : referralMode === 'none' ? 'Apply' : 'Apply referral'}
                     </button>
                   </div>
-                  {referralMode === 'friend' && (
+                  {appliedReturningDiscountPercent > 0 && (
+                    <p className="text-xs text-orange-600 mt-1 font-medium">
+                      ⚠️ Automatic returning client discount is active. Promo codes cannot be used with automatic discounts.
+                    </p>
+                  )}
+                  {referralMode === 'friend' && appliedReturningDiscountPercent === 0 && (
                     <p className="text-xs text-brown-dark/70 mt-1">
                       Enter the referral code your friend shared to unlock 10% off your first visit.
                     </p>
                   )}
-                  {referralMode === 'salon' && (
+                  {referralMode === 'salon' && appliedReturningDiscountPercent === 0 && (
                 <p className="text-xs text-brown-dark/70 mt-1">
                   Enter the code printed on the salon / beautician / influencer card you received.
                 </p>
+                  )}
+                  {referralMode === 'none' && appliedReturningDiscountPercent === 0 && (
+                    <p className="text-xs text-brown-dark/70 mt-1">
+                      Have a promo code from a card? Enter it here to apply your discount. Note: Some promo codes are only available for returning clients.
+                    </p>
                   )}
                   {promoError && (
                     <div className="mt-3 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
@@ -2095,15 +2248,15 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                       We'll unlock returning-client discounts as soon as your previous appointment is marked paid in full on our side.
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
+                  <div className="space-y-2 text-sm sm:text-base">
+                    <div className="flex justify-between items-center flex-wrap gap-1">
                       <span className="text-brown-dark font-semibold">Service Price:</span>
-                      <span className="text-brown-dark font-bold">KSH {pricing.originalPrice.toLocaleString()}</span>
+                      <span className="text-brown-dark font-bold">{formatCurrencyContext(pricing.originalPrice)}</span>
                     </div>
                     {pricing.discountType === 'first-time' && (
                       <div className="flex justify-between items-center text-green-700">
                         <span className="font-semibold">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>
-                        <span className="font-bold">- KSH {pricing.discount.toLocaleString()}</span>
+                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
                     {pricing.discountType === 'returning' && (
@@ -2111,7 +2264,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                         <span className="font-semibold">
                               Returning Client Discount ({activeReturningSummaryLabel}):
                         </span>
-                        <span className="font-bold">- KSH {pricing.discount.toLocaleString()}</span>
+                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
                     {pricing.discountType === 'promo' && promoCodeData && (
@@ -2120,19 +2273,21 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                           Promo Code Discount ({promoCodeData.code}): 
                           {promoCodeData.discountType === 'percentage' 
                             ? ` ${promoCodeData.discountValue}%`
-                            : ` KSH ${promoCodeData.discountValue}`
+                            : ` ${formatCurrencyContext(promoCodeData.discountValue)}`
                           }
                         </span>
-                        <span className="font-bold">- KSH {pricing.discount.toLocaleString()}</span>
+                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center pt-2 border-t border-brown-light/50">
                       <span className="text-brown-dark font-semibold">Final Price:</span>
-                      <span className="text-brown-dark font-bold text-lg">KSH {pricing.finalPrice.toLocaleString()}</span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg">{formatCurrencyContext(pricing.finalPrice)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-brown-light/50">
-                      <span className="text-brown-dark font-semibold">Required Deposit ({depositPercentage}%):</span>
-                      <span className="text-brown-dark font-bold text-lg">KSH {depositAmount.toLocaleString()}</span>
+                      <span className="text-brown-dark font-semibold">
+                        Required Deposit ({pricing.depositPercentage}%{pricing.isFridayNight ? ' - Friday Night' : ''}):
+                      </span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg">{formatCurrencyContext(depositAmount)}</span>
                     </div>
                   </div>
                   <p className="text-sm text-brown-dark/70 mt-3 pt-3 border-t border-brown-light/50">
@@ -2198,6 +2353,63 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </div>
             )}
 
+            {/* Payment Method Selection */}
+            <div id="payment-method-section" className="rounded-lg border-2 border-brown-light bg-white p-4 sm:p-5">
+              <label className="block text-sm sm:text-base font-semibold text-brown-dark mb-3">
+                Payment Method
+              </label>
+              
+              {/* Payment Notice */}
+              <div className="mb-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">💳</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-yellow-900 mb-1">
+                      Payment Information
+                    </p>
+                    <p className="text-xs text-yellow-800">
+                      You can pay now via M-Pesa, or complete your booking and we'll contact you with payment instructions. Payment is required to secure your appointment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                  style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="mpesa"
+                    checked={paymentMethod === 'mpesa'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'none')}
+                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark">M-Pesa STK Push</div>
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">Pay directly via M-Pesa on your phone (KES only)</div>
+                  </div>
+                </label>
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                  style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="none"
+                    checked={paymentMethod === 'none'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'none')}
+                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark">Pay Later</div>
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                      Complete your booking now. We'll contact you with payment instructions to secure your appointment.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             {/* Terms Acknowledgement */}
             <div
               id="terms-consent"
@@ -2244,15 +2456,18 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 loading ||
                 loadingDates ||
                 loadingSlots ||
+                loadingLookOptions ||
                 !formData.date ||
                 !formData.timeSlot ||
                 !formData.service ||
+                !selectedEyeShapeId ||
                 mpesaStatus.loading ||
-                !termsAccepted
+                !termsAccepted ||
+                (currency === 'USD' && paymentMethod === 'mpesa')
               }
-              className="w-full bg-brown-dark hover:bg-brown text-white font-semibold px-8 py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation"
             >
-              {loading || mpesaStatus.loading ? 'Processing...' : 'Book Appointment & Pay Deposit'}
+              {loading || mpesaStatus.loading ? 'Processing...' : paymentMethod === 'none' ? 'Book Appointment (Pay Later)' : 'Book Appointment & Pay Deposit'}
             </button>
             {!formData.service && (
               <p className="text-sm text-red-600 text-center mt-2">
@@ -2333,6 +2548,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     <dd className="text-brown-dark font-semibold">{bookingDetails.service}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
+                    <dt className="text-brown-dark/70 font-medium">Eye Shape</dt>
+                    <dd className="text-brown-dark font-semibold">{bookingDetails.eyeShape}</dd>
+                  </div>
+                  <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Deposit Required</dt>
                     <dd className="text-brown-dark font-bold">{bookingDetails.deposit}</dd>
                   </div>
@@ -2340,6 +2559,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     <dt className="text-brown-dark/70 font-medium">Final Price</dt>
                     <dd className="text-brown-dark font-bold">{bookingDetails.finalPrice}</dd>
                   </div>
+                  {bookingDetails.recommendedStyles.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-brown-dark/70 font-medium">Recommended styles for this eye shape</dt>
+                      <dd className="text-brown-dark">
+                        {bookingDetails.recommendedStyles.join(', ')}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </div>
 

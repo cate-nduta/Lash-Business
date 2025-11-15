@@ -28,6 +28,7 @@ export type PromoCode = {
   commissionTotal?: number
   commissionPaid?: number
   terminatedAt?: string | null
+  usedByEmails?: string[] // Track which emails have used this promo code (one-time use per email)
 }
 
 export type PromoCatalog = {
@@ -111,6 +112,11 @@ export const normalizePromoCatalog = (raw: any): { catalog: PromoCatalog; change
       commissionTotal: coerceNumber(promo?.commissionTotal, 0),
       commissionPaid: coerceNumber(promo?.commissionPaid, 0),
       terminatedAt: typeof promo?.terminatedAt === 'string' ? promo.terminatedAt : null,
+      usedByEmails: Array.isArray(promo?.usedByEmails)
+        ? promo.usedByEmails
+            .map((email: any) => (typeof email === 'string' ? email.trim().toLowerCase() : ''))
+            .filter((email: string) => email.length > 0 && email.includes('@'))
+        : [],
     }
 
     if (normalized.code !== promo?.code) {
@@ -123,5 +129,3 @@ export const normalizePromoCatalog = (raw: any): { catalog: PromoCatalog; change
   const catalog = { promoCodes }
   return { catalog, changed, count: promoCodes.length }
 }
-
-

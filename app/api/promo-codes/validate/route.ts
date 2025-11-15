@@ -33,18 +33,37 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    const now = new Date()
+    const parseDateOnly = (dateStr: string): Date | null => {
+      if (!dateStr || typeof dateStr !== 'string') return null
+      const parts = dateStr.split('-')
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10)
+        const month = parseInt(parts[1], 10) - 1
+        const day = parseInt(parts[2], 10)
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          const date = new Date(year, month, day)
+          date.setHours(0, 0, 0, 0)
+          return date
+        }
+      }
+      const parsed = new Date(dateStr)
+      parsed.setHours(0, 0, 0, 0)
+      return isNaN(parsed.getTime()) ? null : parsed
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
 
     if (promoCode.validFrom) {
-      const starts = new Date(promoCode.validFrom)
-      if (starts > now) {
+      const starts = parseDateOnly(promoCode.validFrom)
+      if (starts && starts > today) {
         return NextResponse.json({ valid: false, error: 'This promo code is not yet valid.' }, { status: 400 })
       }
     }
 
     if (promoCode.validUntil) {
-      const ends = new Date(promoCode.validUntil)
-      if (ends < now) {
+      const ends = parseDateOnly(promoCode.validUntil)
+      if (ends && ends < today) {
         return NextResponse.json({ valid: false, error: 'This promo code has expired.' }, { status: 400 })
       }
     }
@@ -58,6 +77,19 @@ export async function POST(request: NextRequest) {
     const isReferral = promoCode.isReferral === true
     const isSalonReferral = promoCode.isSalonReferral === true
     const allowsFirstTime = promoCode.allowFirstTimeClient ?? false
+
+    if (requesterEmail) {
+      const usedByEmails = Array.isArray(promoCode.usedByEmails)
+        ? promoCode.usedByEmails.map((e: string) => e.toLowerCase())
+        : []
+      if (usedByEmails.includes(requesterEmail)) {
+        return NextResponse.json({
+          valid: false,
+          error: 'You have already used this promo code. Each promo code can only be used once per email address.',
+          code: 'PROMO_ALREADY_USED',
+        }, { status: 400 })
+      }
+    }
 
     if (isReferral && !isSalonReferral) {
       const isReferrer = Boolean(normalizedReferrerEmail && requesterEmail && normalizedReferrerEmail === requesterEmail)
@@ -111,11 +143,13 @@ export async function POST(request: NextRequest) {
           code: 'SALON_FIRST_TIME_BLOCKED',
         }, { status: 400 })
       }
-    } else if (isFirstTimeClient === true) {
+    }
+
+    if (!isReferral && !isSalonReferral && allowsFirstTime === false && isFirstTimeClient === true) {
       return NextResponse.json({
         valid: false,
-        error: 'First-time clients qualify for the welcome discount automatically and cannot use promo codes yet.',
-        code: 'FIRST_TIME_PROMO_BLOCKED',
+        error: 'This promo code cannot be used by first-time clients. Please book your first appointment to become eligible.',
+        code: 'CARD_FIRST_TIME_BLOCKED',
       }, { status: 400 })
     }
 

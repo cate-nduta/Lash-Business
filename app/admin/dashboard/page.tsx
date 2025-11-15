@@ -165,10 +165,10 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
-      title: 'Client Photo Library',
-      description: 'Review booking eye photos and download them for lash mapping',
-      href: '/admin/picture-clients',
-      icon: '📷',
+      title: 'Image Library',
+      description: 'Manage eye shape references and guidance used in bookings',
+      href: '/admin/image-library',
+      icon: '🖼️',
       ownerOnly: false,
     },
     {

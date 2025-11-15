@@ -48,6 +48,7 @@ export default function Home() {
   const [homepageData, setHomepageData] = useState<HomepageData | null>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [loading, setLoading] = useState(true)
+  const [fridaySlotsActivated, setFridaySlotsActivated] = useState(false)
 
   useEffect(() => {
     fetch('/api/homepage', { cache: 'no-store' })
@@ -69,6 +70,20 @@ export default function Home() {
       })
       .catch((error) => {
         console.error('Error loading testimonials:', error)
+      })
+
+    // Check if Friday night slots are activated
+    fetch('/api/availability', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        // Friday slots are activated if friday time slots exist and have at least one slot
+        const fridaySlots = data?.timeSlots?.friday
+        const isActivated = Array.isArray(fridaySlots) && fridaySlots.length > 0
+        setFridaySlotsActivated(isActivated)
+      })
+      .catch((error) => {
+        console.error('Error checking Friday slots:', error)
+        setFridaySlotsActivated(false)
       })
   }, [])
 
@@ -156,10 +171,10 @@ export default function Home() {
             <span className="inline-block w-2 h-2 rounded-full bg-[var(--color-primary)]" />
             {hero.badge}
           </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg">
             {hero.title}
           </h1>
-          <p className="text-lg md:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md">
+          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2">
             {hero.subtitle}
           </p>
           {hero.highlight && (
@@ -169,17 +184,17 @@ export default function Home() {
               </span>
             </div>
           )}
-          <div className="flex items-center justify-center gap-4 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
             <Link
               href="/booking"
-              className="hover-soft inline-flex items-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20"
+              className="hover-soft inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation"
             >
               Book Now
               <span aria-hidden>→</span>
             </Link>
             <Link
               href="/gallery"
-              className="hover-soft inline-flex items-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold px-6 py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25"
+              className="hover-soft inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation"
             >
               View Gallery
             </Link>
@@ -201,6 +216,87 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Friday Night Slots Banner */}
+      {fridaySlotsActivated && (
+        <section className="relative py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--color-background)] to-[var(--color-surface)]">
+          <div className="max-w-4xl mx-auto">
+            <div className="max-w-3xl mx-auto animate-fade-in-up">
+              <div className="relative rounded-3xl overflow-hidden p-8 md:p-10 shadow-2xl border-4 border-[var(--color-primary)]/40 transform hover:scale-[1.02] transition-all duration-300" style={{
+                background: 'linear-gradient(135deg, rgba(139, 69, 19, 0.15) 0%, rgba(115, 61, 38, 0.25) 50%, rgba(139, 69, 19, 0.15) 100%)',
+                boxShadow: '0 20px 60px rgba(139, 69, 19, 0.3), 0 0 40px rgba(139, 69, 19, 0.2), inset 0 0 30px rgba(255, 255, 255, 0.1)',
+              }}>
+                {/* Animated background glow */}
+                <div className="absolute inset-0 opacity-30 animate-pulse" style={{
+                  background: 'radial-gradient(circle at 30% 50%, rgba(139, 69, 19, 0.4) 0%, transparent 50%), radial-gradient(circle at 70% 50%, rgba(115, 61, 38, 0.4) 0%, transparent 50%)',
+                }} />
+                
+                {/* Shimmer effect */}
+                <div className="absolute inset-0 overflow-hidden rounded-3xl">
+                  <div className="absolute -inset-10 -top-10 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent transform rotate-12 animate-shimmer" />
+                </div>
+
+                <div className="relative z-10 text-center">
+                  {/* Header with moon icon */}
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <div className="text-5xl animate-bounce" style={{ animationDuration: '2s' }}>
+                      🌙
+                    </div>
+                    <div>
+                      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)]/20 border-2 border-[var(--color-primary)]/50 backdrop-blur-sm">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[var(--color-primary)] animate-pulse" />
+                        <span className="text-sm md:text-base font-bold uppercase tracking-[0.3em] text-[var(--color-primary)] drop-shadow-lg">
+                          Friday Night Bookings
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-5xl animate-bounce" style={{ animationDuration: '2s', animationDelay: '0.5s' }}>
+                      ✨
+                    </div>
+                  </div>
+
+                  {/* Main headline */}
+                  <h3 className="text-2xl md:text-3xl font-display font-bold text-[var(--color-text)] mb-3 drop-shadow-md">
+                    Weekdays Too Hectic?
+                  </h3>
+                  <h3 className="text-2xl md:text-3xl font-display font-bold text-[var(--color-primary)] mb-4 drop-shadow-md">
+                    Your Weekends Are Packed?
+                  </h3>
+
+                  {/* Description */}
+                  <div className="bg-white/40 backdrop-blur-md rounded-2xl p-5 md:p-6 mb-6 border-2 border-white/50 shadow-lg">
+                    <p className="text-base md:text-lg text-[var(--color-text)]/95 font-semibold leading-relaxed mb-2">
+                      Friday Night Appointments Available
+                    </p>
+                    <p className="text-sm md:text-base text-[var(--color-text)]/85 leading-relaxed">
+                      Designed for busy professionals who can't make weekday appointments and whose weekends are already committed. 
+                      Book your <span className="font-bold text-[var(--color-primary)]">Friday evening slot</span> and end your week with a premium lash experience.
+                    </p>
+                  </div>
+
+                  {/* CTA Button */}
+                  <Link
+                    href="/booking"
+                    className="group inline-flex items-center gap-3 bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-primary-dark)] to-[var(--color-primary)] text-white font-bold text-lg px-8 py-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 hover:shadow-[0_0_30px_rgba(139,69,19,0.6)] border-2 border-white/30"
+                    style={{
+                      boxShadow: '0 10px 30px rgba(139, 69, 19, 0.4), inset 0 0 20px rgba(255, 255, 255, 0.2)',
+                    }}
+                  >
+                    <span className="text-2xl group-hover:rotate-12 transition-transform">🌙</span>
+                    <span>Book Friday Night Slot</span>
+                    <span className="text-2xl group-hover:translate-x-1 transition-transform">→</span>
+                  </Link>
+
+                  {/* Small note */}
+                  <p className="mt-4 text-xs text-[var(--color-text)]/60 italic">
+                    For those who need flexibility beyond traditional hours
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Intro Section */}
       <section
         ref={introRef}
@@ -219,10 +315,10 @@ export default function Home() {
           <span className="inline-block text-sm font-semibold tracking-[0.3em] uppercase text-[var(--color-text)]/70 mb-4">
             Discover Elegance
           </span>
-          <h2 className="text-4xl md:text-5xl font-display text-[var(--color-text)] mb-6">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display text-[var(--color-text)] mb-6 px-2">
             {intro.title}
           </h2>
-          <div className="grid gap-6 text-left md:grid-cols-2">
+          <div className="grid gap-4 sm:gap-6 text-left md:grid-cols-2">
             <div className="p-6 rounded-2xl bg-[var(--color-surface)] shadow-lg border border-[var(--color-text)]/10">
               <p className="text-base md:text-lg leading-relaxed text-[var(--color-text)]/85">
                 {intro.paragraph1}

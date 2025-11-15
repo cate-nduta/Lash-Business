@@ -1,7 +1,8 @@
 export type Service = {
   id: string
   name: string
-  price: number
+  price: number // KES price (for backward compatibility)
+  priceUSD?: number // USD price (optional)
   duration: number
 }
 
@@ -88,6 +89,7 @@ export const normalizeServiceCatalog = (
           id: serviceId,
           name: typeof service?.name === 'string' ? service.name : 'Service',
           price: coerceNumber(service?.price, 0),
+          priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
           duration: coerceNumber(service?.duration, 60),
         }
       })
@@ -145,6 +147,7 @@ export const normalizeServiceCatalog = (
               id: serviceId,
               name: typeof service?.name === 'string' ? service.name : 'Service',
               price: coerceNumber(service?.price, 0),
+              priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
               duration: coerceNumber(service?.duration, 60),
             }
           })

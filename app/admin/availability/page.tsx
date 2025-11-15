@@ -40,7 +40,8 @@ interface BookingWindowState {
 interface AvailabilityData {
   businessHours: BusinessHours
   timeSlots: {
-    weekdays: TimeSlot[]
+    weekdays?: TimeSlot[] // Monday-Thursday shared time slots
+    friday?: TimeSlot[]
     saturday?: TimeSlot[]
     sunday: TimeSlot[]
   }
@@ -61,12 +62,12 @@ export default function AdminAvailability() {
   })
   const [availability, setAvailability] = useState<AvailabilityData>({
     businessHours: {},
-    timeSlots: { weekdays: [], saturday: [], sunday: [] },
+    timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
   })
   const [originalAvailability, setOriginalAvailability] = useState<AvailabilityData>({
     businessHours: {},
-    timeSlots: { weekdays: [], saturday: [], sunday: [] },
+    timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
   })
   const [loading, setLoading] = useState(true)
@@ -114,8 +115,17 @@ export default function AdminAvailability() {
       if (response.ok) {
         const data = await response.json()
         const businessHours: BusinessHours = data.businessHours || {}
+        // Normalize time slots - combine Monday-Thursday into weekdays if they exist separately
+        const weekdaysSlots: TimeSlot[] = 
+          Array.isArray(data?.timeSlots?.weekdays) ? data.timeSlots.weekdays :
+          Array.isArray(data?.timeSlots?.monday) ? data.timeSlots.monday :
+          Array.isArray(data?.timeSlots?.tuesday) ? data.timeSlots.tuesday :
+          Array.isArray(data?.timeSlots?.wednesday) ? data.timeSlots.wednesday :
+          Array.isArray(data?.timeSlots?.thursday) ? data.timeSlots.thursday :
+          []
         const timeSlots = {
-          weekdays: Array.isArray(data?.timeSlots?.weekdays) ? data.timeSlots.weekdays : [],
+          weekdays: weekdaysSlots,
+          friday: Array.isArray(data?.timeSlots?.friday) ? data.timeSlots.friday : [],
           saturday: Array.isArray(data?.timeSlots?.saturday) ? data.timeSlots.saturday : [],
           sunday: Array.isArray(data?.timeSlots?.sunday) ? data.timeSlots.sunday : [],
         }
@@ -230,7 +240,7 @@ export default function AdminAvailability() {
     }))
   }
 
-  const addTimeSlot = (type: 'weekdays' | 'saturday' | 'sunday') => {
+  const addTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday') => {
     setAvailability((prev) => ({
       ...prev,
       timeSlots: {
@@ -240,7 +250,7 @@ export default function AdminAvailability() {
     }))
   }
 
-  const updateTimeSlot = (type: 'weekdays' | 'saturday' | 'sunday', index: number, field: keyof TimeSlot, value: string | number) => {
+  const updateTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday', index: number, field: keyof TimeSlot, value: string | number) => {
     setAvailability((prev) => {
       const updated = { ...prev }
       if (!updated.timeSlots[type]) {
@@ -262,7 +272,7 @@ export default function AdminAvailability() {
     })
   }
 
-  const removeTimeSlot = (type: 'weekdays' | 'saturday' | 'sunday', index: number) => {
+  const removeTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday', index: number) => {
     setAvailability((prev) => ({
       ...prev,
       timeSlots: {
@@ -604,23 +614,87 @@ export default function AdminAvailability() {
           </div>
         </div>
 
+        {/* Monday-Thursday Time Slots (Shared) */}
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+            <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-brown-dark">Monday-Thursday Time Slots</h2>
+              <button
+              onClick={() => addTimeSlot('weekdays')}
+                className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
+              >
+                + Add Slot
+              </button>
+            </div>
+            <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl shadow-sm">
+              <p className="text-sm text-blue-900">
+              <strong>Note:</strong> These time slots are shared across Monday, Tuesday, Wednesday, and Thursday. If no slots are configured, the system will use default slots.
+              </p>
+            </div>
+            <div className="space-y-4">
+            {(availability.timeSlots.weekdays || []).map((slot, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
+                  <input
+                    type="number"
+                    value={slot.hour}
+                  onChange={(e) => updateTimeSlot('weekdays', index, 'hour', parseInt(e.target.value) || 0)}
+                    placeholder="Hour (0-23)"
+                    min="0"
+                    max="23"
+                    className="px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                  <input
+                    type="number"
+                    value={slot.minute}
+                  onChange={(e) => updateTimeSlot('weekdays', index, 'minute', parseInt(e.target.value) || 0)}
+                    placeholder="Minute (0-59)"
+                    min="0"
+                    max="59"
+                    className="px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={slot.label}
+                  onChange={(e) => updateTimeSlot('weekdays', index, 'label', e.target.value)}
+                    placeholder="Label (e.g., 9:30 AM)"
+                    className="px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                  <button
+                  onClick={() => removeTimeSlot('weekdays', index)}
+                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            {(!availability.timeSlots.weekdays || availability.timeSlots.weekdays.length === 0) && (
+              <p className="text-sm text-gray-500 italic">No Monday-Thursday time slots configured. Will use default slots as fallback.</p>
+              )}
+            </div>
+        </div>
+
+        {/* Friday Time Slots */}
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Weekday Time Slots (Mon-Fri)</h2>
+            <h2 className="text-2xl font-semibold text-brown-dark">Friday Time Slots</h2>
             <button
-              onClick={() => addTimeSlot('weekdays')}
+              onClick={() => addTimeSlot('friday')}
               className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
             >
               + Add Slot
             </button>
           </div>
+          <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl shadow-sm">
+            <p className="text-sm text-blue-900">
+              <strong>Note:</strong> Friday has its own independent time slots. If no Friday slots are configured, the system will fall back to weekday slots or default slots.
+            </p>
+          </div>
           <div className="space-y-4">
-            {availability.timeSlots.weekdays.map((slot, index) => (
+            {(availability.timeSlots.friday || []).map((slot, index) => (
               <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
                 <input
                   type="number"
                   value={slot.hour}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'hour', parseInt(e.target.value) || 0)}
+                  onChange={(e) => updateTimeSlot('friday', index, 'hour', parseInt(e.target.value) || 0)}
                   placeholder="Hour (0-23)"
                   min="0"
                   max="23"
@@ -629,7 +703,7 @@ export default function AdminAvailability() {
                 <input
                   type="number"
                   value={slot.minute}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'minute', parseInt(e.target.value) || 0)}
+                  onChange={(e) => updateTimeSlot('friday', index, 'minute', parseInt(e.target.value) || 0)}
                   placeholder="Minute (0-59)"
                   min="0"
                   max="59"
@@ -638,18 +712,21 @@ export default function AdminAvailability() {
                 <input
                   type="text"
                   value={slot.label}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'label', e.target.value)}
+                  onChange={(e) => updateTimeSlot('friday', index, 'label', e.target.value)}
                   placeholder="Label (e.g., 9:30 AM)"
                   className="px-3 py-2 border border-brown-light rounded bg-white"
                 />
                 <button
-                  onClick={() => removeTimeSlot('weekdays', index)}
+                  onClick={() => removeTimeSlot('friday', index)}
                   className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
                 >
                   Remove
                 </button>
-              </div>
-            ))}
+          </div>
+        ))}
+            {(!availability.timeSlots.friday || availability.timeSlots.friday.length === 0) && (
+              <p className="text-sm text-gray-500 italic">No Friday time slots configured. Will use weekday slots or defaults as fallback.</p>
+            )}
           </div>
         </div>
 

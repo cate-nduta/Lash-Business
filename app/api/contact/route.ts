@@ -13,11 +13,22 @@ type ContactSettings = {
   showEmail?: boolean | string | null
   showInstagram?: boolean | string | null
   showLocation?: boolean | string | null
+  headerTitle?: string | null
+  headerSubtitle?: string | null
+  businessHoursTitle?: string | null
+  socialMediaTitle?: string | null
+  socialMediaDescription?: string | null
+  bookingTitle?: string | null
+  bookingDescription?: string | null
+  bookingButtonText?: string | null
 }
 
 export async function GET(request: NextRequest) {
   try {
     const contact = await readDataFile<ContactSettings>('contact.json', {})
+    
+    // Log what we're reading for debugging
+    console.log('Reading contact data from storage:', JSON.stringify(contact, null, 2))
 
     const coerceBoolean = (value: unknown, fallback: boolean) => {
       if (typeof value === 'boolean') return value
@@ -38,15 +49,26 @@ export async function GET(request: NextRequest) {
       location: contact?.location ?? '',
       showPhone: coerceBoolean(contact?.showPhone, Boolean(contact?.phone)),
       showEmail: coerceBoolean(contact?.showEmail, Boolean(contact?.email)),
-      showInstagram: coerceBoolean(
-        contact?.showInstagram,
-        Boolean(contact?.instagram || contact?.instagramUrl),
-      ),
+      showInstagram: coerceBoolean(contact?.showInstagram, Boolean(contact?.instagram || contact?.instagramUrl)),
       showLocation: coerceBoolean(contact?.showLocation, Boolean(contact?.location)),
+      headerTitle: contact?.headerTitle ?? '',
+      headerSubtitle: contact?.headerSubtitle ?? '',
+      businessHoursTitle: contact?.businessHoursTitle ?? '',
+      socialMediaTitle: contact?.socialMediaTitle ?? '',
+      socialMediaDescription: contact?.socialMediaDescription ?? '',
+      bookingTitle: contact?.bookingTitle ?? '',
+      bookingDescription: contact?.bookingDescription ?? '',
+      bookingButtonText: contact?.bookingButtonText ?? '',
     }
+    
+    console.log('Returning contact data:', JSON.stringify(responseBody, null, 2))
 
     return NextResponse.json(responseBody, {
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      headers: { 
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
     })
   } catch (error) {
     console.error('Error loading contact info:', error)

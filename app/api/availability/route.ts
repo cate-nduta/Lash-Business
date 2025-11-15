@@ -14,7 +14,15 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error loading availability:', error)
-    return NextResponse.json({ availability: [] }, { status: 500 })
+    return NextResponse.json(
+      {
+        businessHours: {},
+        timeSlots: {},
+        bookingWindow: {},
+        fullyBookedDates: [],
+      },
+      { status: 500 }
+    )
   }
 }
 

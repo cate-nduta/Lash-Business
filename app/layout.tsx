@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import PromoBanner from '@/components/PromoBanner'
 import ThemeProvider from './theme-provider'
+import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { readDataFile } from '@/lib/data-utils'
 import { DEFAULT_THEME_DATA, withDefaultThemeData, type ThemeFile } from '@/lib/theme-defaults'
 
@@ -75,14 +76,16 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${playfair.variable} font-body antialiased`} suppressHydrationWarning>
         <ThemeProvider colors={colors}>
-          <div className="sticky top-0 z-[70]">
-            <PromoBanner />
-            <Navbar />
-          </div>
-          <main className="min-h-screen">
-            {children}
-          </main>
-          <Footer />
+          <CurrencyProvider>
+            <div className="sticky top-0 z-[70]">
+              <PromoBanner />
+              <Navbar />
+            </div>
+            <main className="min-h-screen">
+              {children}
+            </main>
+            <Footer />
+          </CurrencyProvider>
         </ThemeProvider>
         <Script id="interaction-guard" strategy="afterInteractive">
           {`

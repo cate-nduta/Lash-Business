@@ -19,6 +19,7 @@ interface DiscountsData {
     tier45Percentage: number
   }
   depositPercentage: number
+  fridayNightDepositPercentage: number
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -28,12 +29,14 @@ export default function AdminDiscounts() {
   const [discounts, setDiscounts] = useState<DiscountsData>({
     firstTimeClientDiscount: { enabled: true, percentage: 10, bannerEnabled: 'auto', bannerMessage: '' },
     returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
-    depositPercentage: 35,
+    depositPercentage: 30,
+    fridayNightDepositPercentage: 50,
   })
   const [originalDiscounts, setOriginalDiscounts] = useState<DiscountsData>({
     firstTimeClientDiscount: { enabled: true, percentage: 10, bannerEnabled: 'auto', bannerMessage: '' },
     returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
-    depositPercentage: 35,
+    depositPercentage: 30,
+    fridayNightDepositPercentage: 50,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -107,7 +110,8 @@ export default function AdminDiscounts() {
                 0,
             ),
           },
-          depositPercentage: Number(data?.depositPercentage ?? 0),
+          depositPercentage: Number(data?.depositPercentage ?? 30),
+          fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
         }
         setDiscounts(normalized)
         setOriginalDiscounts(normalized)
@@ -189,7 +193,8 @@ export default function AdminDiscounts() {
           tier30Percentage: Number(discounts.returningClientDiscount.tier30Percentage ?? 0),
           tier45Percentage: Number(discounts.returningClientDiscount.tier45Percentage ?? 0),
         },
-        depositPercentage: Number(discounts.depositPercentage ?? 0),
+        depositPercentage: Number(discounts.depositPercentage ?? 30),
+        fridayNightDepositPercentage: Number(discounts.fridayNightDepositPercentage ?? 50),
       }
 
       const response = await authorizedFetch('/api/admin/discounts', {
@@ -427,26 +432,49 @@ export default function AdminDiscounts() {
 
             <div className="bg-pink-light rounded-lg p-6">
               <h2 className="text-2xl font-semibold text-brown-dark mb-4">Deposit Settings</h2>
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">
-                  Deposit Percentage (%)
-                </label>
-                <input
-                  type="number"
-                  value={discounts.depositPercentage}
-                  onChange={(e) =>
-                    setDiscounts((prev) => ({
-                      ...prev,
-                      depositPercentage: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                  min="0"
-                  max="100"
-                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                />
-                <p className="text-sm text-brown mt-2">
-                  Percentage of the final price (after discounts) required as deposit to secure a booking
-                </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Standard Deposit Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={discounts.depositPercentage}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        depositPercentage: parseInt(e.target.value) || 0,
+                      }))
+                    }
+                    min="0"
+                    max="100"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <p className="text-sm text-brown mt-2">
+                    Percentage of the final price (after discounts) required as deposit to secure a regular booking
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Friday Night Deposit Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={discounts.fridayNightDepositPercentage}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        fridayNightDepositPercentage: parseInt(e.target.value) || 50,
+                      }))
+                    }
+                    min="0"
+                    max="100"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <p className="text-sm text-brown mt-2">
+                    Percentage of the final price required as deposit for Friday evening time slot bookings. This applies automatically when clients select Friday evening slots.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

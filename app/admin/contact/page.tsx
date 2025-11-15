@@ -20,17 +20,16 @@ export default function AdminContact() {
     showEmail: true,
     showInstagram: true,
     showLocation: true,
+    headerTitle: 'Get In Touch',
+    headerSubtitle: 'Visit us at our studio or reach out with any questions. We can\'t wait to welcome you and curate a stunning lash look.',
+    businessHoursTitle: 'Business Hours',
+    socialMediaTitle: 'Follow Us',
+    socialMediaDescription: 'Stay connected and see our latest work on social media',
+    bookingTitle: 'Ready to Book?',
+    bookingDescription: 'Reserve your studio appointment today and let us pamper you with a luxury lash experience.',
+    bookingButtonText: 'Book Appointment',
   }
   type ContactState = typeof defaultContactState
-
-  const coerceBoolean = (value: unknown, defaultValue: boolean) => {
-    if (typeof value === 'boolean') return value
-    if (typeof value === 'string') {
-      if (value.toLowerCase() === 'true') return true
-      if (value.toLowerCase() === 'false') return false
-    }
-    return defaultValue
-  }
 
   const [contact, setContact] = useState<ContactState>(defaultContactState)
   const [originalContact, setOriginalContact] = useState<ContactState>(defaultContactState)
@@ -76,14 +75,13 @@ export default function AdminContact() {
       const response = await authorizedFetch('/api/admin/contact')
       if (response.ok) {
         const data = await response.json()
-        const { mobileServiceNote, ...rest } = data || {}
         const sanitizedContact = {
           ...defaultContactState,
-          ...rest,
-          showPhone: coerceBoolean(rest?.showPhone, defaultContactState.showPhone),
-          showEmail: coerceBoolean(rest?.showEmail, defaultContactState.showEmail),
-          showInstagram: coerceBoolean(rest?.showInstagram, defaultContactState.showInstagram),
-          showLocation: coerceBoolean(rest?.showLocation, defaultContactState.showLocation),
+          ...data,
+          showPhone: data.showPhone !== undefined ? Boolean(data.showPhone) : defaultContactState.showPhone,
+          showEmail: data.showEmail !== undefined ? Boolean(data.showEmail) : defaultContactState.showEmail,
+          showInstagram: data.showInstagram !== undefined ? Boolean(data.showInstagram) : defaultContactState.showInstagram,
+          showLocation: data.showLocation !== undefined ? Boolean(data.showLocation) : defaultContactState.showLocation,
         }
         setContact(sanitizedContact)
         setOriginalContact(sanitizedContact)
@@ -143,24 +141,6 @@ export default function AdminContact() {
     setPendingNavigation(null)
   }
 
-  const handleToggleVisibility = (
-    key: 'showPhone' | 'showEmail' | 'showInstagram' | 'showLocation'
-  ) => {
-    setContact((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }))
-  }
-
-  const visibilityButtonStyles = (active: boolean) =>
-    `ml-4 px-4 py-1 rounded-full border-2 text-sm font-medium transition-all ${
-      active
-        ? 'bg-green-50 border-green-400 text-green-700 hover:bg-green-100'
-        : 'bg-gray-100 border-gray-300 text-gray-500 hover:bg-gray-200'
-    }`
-
-  const visibilityLabel = (active: boolean) => (active ? 'Visible on website' : 'Hidden on website')
-
   const handleSave = async () => {
     setSaving(true)
     setMessage(null)
@@ -173,14 +153,26 @@ export default function AdminContact() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Contact information updated successfully!' })
-        setOriginalContact({ ...contact }) // Update original to clear unsaved changes flag
-        setShowDialog(false) // Close dialog if open
+        const responseData = await response.json()
+        console.log('Save response:', responseData)
+        setMessage({ type: 'success', text: 'Contact information updated successfully! The contact page will refresh automatically.' })
+        setOriginalContact({ ...contact })
+        setShowDialog(false)
+        
+        // Open contact page in new tab to verify changes
+        setTimeout(() => {
+          window.open('/contact', '_blank')
+        }, 1000)
       } else {
-        setMessage({ type: 'error', text: 'Failed to save contact information' })
+        const errorData = await response.json().catch(() => ({}))
+        setMessage({ 
+          type: 'error', 
+          text: errorData.error || 'Failed to save contact information' 
+        })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'An error occurred' })
+      console.error('Error saving contact:', error)
+      setMessage({ type: 'error', text: 'An error occurred while saving' })
     } finally {
       setSaving(false)
     }
@@ -229,21 +221,58 @@ export default function AdminContact() {
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-display text-brown-dark mb-8">Contact Information</h1>
+          <h1 className="text-4xl font-display text-brown-dark mb-8">Contact Page Settings</h1>
           
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Header Section */}
+            <div className="pb-8 border-b-2 border-brown-light">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Page Header</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Header Title
+                  </label>
+                  <input
+                    type="text"
+                    value={contact.headerTitle}
+                    onChange={(e) => setContact({ ...contact, headerTitle: e.target.value })}
+                    placeholder="Get In Touch"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Header Subtitle
+                  </label>
+                  <textarea
+                    value={contact.headerSubtitle}
+                    onChange={(e) => setContact({ ...contact, headerSubtitle: e.target.value })}
+                    placeholder="Visit us at our studio or reach out with any questions..."
+                    rows={3}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information Section */}
+            <div className="pb-8 border-b-2 border-brown-light">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Contact Information</h2>
+              <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-brown-dark">
                   Phone Number
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleToggleVisibility('showPhone')}
-                  className={visibilityButtonStyles(contact.showPhone)}
-                >
-                  {visibilityLabel(contact.showPhone)}
-                </button>
+                    <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contact.showPhone}
+                        onChange={(e) => setContact({ ...contact, showPhone: e.target.checked })}
+                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                      />
+                      <span>Show on website</span>
+                    </label>
               </div>
               <input
                 type="text"
@@ -259,13 +288,15 @@ export default function AdminContact() {
                 <label className="block text-sm font-medium text-brown-dark">
                   Email Address
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleToggleVisibility('showEmail')}
-                  className={visibilityButtonStyles(contact.showEmail)}
-                >
-                  {visibilityLabel(contact.showEmail)}
-                </button>
+                    <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contact.showEmail}
+                        onChange={(e) => setContact({ ...contact, showEmail: e.target.checked })}
+                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                      />
+                      <span>Show on website</span>
+                    </label>
               </div>
               <input
                 type="email"
@@ -281,13 +312,15 @@ export default function AdminContact() {
                 <label className="block text-sm font-medium text-brown-dark">
                   Instagram Handle
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleToggleVisibility('showInstagram')}
-                  className={visibilityButtonStyles(contact.showInstagram)}
-                >
-                  {visibilityLabel(contact.showInstagram)}
-                </button>
+                    <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contact.showInstagram}
+                        onChange={(e) => setContact({ ...contact, showInstagram: e.target.checked })}
+                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                      />
+                      <span>Show on website</span>
+                    </label>
               </div>
               <input
                 type="text"
@@ -317,13 +350,15 @@ export default function AdminContact() {
                 <label className="block text-sm font-medium text-brown-dark">
                   Studio Location
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleToggleVisibility('showLocation')}
-                  className={visibilityButtonStyles(contact.showLocation)}
-                >
-                  {visibilityLabel(contact.showLocation)}
-                </button>
+                    <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contact.showLocation}
+                        onChange={(e) => setContact({ ...contact, showLocation: e.target.checked })}
+                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                      />
+                      <span>Show on website</span>
+                    </label>
               </div>
               <input
                 type="text"
@@ -332,6 +367,99 @@ export default function AdminContact() {
                 placeholder="LashDiary Studio, Nairobi, Kenya"
                 className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
               />
+                </div>
+              </div>
+            </div>
+
+            {/* Business Hours Section */}
+            <div className="pb-8 border-b-2 border-brown-light">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Business Hours Section</h2>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">
+                  Section Title
+                </label>
+                <input
+                  type="text"
+                  value={contact.businessHoursTitle}
+                  onChange={(e) => setContact({ ...contact, businessHoursTitle: e.target.value })}
+                  placeholder="Business Hours"
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                />
+              </div>
+            </div>
+
+            {/* Social Media Section */}
+            <div className="pb-8 border-b-2 border-brown-light">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Social Media Section</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Section Title
+                  </label>
+                  <input
+                    type="text"
+                    value={contact.socialMediaTitle}
+                    onChange={(e) => setContact({ ...contact, socialMediaTitle: e.target.value })}
+                    placeholder="Follow Us"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Section Description
+                  </label>
+                  <textarea
+                    value={contact.socialMediaDescription}
+                    onChange={(e) => setContact({ ...contact, socialMediaDescription: e.target.value })}
+                    placeholder="Stay connected and see our latest work on social media"
+                    rows={2}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Booking Section */}
+            <div>
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Booking Section</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Section Title
+                  </label>
+                  <input
+                    type="text"
+                    value={contact.bookingTitle}
+                    onChange={(e) => setContact({ ...contact, bookingTitle: e.target.value })}
+                    placeholder="Ready to Book?"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Section Description
+                  </label>
+                  <textarea
+                    value={contact.bookingDescription}
+                    onChange={(e) => setContact({ ...contact, bookingDescription: e.target.value })}
+                    placeholder="Reserve your studio appointment today..."
+                    rows={2}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    value={contact.bookingButtonText}
+                    onChange={(e) => setContact({ ...contact, bookingButtonText: e.target.value })}
+                    placeholder="Book Appointment"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -347,4 +475,3 @@ export default function AdminContact() {
     </div>
   )
 }
-

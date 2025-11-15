@@ -10,6 +10,17 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
+function trackEmailUsage(promo: any, email: string | null | undefined) {
+  if (email) {
+    const usedByEmails = Array.isArray(promo.usedByEmails) ? [...promo.usedByEmails] : []
+    const normalizedEmail = email.toLowerCase()
+    if (!usedByEmails.includes(normalizedEmail)) {
+      usedByEmails.push(normalizedEmail)
+      promo.usedByEmails = usedByEmails
+    }
+  }
+}
+
 async function sendRewardReadyEmail(referrerEmail: string, code: string) {
   if (!resend) return
 
@@ -123,6 +134,8 @@ export async function POST(request: NextRequest) {
       const commissionEarlyAmount = 0
       salonCommissionAmount = commissionFinalAmount
 
+      trackEmailUsage(promo, email)
+
       promo.usedCount = (promo.usedCount || 0) + 1
       promo.salonUsedCount = (promo.salonUsedCount || 0) + 1
       promo.commissionTotal = (promo.commissionTotal || 0) + salonCommissionAmount
@@ -200,6 +213,8 @@ export async function POST(request: NextRequest) {
 
       salonRedeemed = true
     } else if (isReferral) {
+      trackEmailUsage(promo, email)
+
       if (isReferrer) {
         if (!promo.referrerRewardAvailable) {
           return NextResponse.json({ error: 'Referral reward not available for this code.' }, { status: 400 })
@@ -218,6 +233,7 @@ export async function POST(request: NextRequest) {
         friendRedeemed = true
       }
     } else {
+      trackEmailUsage(promo, email)
       promo.usedCount = (promo.usedCount || 0) + 1
       if (promo.usageLimit && promo.usedCount >= promo.usageLimit) {
         promo.active = false
@@ -248,5 +264,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update promo code usage' }, { status: 500 })
   }
 }
-
-

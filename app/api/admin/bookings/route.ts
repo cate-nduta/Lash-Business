@@ -41,6 +41,17 @@ interface Booking {
     rescheduledBy: 'admin' | 'client'
     notes?: string | null
   }>
+  eyeShape?: {
+    id: string
+    label: string
+    imageUrl?: string | null
+    description?: string | null
+    recommendedStyles?: string[]
+  } | null
+  desiredLook?: string | null
+  desiredLookStatus?: 'recommended' | 'custom' | null
+  desiredLookStatusMessage?: string | null
+  desiredLookMatchesRecommendation?: boolean | null
 }
 
 export async function GET(request: NextRequest) {
@@ -52,7 +63,13 @@ export async function GET(request: NextRequest) {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
 
-    return NextResponse.json({ bookings })
+    return NextResponse.json({ bookings }, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    })
   } catch (error: any) {
     if (error.status === 401) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

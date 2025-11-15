@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { type ServiceCatalog, type ServiceCategory } from '@/lib/services-utils'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 interface DisplayService {
   id: string
@@ -28,18 +30,24 @@ const serviceDescriptions: Record<string, string> = {
   'Lash Lift': 'Enhance your natural lashes with a perm that curls and lifts, no extensions needed.',
 }
 
-const formatCurrency = (value: number) => `KSH ${value.toLocaleString()}`
-
-const toDisplayServices = (category: ServiceCategory): DisplayService[] =>
-  category.services.map((service) => ({
-    id: service.id,
-    name: service.name,
-    description: serviceDescriptions[service.name] || '',
-    price: formatCurrency(service.price),
-    duration: service.duration ? `${service.duration} min` : undefined,
-  }))
+const toDisplayServices = (category: ServiceCategory, currency: 'KES' | 'USD', formatCurrency: (amount: number) => string): DisplayService[] =>
+  category.services.map((service) => {
+    const price = currency === 'USD' && service.priceUSD !== undefined
+      ? service.priceUSD
+      : currency === 'USD' && service.price
+      ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      : service.price || 0
+    return {
+      id: service.id,
+      name: service.name,
+      description: serviceDescriptions[service.name] || '',
+      price: formatCurrency(price),
+      duration: service.duration ? `${service.duration} min` : undefined,
+    }
+  })
 
 export default function Services() {
+  const { currency, setCurrency, formatCurrency } = useCurrency()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -92,11 +100,11 @@ export default function Services() {
   }
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-20">
+    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-display text-[var(--color-primary)] mb-6">Our Services</h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+        <div className="text-center mb-8 sm:mb-12 md:mb-16">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-[var(--color-primary)] mb-4 sm:mb-6">Our Services</h1>
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto px-2">
             Discover our range of premium lash and brow treatments. Select a category to explore services crafted to
             enhance your natural beauty.
           </p>
@@ -108,13 +116,13 @@ export default function Services() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8 md:mb-10 px-2">
               {catalog.categories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => setActiveCategoryId(category.id)}
-                  className={`px-5 py-2 rounded-full border text-sm font-semibold transition-all ${
+                  className={`px-4 sm:px-5 py-2 rounded-full border text-xs sm:text-sm font-semibold transition-all touch-manipulation ${
                     category.id === activeCategoryId
                       ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border-[var(--color-primary)] shadow-lg'
                       : 'bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-text)]/20 hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)]'
@@ -138,18 +146,18 @@ export default function Services() {
                   ref={ref}
                   className={`space-y-6 transition-opacity ${inView ? 'animate-fade-in-up' : 'opacity-0'}`}
                 >
-                  {toDisplayServices(activeCategory).map((service) => (
+                  {toDisplayServices(activeCategory, currency, formatCurrency).map((service) => (
                 <div
                   key={service.id}
-                  className="rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover:scale-[1.02] transform cursor-pointer group"
+                  className="rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-4 sm:p-6 md:p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover:scale-[1.02] transform cursor-pointer group"
                 >
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4 mb-3 flex-wrap">
-                        <h3 className="text-2xl md:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3">
+                        <h3 className="text-xl sm:text-2xl md:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">
                           {service.name}
                         </h3>
-                        <span className="text-[var(--color-primary)] font-semibold text-xl bg-[color-mix(in srgb,var(--color-primary) 8%, var(--color-surface) 92%)] px-3 py-1 rounded-full border border-[var(--color-primary)]/40 group-hover:border-[var(--color-primary)] transition-colors">
+                        <span className="text-[var(--color-primary)] font-semibold text-lg sm:text-xl bg-[color-mix(in srgb,var(--color-primary) 8%, var(--color-surface) 92%)] px-3 py-1 rounded-full border border-[var(--color-primary)]/40 group-hover:border-[var(--color-primary)] transition-colors inline-block w-fit">
                           {service.price}
                         </span>
                       </div>
@@ -193,7 +201,7 @@ export default function Services() {
               longevity and maintain the quality of your lashes.
             </p>
             <p>
-              <strong className="text-[var(--color-primary)]">Pricing:</strong> All prices are in Kenyan Shillings (KSH). Contact us for
+              <strong className="text-[var(--color-primary)]">Pricing:</strong> Prices are displayed in {currency === 'KES' ? 'Kenyan Shillings (KES)' : 'US Dollars (USD)'}. You can switch currencies on the booking page. Contact us for
               any questions about our services or to book your appointment.
             </p>
           </div>

@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
+import { google } from 'googleapis'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
+
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+
+// Initialize Google Calendar API
+function getCalendarClient() {
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
+    return null
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      project_id: process.env.GOOGLE_PROJECT_ID,
+    },
+    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  })
+
+  return google.calendar({ version: 'v3', auth })
+}
 
 const parseClientDate = (value: string | null) => {
   if (!value) return null
@@ -26,78 +47,119 @@ export async function GET(request: NextRequest) {
     const targetDate = parseClientDate(dateParam)
     const email = emailParam.trim().toLowerCase()
 
-    const [bookingsData, discountsConfig] = await Promise.all([
-      readDataFile<{ bookings: Array<Record<string, any>> }>('bookings.json', { bookings: [] }),
+    const [discountsConfig] = await Promise.all([
       readDataFile<Record<string, any>>('discounts.json', {}),
     ])
-    const bookings = Array.isArray(bookingsData?.bookings) ? bookingsData.bookings : []
+    
     const returningConfig = discountsConfig?.returningClientDiscount ?? {}
     const returningEnabled = returningConfig?.enabled !== false
+    
+    // Default to 7% for 30 days and 4% for 31-45 days if not configured
     const tier30Percentage = Number(
       returningConfig?.tier30Percentage ??
         returningConfig?.within30DaysPercentage ??
-        returningConfig?.percentage ??
-        0,
+        7, // Default 7% for within 30 days
     )
     const tier45Percentage = Number(
       returningConfig?.tier45Percentage ??
         returningConfig?.within31To45DaysPercentage ??
-        returningConfig?.percentage ??
-        0,
+        4, // Default 4% for 31-45 days
     )
 
-    let lastPaidAt: string | null = null
+    let lastAppointmentDate: string | null = null
+
+    // Check Google Calendar for the last appointment date
+    const calendar = getCalendarClient()
+    if (calendar) {
+      try {
+        // Search for past events with this email
+        const oneYearAgo = new Date()
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+        
+        const response = await calendar.events.list({
+          calendarId: CALENDAR_ID,
+          timeMin: oneYearAgo.toISOString(),
+          timeMax: new Date().toISOString(), // Only past events
+          maxResults: 2500,
+          singleEvents: true,
+          orderBy: 'startTime',
+        })
+
+        const events = response.data.items || []
+        const matchingEvents: Array<{ date: Date; event: any }> = []
+
+        // Find all events with this email
+        for (const event of events) {
+          const description = event.description || ''
+          const summary = event.summary || ''
+          const attendees = event.attendees || []
+          
+          // Check if email appears in description, summary, or attendees
+          if (
+            description.toLowerCase().includes(email.toLowerCase()) ||
+            summary.toLowerCase().includes(email.toLowerCase()) ||
+            attendees.some((attendee: any) => attendee.email?.toLowerCase() === email.toLowerCase())
+          ) {
+            // Get the event start date
+            const startDate = event.start?.dateTime || event.start?.date
+            if (startDate) {
+              const eventDate = new Date(startDate)
+              if (!isNaN(eventDate.getTime())) {
+                matchingEvents.push({ date: eventDate, event })
+              }
+            }
+          }
+        }
+
+        // Find the most recent appointment
+        if (matchingEvents.length > 0) {
+          matchingEvents.sort((a, b) => b.date.getTime() - a.date.getTime())
+          const mostRecent = matchingEvents[0]
+          lastAppointmentDate = mostRecent.date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+        }
+      } catch (error) {
+        console.warn('Error checking calendar for last appointment:', error)
+        // Fall back to bookings.json if calendar check fails
+      }
+    }
+
+    // Fallback: Check bookings.json if calendar didn't find anything
+    if (!lastAppointmentDate) {
+      const bookingsData = await readDataFile<{ bookings: Array<Record<string, any>> }>('bookings.json', { bookings: [] })
+      const bookings = Array.isArray(bookingsData?.bookings) ? bookingsData.bookings : []
 
     for (const booking of bookings) {
       const bookingEmail =
         typeof booking?.email === 'string' ? booking.email.trim().toLowerCase() : null
       if (bookingEmail !== email) continue
 
-      const finalPriceRaw = Number(booking?.finalPrice ?? 0)
-      const finalPrice = Number.isFinite(finalPriceRaw) ? finalPriceRaw : 0
-      const depositRaw = Number(booking?.deposit ?? 0)
-      const depositTotal = Number.isFinite(depositRaw) ? depositRaw : 0
-
-      let paidAt: string | null =
-        typeof booking?.paidInFullAt === 'string' && booking.paidInFullAt.trim().length > 0
-          ? booking.paidInFullAt
-          : null
-
-      if (!paidAt && Array.isArray(booking?.payments) && depositTotal >= finalPrice && finalPrice > 0) {
-        const latestPayment = booking.payments
-          .map((entry: any) =>
-            typeof entry?.date === 'string' && entry.date.trim().length > 0 ? entry.date : null,
-          )
-          .filter((value: string | null): value is string => Boolean(value))
-          .sort((a: string, b: string) => new Date(b).getTime() - new Date(a).getTime())
-        if (latestPayment.length > 0) {
-          paidAt = latestPayment[0]
+        // Use the booking date as the appointment date
+        const bookingDate = typeof booking?.date === 'string' ? booking.date : null
+        if (bookingDate) {
+          if (!lastAppointmentDate || bookingDate > lastAppointmentDate) {
+            lastAppointmentDate = bookingDate
+          }
         }
-      }
-
-      if (!paidAt) continue
-
-      if (!lastPaidAt || new Date(paidAt) > new Date(lastPaidAt)) {
-        lastPaidAt = paidAt
       }
     }
 
     let discountPercent = 0
     let daysSince: number | null = null
 
-    if (returningEnabled && lastPaidAt && targetDate) {
-      const lastPaidDate = new Date(lastPaidAt)
-      const diffMs = targetDate.getTime() - lastPaidDate.getTime()
+    if (returningEnabled && lastAppointmentDate && targetDate) {
+      const lastApptDate = new Date(lastAppointmentDate)
+      const diffMs = targetDate.getTime() - lastApptDate.getTime()
       daysSince = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+      
       if (daysSince >= 0 && daysSince <= 30) {
         discountPercent = Math.max(0, tier30Percentage)
-      } else if (daysSince >= 0 && daysSince <= 45) {
+      } else if (daysSince >= 31 && daysSince <= 45) {
         discountPercent = Math.max(0, tier45Percentage)
       }
     }
 
     return NextResponse.json({
-      lastPaidAt,
+      lastPaidAt: lastAppointmentDate, // Keep field name for compatibility
       discountPercent,
       daysSince,
     })

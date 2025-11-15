@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 interface Booking {
   id: string
@@ -64,6 +66,7 @@ interface YearlyStats {
 }
 
 export default function AdminAnalytics() {
+  const { currency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
@@ -393,8 +396,17 @@ export default function AdminAnalytics() {
     return totals
   }
 
+  // Helper function to convert analytics amount to selected currency
+  // Note: Analytics data is stored in KES, so we convert if USD is selected
+  const convertAnalyticsAmount = (amount: number): number => {
+    if (currency === 'USD') {
+      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+    }
+    return amount
+  }
+  
   const formatCurrency = (amount: number) => {
-    return `KSH ${amount.toLocaleString()}`
+    return formatCurrencyContext(convertAnalyticsAmount(amount))
   }
 
 const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | YearlyStats) => {
@@ -476,7 +488,7 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex justify-between items-center">
+        <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <Link 
             href="/admin/dashboard" 
             className="text-brown hover:text-brown-dark"
@@ -489,7 +501,7 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
           <h1 className="text-4xl font-display text-brown-dark mb-8">Analytics & Reports</h1>
 
           {/* Date Range Selector */}
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-semibold text-brown-dark mb-2">
                 Start Date
@@ -561,7 +573,7 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
             <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
               <p className="text-sm text-gray-600 mb-2">Total Services</p>
               <p className="text-3xl font-bold text-brown-dark">{totalStats.servicesCount}</p>

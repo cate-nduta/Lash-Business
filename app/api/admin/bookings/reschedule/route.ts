@@ -4,6 +4,81 @@ import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailNotification } from '../../../booking/email/utils'
 import { recordActivity } from '@/lib/activity-log'
+
+type BookingLookSelection = {
+  id: string
+  label: string
+  imageUrl: string
+  description: string | null
+}
+
+const getLookSelection = (input: any, fallbackLabel: string, fallbackId: string): BookingLookSelection => {
+  if (input && typeof input === 'object') {
+    const idValue = typeof input.id === 'string' && input.id.trim().length > 0 ? input.id.trim() : fallbackId
+    const labelValue =
+      typeof input.label === 'string' && input.label.trim().length > 0 ? input.label.trim() : fallbackLabel
+    const imageValue =
+      typeof input.imageUrl === 'string' && input.imageUrl.trim().length > 0 ? input.imageUrl.trim() : ''
+    const descriptionValue =
+      typeof input.description === 'string' && input.description.trim().length > 0
+        ? input.description.trim()
+        : null
+    return {
+      id: idValue,
+      label: labelValue,
+      imageUrl: imageValue,
+      description: descriptionValue,
+    }
+  }
+
+  return {
+    id: fallbackId,
+    label: fallbackLabel,
+    imageUrl: '',
+    description: null,
+  }
+}
+
+type EyeShapeSelection = {
+  id: string
+  label: string
+  imageUrl: string
+  description: string | null
+  recommendedStyles: string[]
+}
+
+const getEyeShapeSelection = (input: any, fallbackLabel: string, fallbackId: string): EyeShapeSelection => {
+  const base = {
+    id: fallbackId,
+    label: fallbackLabel,
+    imageUrl: '',
+    description: null,
+    recommendedStyles: [] as string[],
+  }
+
+  if (!input || typeof input !== 'object') {
+    return base
+  }
+
+  return {
+    id:
+      typeof input.id === 'string' && input.id.trim().length > 0 ? input.id.trim() : base.id,
+    label:
+      typeof input.label === 'string' && input.label.trim().length > 0 ? input.label.trim() : base.label,
+    imageUrl:
+      typeof input.imageUrl === 'string' && input.imageUrl.trim().length > 0 ? input.imageUrl.trim() : base.imageUrl,
+    description:
+      typeof input.description === 'string' && input.description.trim().length > 0
+        ? input.description.trim()
+        : base.description,
+    recommendedStyles: Array.isArray(input.recommendedStyles)
+      ? input.recommendedStyles
+          .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry: string) => entry.length > 0)
+      : base.recommendedStyles,
+  }
+}
+
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
 
@@ -232,6 +307,12 @@ export async function POST(request: NextRequest) {
           manageToken: booking.manageToken || undefined,
           policyWindowHours: booking.cancellationWindowHours || CLIENT_MANAGE_WINDOW_HOURS,
           notes: typeof booking.notes === 'string' ? booking.notes : undefined,
+          eyeShape: getEyeShapeSelection(booking.eyeShape, 'Not specified', `legacy-eye-shape-${booking.id}`),
+          desiredLook: typeof booking.desiredLook === 'string' && booking.desiredLook.trim().length > 0
+            ? booking.desiredLook
+            : 'Not specified',
+          desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
+          desiredLookMatchesRecommendation: booking.desiredLookMatchesRecommendation === true,
         })
 
         if (!emailResult?.success) {

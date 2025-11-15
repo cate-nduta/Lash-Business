@@ -283,10 +283,39 @@ export default function AdminGallery() {
     }
   }
 
-  const removeImage = (index: number) => {
-    setGallery((prev) => ({
-      images: prev.images.filter((_, i) => i !== index),
-    }))
+  const removeImage = async (index: number) => {
+    // Store the original gallery state in case we need to revert
+    const originalGalleryState = { ...gallery }
+    
+    // Remove from local state immediately
+    const updatedGallery = {
+      images: gallery.images.filter((_, i) => i !== index),
+    }
+    setGallery(updatedGallery)
+    
+    // Automatically save to backend
+    try {
+      const response = await fetch('/api/admin/gallery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedGallery),
+        credentials: 'include',
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Image removed successfully!' })
+        setOriginalGallery(updatedGallery) // Update original to clear unsaved changes flag
+      } else {
+        setMessage({ type: 'error', text: 'Failed to remove image. Please try again.' })
+        // Revert the change if save failed
+        setGallery(originalGalleryState)
+      }
+    } catch (error) {
+      console.error('Error removing image:', error)
+      setMessage({ type: 'error', text: 'An error occurred while removing the image' })
+      // Revert the change if save failed
+      setGallery(originalGalleryState)
+    }
   }
 
   const updateImageName = (index: number, newName: string) => {

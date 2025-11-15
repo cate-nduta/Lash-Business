@@ -1,5 +1,24 @@
 import nodemailer from 'nodemailer'
 
+function normalizeBaseUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    ''
+
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+
+  return 'https://lashdiary.co.ke'
+}
+
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
   process.env.OWNER_EMAIL ||
@@ -7,8 +26,7 @@ const BUSINESS_NOTIFICATION_EMAIL =
   'hello@lashdiary.co.ke'
 const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
 const DEFAULT_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
-const BASE_URL = (process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || '')
-  .replace(/\/$/, '')
+const BASE_URL = normalizeBaseUrl()
 const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
 const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
 const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
@@ -82,6 +100,14 @@ const serviceDurations: { [key: string]: number } = {
   'Lash Lift': 60,
 }
 
+type EyeShapeSelection = {
+  id: string
+  label: string
+  imageUrl: string
+  description?: string | null
+  recommendedStyles?: string[]
+}
+
 type SendEmailPayload = {
   name: string
   email: string
@@ -100,6 +126,10 @@ type SendEmailPayload = {
   policyWindowHours?: number
   transferFromName?: string
   notes?: string
+  eyeShape: EyeShapeSelection
+  desiredLook: string
+  desiredLookStatus: 'recommended' | 'custom'
+  desiredLookMatchesRecommendation: boolean
 }
 
 // Calculate deposit amount (35% of service price)
@@ -129,6 +159,7 @@ function buildGoogleCalendarLink(options: {
   end: Date
   location: string
   description: string
+  reminderMinutes?: number
 }) {
   const start = formatGoogleCalendarDate(options.start)
   const end = formatGoogleCalendarDate(options.end)
@@ -139,6 +170,10 @@ function buildGoogleCalendarLink(options: {
     location: options.location,
     details: options.description,
   })
+  if (typeof options.reminderMinutes === 'number') {
+    params.set('trp', 'true')
+    params.set('reminder', `reminderMethod=popup;reminderMinutes=${options.reminderMinutes}`)
+  }
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
@@ -155,10 +190,13 @@ function createCustomerEmailTemplate(bookingData: {
   servicePrice: string
   manageLink?: string
   addToCalendarLink?: string
-  icsLink?: string
   policyWindowHours?: number
   transferNote?: string
   transferFinancialNote?: string
+  eyeShapeLabel: string
+  eyeShapeRecommendations?: string[]
+  desiredLookLabel: string
+  lashMapStatusMessage: string
 }) {
   const {
     name,
@@ -172,12 +210,14 @@ function createCustomerEmailTemplate(bookingData: {
     servicePrice,
     manageLink,
     addToCalendarLink,
-    icsLink: rawIcsLink,
     policyWindowHours,
     transferNote = '',
     transferFinancialNote = '',
+    eyeShapeLabel,
+    eyeShapeRecommendations = [],
+    desiredLookLabel,
+    lashMapStatusMessage,
   } = bookingData
-  const icsLink = rawIcsLink ?? undefined
   const appointmentLocation = location || DEFAULT_LOCATION
   const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
@@ -245,6 +285,26 @@ function createCustomerEmailTemplate(bookingData: {
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Eye shape</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${eyeShapeLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Desired lash look</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${desiredLookLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
+                  </tr>
+                  ${
+                    eyeShapeRecommendations.length > 0
+                      ? `<tr>
+                          <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Recommended styles</td>
+                          <td style="padding:6px 0; color:${textPrimary};">${eyeShapeRecommendations.join(', ')}</td>
+                        </tr>`
+                      : ''
+                  }
+                  <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
                   </tr>
@@ -275,25 +335,18 @@ function createCustomerEmailTemplate(bookingData: {
                 Need to update anything? Reply to this email or email us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
               </p>
 
-              <div style="margin:28px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px;">
+              <div style="margin:28px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px;">
                 <a href="${manageButtonHref}" style="display:inline-block; padding:12px 28px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;">${manageButtonLabel}</a>
                 ${
                   showAddToCalendar && addToCalendarLink
-                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:12px 24px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
-                    : ''
-                }
-                ${
-                  icsLink
-                    ? `<a href="${icsLink}" style="display:inline-block; padding:12px 24px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Apple / Outlook Calendar</a>`
+                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:12px 28px; border:2px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
                     : ''
                 }
               </div>
 
               ${
-                icsLink
-                  ? `<p style="margin:18px 0 0 0; font-size:13px; color:${textSecondary}; text-align:center;">
-                Using another calendar? Download the Apple/Outlook link above and your device will add a reminder automatically.
-              </p>`
+                showAddToCalendar && addToCalendarLink
+                  ? `<p style="margin:18px 0 0 0; font-size:13px; color:${textSecondary}; text-align:center;">Need a device reminder? Use the Google Calendar button to add the appointment with a 24-hour alert.</p>`
                   : ''
               }
             </td>
@@ -333,7 +386,11 @@ function createOwnerEmailTemplate(bookingData: {
   policyWindowHours?: number
   notes?: string
   addToCalendarLink?: string
-  icsLink?: string
+  eyeShapeLabel: string
+  recommendedStyles: string[]
+  desiredLookLabel: string
+  lashMapStatusMessage: string
+  adminBookingLink?: string
 }, customerEmailError?: string | null, customerEmail?: string) {
   const {
     name,
@@ -353,9 +410,12 @@ function createOwnerEmailTemplate(bookingData: {
     policyWindowHours,
     notes,
     addToCalendarLink,
-    icsLink: rawIcsLink,
+    eyeShapeLabel,
+    recommendedStyles,
+    desiredLookLabel,
+    lashMapStatusMessage,
+    adminBookingLink,
   } = bookingData
-  const icsLink = rawIcsLink ?? undefined
   const appointmentLocation = location || DEFAULT_LOCATION
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
@@ -438,6 +498,26 @@ The LashDiary Team
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Not specified'}</td>
                   </tr>
                   <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Eye shape</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${eyeShapeLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Desired lash look</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${desiredLookLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
+                  </tr>
+                  ${
+                    recommendedStyles.length > 0
+                      ? `<tr>
+                          <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Recommended styles</td>
+                          <td style="padding:6px 0; color:${textPrimary};">${recommendedStyles.join(', ')}</td>
+                        </tr>`
+                      : ''
+                  }
+                  <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Date</td>
                     <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
                   </tr>
@@ -476,34 +556,29 @@ The LashDiary Team
 
               ${emailIssueBlock}
 
-              ${manageLink ? `
-              <div style="margin:24px 0 0 0; text-align:center;">
-                <a href="${manageLink}" style="display:inline-block; padding:10px 22px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;">Open client manage link</a>
-              </div>
-              ` : ''}
-
               ${
-                addToCalendarLink || icsLink
+                adminBookingLink
                   ? `
-              <div style="margin:18px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px;">
-                ${
-                  addToCalendarLink
-                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:10px 22px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
-                    : ''
-                }
-                ${
-                  icsLink
-                    ? `<a href="${icsLink}" style="display:inline-block; padding:10px 22px; border:1px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Download .ics (Apple/Outlook)</a>`
-                    : ''
-                }
+              <div style="margin:24px 0 0 0; text-align:center;">
+                <a href="${adminBookingLink}" style="display:inline-block; padding:10px 24px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">View booking in dashboard</a>
               </div>
-              <p style="margin:12px 0 0 0; font-size:12px; color:${textSecondary}; text-align:center;">Need a device reminder? Use ${addToCalendarLink && icsLink ? 'either button' : addToCalendarLink ? 'the Google Calendar button' : 'the .ics download'} to add the appointment with a 24-hour alert.</p>
               `
                   : ''
               }
 
               ${
-                addToCalendarLink || icsLink
+                addToCalendarLink
+                  ? `
+              <div style="margin:18px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px;">
+                <a href="${addToCalendarLink}" style="display:inline-block; padding:10px 22px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
+              </div>
+              <p style="margin:12px 0 0 0; font-size:12px; color:${textSecondary}; text-align:center;">Need a device reminder? Use the Google Calendar button to add the appointment with a 24-hour alert.</p>
+              `
+                  : ''
+              }
+
+              ${
+                addToCalendarLink
                   ? ''
                   : `<p style="margin:28px 0 0 0; font-size:14px; color:${textSecondary};"></p>`
               }
@@ -544,10 +619,18 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     manageToken,
     policyWindowHours,
     notes,
+    eyeShape,
+    desiredLook,
+    desiredLookStatus,
+    desiredLookMatchesRecommendation,
   } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
   const manageLink = manageToken ? `${BASE_URL}/booking/manage/${manageToken}` : undefined
+  const adminBookingLink =
+    bookingId && typeof bookingId === 'string'
+      ? `${BASE_URL}/admin/bookings?bookingId=${encodeURIComponent(bookingId)}`
+      : `${BASE_URL}/admin/bookings`
   const ownerNotes = typeof notes === 'string' && notes.trim().length > 0 ? notes.trim() : ''
   let customerEmailError: string | null = null
   let customerEmailStatus: 'sent' | 'pending' | 'error' | 'skipped' = 'skipped'
@@ -642,36 +725,29 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
       : ''
 
   const eventSummary = `LashDiary Appointment – ${service || 'Lash Service'}`
-  const eventDescriptionLines = [
-    `Client: ${name}`,
-    `Service: ${service || 'Lash Service'}`,
-    `Time: ${formattedDate} at ${formattedTime}`,
-    `Deposit: ${depositFormatted}`,
-    manageLink ? `Manage or reschedule: ${manageLink}` : `Manage or reschedule: ${BASE_URL}/booking`,
-  ]
-  if (transferNote) {
-    eventDescriptionLines.push(`Transferred from: ${bookingData.transferFromName?.trim() || 'Previous guest'}`)
-  }
-  if (bookingId) {
-    eventDescriptionLines.push(`Booking ID: ${bookingId}`)
-  }
-  const eventDescription = eventDescriptionLines.join('\n')
+  const desiredLookLabel = desiredLook
+    .split('-')
+    .join(' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+  const lashMapStatusMessage =
+    desiredLookStatus === 'recommended'
+      ? 'Lash map ready, can plan before arrival.'
+      : 'Picked outside recommended, map will be decided at appointment.'
+  const eyeShapeRecommendations = Array.isArray(eyeShape.recommendedStyles)
+    ? eyeShape.recommendedStyles
+    : []
+  
+  const appointmentStart = new Date(appointmentTime)
+  const appointmentEnd = new Date(endTime)
+  const calendarDescription = `${service || 'Lash Service'} appointment with ${name}.\n\nLocation: ${appointmentLocation}\nPhone: ${phone}${ownerNotes ? `\n\nNotes: ${ownerNotes}` : ''}`
   const addToCalendarLink = buildGoogleCalendarLink({
     summary: eventSummary,
-    start: appointmentTime,
-    end: endTime,
+    start: appointmentStart,
+    end: appointmentEnd,
     location: appointmentLocation,
-    description: eventDescription,
+    description: calendarDescription,
+    reminderMinutes: 1440,
   })
-  const calendarToken = manageToken || bookingId || null
-  const icsPath = calendarToken
-    ? `/api/booking/ics/${encodeURIComponent(calendarToken)}?format=ics`
-    : null
-  const icsLink =
-    icsPath != null
-      ? `${BASE_URL ? `${BASE_URL}${icsPath}` : icsPath}`
-      : null
-  const normalizedIcsLink = icsLink ?? undefined
 
   const ownerEmailTemplateData = {
     name,
@@ -691,7 +767,11 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     policyWindowHours: windowHours,
     notes: ownerNotes,
     addToCalendarLink,
-    icsLink: normalizedIcsLink,
+    eyeShapeLabel: eyeShape.label,
+    recommendedStyles: eyeShapeRecommendations,
+    desiredLookLabel,
+    lashMapStatusMessage,
+    adminBookingLink,
   }
 
   const baseOwnerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData)
@@ -741,10 +821,13 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
               servicePrice: finalPriceFormatted,
               manageLink,
               addToCalendarLink,
-              icsLink: normalizedIcsLink,
               policyWindowHours: windowHours,
               transferNote,
               transferFinancialNote,
+              eyeShapeLabel: eyeShape.label,
+              eyeShapeRecommendations,
+              desiredLookLabel,
+              lashMapStatusMessage,
             }),
           })
 

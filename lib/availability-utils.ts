@@ -83,7 +83,12 @@ export function generateTimeSlotsForDateLocal(dateStr: string, availability: any
         ? availability.timeSlots.weekdays
         : DEFAULT_SATURDAY_SLOTS)
   } else {
+    // Check for individual day slots first, then fall back to weekdays
+    const daySpecificSlots = availability?.timeSlots?.[dayKey as keyof typeof availability.timeSlots]
     timeConfig =
+      (Array.isArray(daySpecificSlots) && daySpecificSlots.length > 0
+        ? daySpecificSlots
+        : undefined) ??
       (availability?.timeSlots?.weekdays && availability.timeSlots.weekdays.length > 0
         ? availability.timeSlots.weekdays
         : DEFAULT_WEEKDAY_SLOTS)

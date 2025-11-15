@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 interface Booking {
   id: string
@@ -52,6 +54,17 @@ interface Booking {
   lastClientManageActionAt?: string | null
   clientManageDisabled?: boolean
   paidInFullAt?: string | null
+  eyeShape?: {
+    id: string
+    label: string
+    imageUrl?: string | null
+    description?: string | null
+    recommendedStyles?: string[]
+  } | null
+  desiredLook?: string | null
+  desiredLookStatus?: 'recommended' | 'custom' | null
+  desiredLookStatusMessage?: string | null
+  desiredLookMatchesRecommendation?: boolean | null
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -59,12 +72,22 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
 }
 
 export default function AdminBookings() {
+  const { currency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+
+  // Helper function to convert booking price to selected currency
+  // Note: Bookings are stored in KES, so we convert if USD is selected
+  const convertBookingPrice = (amount: number): number => {
+    if (currency === 'USD') {
+      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+    }
+    return amount
+  }
   const [sendingRequest, setSendingRequest] = useState(false)
   const [sendingPayment, setSendingPayment] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa'>('cash')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash')
   const [cashAmount, setCashAmount] = useState('')
   const [mpesaPhone, setMpesaPhone] = useState('')
   const [markingPaid, setMarkingPaid] = useState(false)
@@ -86,6 +109,8 @@ export default function AdminBookings() {
   const [loadingAvailability, setLoadingAvailability] = useState(true)
   const [fullyBookedDatesAdmin, setFullyBookedDatesAdmin] = useState<string[]>([])
   const [pendingFullyBookedDates, setPendingFullyBookedDates] = useState<string[]>([])
+  const [clearingBookings, setClearingBookings] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -101,6 +126,7 @@ export default function AdminBookings() {
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0])
   const [updatingFullyBooked, setUpdatingFullyBooked] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const hasFullyBookedChanges = useMemo(() => {
     if (pendingFullyBookedDates.length !== fullyBookedDatesAdmin.length) return true
     const savedSet = new Set(fullyBookedDatesAdmin)
@@ -193,8 +219,35 @@ export default function AdminBookings() {
       clientManageDisabled: Boolean(booking.clientManageDisabled),
       paidInFullAt:
         typeof booking.paidInFullAt === 'string' ? booking.paidInFullAt : null,
+      desiredLook:
+        typeof booking.desiredLook === 'string' && booking.desiredLook.trim().length > 0
+          ? booking.desiredLook.trim()
+          : null,
+      desiredLookStatus:
+        booking.desiredLookStatus === 'recommended'
+          ? 'recommended'
+          : booking.desiredLookStatus === 'custom'
+          ? 'custom'
+          : null,
+      desiredLookStatusMessage:
+        typeof booking.desiredLookStatusMessage === 'string' && booking.desiredLookStatusMessage.trim().length > 0
+          ? booking.desiredLookStatusMessage.trim()
+          : null,
+      desiredLookMatchesRecommendation: booking.desiredLookMatchesRecommendation === true,
     }
   }
+
+  useEffect(() => {
+    const requestedBookingId = searchParams?.get('bookingId')
+    if (!requestedBookingId || bookings.length === 0) return
+    const found = bookings.find((booking) => booking.id === requestedBookingId)
+    if (!found) return
+    const bookingDate = found.date || found.timeSlot?.split('T')[0] || ''
+    if (bookingDate) {
+      setSelectedDate(bookingDate)
+    }
+    setSelectedBooking(found)
+  }, [searchParams, bookings])
 
   useEffect(() => {
     let isMounted = true
@@ -263,6 +316,37 @@ export default function AdminBookings() {
       console.error('Error loading availability:', error)
     } finally {
       setLoadingAvailability(false)
+    }
+  }
+
+  const handleClearAllBookings = async () => {
+    if (!showClearConfirm) {
+      setShowClearConfirm(true)
+      return
+    }
+
+    setClearingBookings(true)
+    try {
+      const response = await authorizedFetch('/api/admin/bookings/clear', {
+        method: 'POST',
+      })
+      if (response.ok) {
+        setBookings([])
+        setFullyBookedDatesAdmin([])
+        setPendingFullyBookedDates([])
+        setMessage({ type: 'success', text: 'All bookings and fully booked dates have been cleared' })
+        setShowClearConfirm(false)
+        // Reload availability to refresh fully booked dates
+        await loadAvailability()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.error || 'Failed to clear bookings' })
+      }
+    } catch (error) {
+      console.error('Error clearing bookings:', error)
+      setMessage({ type: 'error', text: 'Failed to clear bookings' })
+    } finally {
+      setClearingBookings(false)
     }
   }
 
@@ -631,7 +715,7 @@ export default function AdminBookings() {
     }
   }
 
-  const handleMarkAsPaid = async (booking: Booking, amount: number) => {
+  const handleMarkAsPaid = async (booking: Booking, amount: number, method: 'cash' | 'card' = 'cash') => {
     if (booking.status !== 'confirmed') {
       setMessage({ type: 'error', text: 'You can only record payments for active bookings.' })
       return
@@ -649,7 +733,7 @@ export default function AdminBookings() {
     }
 
     if (amount > balance) {
-      setMessage({ type: 'error', text: `Amount cannot exceed balance due (KSH ${balance.toLocaleString()})` })
+      setMessage({ type: 'error', text: `Amount cannot exceed balance due (${formatCurrencyContext(convertBookingPrice(balance))})` })
       setMarkingPaid(false)
       return
     }
@@ -661,14 +745,15 @@ export default function AdminBookings() {
         body: JSON.stringify({
           bookingId: booking.id,
           amount: amount,
-          paymentMethod: 'cash',
+          paymentMethod: method,
         }),
       })
 
       const data = await response.json()
 
       if (response.ok && data.success) {
-        setMessage({ type: 'success', text: `Cash payment of KSH ${amount.toLocaleString()} recorded successfully` })
+        const methodLabel = method === 'card' ? 'Card' : 'Cash'
+        setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
         loadBookings()
         if (data.booking) {
           const updatedBooking = normalizeBooking(data.booking)
@@ -754,7 +839,7 @@ export default function AdminBookings() {
           console.error('Error saving checkout request ID:', err)
         }
 
-        setMessage({ type: 'success', text: `M-Pesa prompt sent to ${phone.trim()} for KSH ${balance.toLocaleString()}` })
+        setMessage({ type: 'success', text: `M-Pesa prompt sent to ${phone.trim()} for ${formatCurrencyContext(convertBookingPrice(balance))}` })
         setMpesaPhone('')
         // Reload bookings to get updated data
         loadBookings()
@@ -1114,6 +1199,26 @@ export default function AdminBookings() {
           >
             ← Back to Dashboard
           </Link>
+          <div className="flex items-center gap-2">
+            {showClearConfirm && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearingBookings}
+                className="px-4 py-2 rounded-lg bg-gray-500 text-white text-sm font-semibold hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleClearAllBookings}
+              disabled={clearingBookings}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            >
+              {clearingBookings ? 'Clearing...' : showClearConfirm ? 'Confirm Clear All' : 'Clear All Bookings'}
+            </button>
+          </div>
         </div>
 
         {/* Toast Notification */}
@@ -1227,68 +1332,122 @@ export default function AdminBookings() {
               No bookings found for {selectedDate ? formatDate(selectedDate) : 'this selection'}.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b-2 border-brown-light">
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Client Name</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Service</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Date & Time</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Final Price</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Deposit</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Balance</th>
-                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBookings.map((booking) => {
-                    const balance = booking.finalPrice - booking.deposit
-                    return (
-                    <tr 
-                      key={booking.id} 
-                      className={`border-b border-brown-light/30 hover:bg-pink-light/20 cursor-pointer transition-colors ${booking.status === 'cancelled' ? 'opacity-70' : ''}`}
+            <>
+              {/* Mobile Card View */}
+              <div className="block md:hidden space-y-4">
+                {filteredBookings.map((booking) => {
+                  const balance = booking.finalPrice - booking.deposit
+                  return (
+                    <div
+                      key={booking.id}
+                      className={`bg-white rounded-lg border-2 border-brown-light p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${booking.status === 'cancelled' ? 'opacity-70' : ''}`}
                       onClick={() => setSelectedBooking(booking)}
                     >
-                      <td className="py-3 px-4 text-brown font-medium">
-                        <div className="font-semibold text-brown-dark">{booking.name}</div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-brown-dark text-base mb-1">{booking.name}</div>
+                          <div className="text-sm text-brown-dark/70">{booking.service || 'N/A'}</div>
+                        </div>
+                        <div className="ml-2">
+                          {renderStatusBadge(booking.status)}
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Date & Time:</span>
+                          <span className="font-medium text-brown-dark">
+                            {formatDate(booking.date)} {formatTime(booking.timeSlot)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Final Price:</span>
+                          <span className="font-semibold">{formatCurrencyContext(convertBookingPrice(booking.finalPrice))}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Deposit:</span>
+                          <span className="text-green-600 font-semibold">{formatCurrencyContext(convertBookingPrice(booking.deposit))}</span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-brown-light/30">
+                          <span className="text-gray-600 font-semibold">Balance:</span>
+                          <span className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrencyContext(convertBookingPrice(balance))}
+                          </span>
+                        </div>
                         {booking.createdAt && (
-                          <div className="text-xs text-gray-500 mt-0.5">
+                          <div className="text-xs text-gray-500 mt-2">
                             Booked {formatDateTime(booking.createdAt)}
                           </div>
                         )}
-                      </td>
-                      <td className="py-3 px-4 text-brown">{booking.service || 'N/A'}</td>
-                      <td className="py-3 px-4 text-brown">
-                        <div className="font-medium">{formatDate(booking.date)}</div>
-                        <div className="text-sm text-gray-600">{formatTime(booking.timeSlot)}</div>
-                      </td>
-                      <td className="py-3 px-4 text-brown">
-                        <span className="font-semibold">KSH {booking.finalPrice.toLocaleString()}</span>
-                      </td>
-                      <td className="py-3 px-4 text-brown">
-                        <span className="text-green-600 font-semibold">KSH {booking.deposit.toLocaleString()}</span>
-                      </td>
-                      <td className="py-3 px-4 text-brown">
-                        <span className={`font-semibold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          KSH {balance.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="space-y-1">
-                          {renderStatusBadge(booking.status)}
-                          {booking.status === 'cancelled' && booking.refundStatus && (
-                            <span className="block text-xs text-gray-600">
-                              {formatRefundStatusLabel(booking.refundStatus)}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead>
+                    <tr className="border-b-2 border-brown-light">
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Client Name</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Service</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Date & Time</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Final Price ({currency})</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Deposit</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Balance</th>
+                      <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Status</th>
                     </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredBookings.map((booking) => {
+                      const balance = booking.finalPrice - booking.deposit
+                      return (
+                      <tr 
+                        key={booking.id} 
+                        className={`border-b border-brown-light/30 hover:bg-pink-light/20 cursor-pointer transition-colors ${booking.status === 'cancelled' ? 'opacity-70' : ''}`}
+                        onClick={() => setSelectedBooking(booking)}
+                      >
+                        <td className="py-3 px-4 text-brown font-medium">
+                          <div className="font-semibold text-brown-dark">{booking.name}</div>
+                          {booking.createdAt && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Booked {formatDateTime(booking.createdAt)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-brown">{booking.service || 'N/A'}</td>
+                        <td className="py-3 px-4 text-brown">
+                          <div className="font-medium">{formatDate(booking.date)}</div>
+                          <div className="text-sm text-gray-600">{formatTime(booking.timeSlot)}</div>
+                        </td>
+                        <td className="py-3 px-4 text-brown">
+                          <span className="font-semibold">{formatCurrencyContext(convertBookingPrice(booking.finalPrice))}</span>
+                        </td>
+                        <td className="py-3 px-4 text-brown">
+                          <span className="text-green-600 font-semibold">{formatCurrencyContext(convertBookingPrice(booking.deposit))}</span>
+                        </td>
+                        <td className="py-3 px-4 text-brown">
+                          <span className={`font-semibold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrencyContext(convertBookingPrice(balance))}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="space-y-1">
+                            {renderStatusBadge(booking.status)}
+                            {booking.status === 'cancelled' && booking.refundStatus && (
+                              <span className="block text-xs text-gray-600">
+                                {formatRefundStatusLabel(booking.refundStatus)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1296,17 +1455,17 @@ export default function AdminBookings() {
       {/* Booking Details Modal */}
       {selectedBooking && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 pt-24 sm:pt-16"
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 backdrop-blur-sm px-2 sm:px-4 pt-4 sm:pt-8 md:pt-16 pb-4 sm:pb-8 overflow-y-auto"
           onClick={() => setSelectedBooking(null)}
         >
           <div 
-            className="relative bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[82vh] overflow-hidden border-2 border-brown-light"
+            className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] sm:max-h-[82vh] overflow-y-auto border-2 border-brown-light my-4 sm:my-0"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/95 via-white/98 to-white" />
-            <div className="relative p-8 pb-24 overflow-y-auto max-h-[78vh]">
-            <div className="flex justify-between items-start mb-6">
-              <h2 className="text-3xl font-display text-brown-dark">Booking Details</h2>
+            <div className="relative p-4 sm:p-6 md:p-8 pb-20 sm:pb-24 overflow-y-auto max-h-[78vh]">
+            <div className="flex justify-between items-start mb-4 sm:mb-6">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-display text-brown-dark">Booking Details</h2>
               <button
                 onClick={() => setSelectedBooking(null)}
                   className="text-gray-400 hover:text-gray-600 text-3xl font-light transition-colors"
@@ -1352,17 +1511,55 @@ export default function AdminBookings() {
                     <p className="text-sm text-gray-600">Service</p>
                     <p className="text-brown-dark font-semibold">{selectedBooking.service || 'N/A'}</p>
                   </div>
-                <div>
-                  <p className="text-sm text-gray-600">Status</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {renderStatusBadge(selectedBooking.status)}
-                    {selectedBooking.status === 'cancelled' && selectedBooking.cancelledAt && (
-                      <span className="text-xs text-red-600 font-semibold">
-                        Cancelled {formatDateTime(selectedBooking.cancelledAt)}
-                      </span>
-                    )}
+                  <div>
+                    <p className="text-sm text-gray-600">Eye Shape</p>
+                    <div className="space-y-1">
+                      <p className="text-brown-dark font-semibold">
+                        {selectedBooking.eyeShape?.label || 'Not specified'}
+                      </p>
+                      {selectedBooking.eyeShape?.recommendedStyles &&
+                        selectedBooking.eyeShape.recommendedStyles.length > 0 && (
+                          <p className="text-xs text-brown-dark/70">
+                            Recommended styles: {selectedBooking.eyeShape.recommendedStyles.join(', ')}
+                          </p>
+                        )}
+                    </div>
                   </div>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Desired Look</p>
+                    <div className="space-y-1">
+                      <p className="text-brown-dark font-semibold">
+                        {selectedBooking.desiredLook
+                          ? selectedBooking.desiredLook
+                              .split('-')
+                              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ')
+                          : 'Not specified'}
+                      </p>
+                      {selectedBooking.desiredLookStatusMessage && (
+                        <p
+                          className={`text-xs font-semibold ${
+                            selectedBooking.desiredLookStatus === 'recommended'
+                              ? 'text-emerald-700'
+                              : 'text-orange-700'
+                          }`}
+                        >
+                          {selectedBooking.desiredLookStatusMessage}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Status</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {renderStatusBadge(selectedBooking.status)}
+                      {selectedBooking.status === 'cancelled' && selectedBooking.cancelledAt && (
+                        <span className="text-xs text-red-600 font-semibold">
+                          Cancelled {formatDateTime(selectedBooking.cancelledAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <div>
                     <p className="text-sm text-gray-600">Date</p>
                     <p className="text-brown-dark font-semibold">{formatDate(selectedBooking.date)}</p>
@@ -1376,6 +1573,26 @@ export default function AdminBookings() {
                     <p className="text-brown-dark font-semibold">{formatDateTime(selectedBooking.createdAt)}</p>
                   </div>
                 </div>
+                {selectedBooking.eyeShape?.imageUrl && (
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-white/70 border border-brown-light rounded-xl overflow-hidden shadow-sm">
+                      <div className="h-44 w-full bg-brown-light/10">
+                        <img
+                          src={selectedBooking.eyeShape.imageUrl}
+                          alt={`Eye shape reference: ${selectedBooking.eyeShape.label || 'Selection'}`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="px-4 py-3">
+                        <p className="text-sm font-semibold text-brown-dark mb-1">Eye Shape Reference</p>
+                        <p className="text-xs text-brown-dark/70 leading-relaxed">
+                          {selectedBooking.eyeShape.description || 'Provided through the image library.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Pricing Details */}
@@ -1384,7 +1601,7 @@ export default function AdminBookings() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Original Price:</span>
-                    <span className="text-brown-dark font-semibold">KSH {selectedBooking.originalPrice.toLocaleString()}</span>
+                    <span className="text-brown-dark font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.originalPrice))}</span>
                   </div>
                   {selectedBooking.discount > 0 && (
                     <div className="flex justify-between items-center">
@@ -1395,21 +1612,21 @@ export default function AdminBookings() {
                           <span className="text-xs text-gray-500 ml-1">({selectedBooking.promoCode})</span>
                         )}:
                       </span>
-                      <span className="text-green-600 font-semibold">-KSH {selectedBooking.discount.toLocaleString()}</span>
+                      <span className="text-green-600 font-semibold">-{formatCurrencyContext(convertBookingPrice(selectedBooking.discount))}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-2 border-t border-brown-light/30">
                     <span className="text-gray-600 font-semibold">Final Price:</span>
-                    <span className="text-brown-dark font-bold text-lg">KSH {selectedBooking.finalPrice.toLocaleString()}</span>
+                    <span className="text-brown-dark font-bold text-lg">{formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Deposit Paid:</span>
-                    <span className="text-green-600 font-semibold">KSH {selectedBooking.deposit.toLocaleString()}</span>
+                    <span className="text-green-600 font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.deposit))}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t-2 border-brown-light">
                     <span className="text-gray-600 font-bold">Balance Due:</span>
                     <span className={`font-bold text-xl ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      KSH {balance.toLocaleString()}
+                      {formatCurrencyContext(convertBookingPrice(balance))}
                     </span>
                   </div>
                 </div>
@@ -1442,7 +1659,7 @@ export default function AdminBookings() {
                   {typeof selectedBooking.refundAmount === 'number' && (
                     <div className="flex justify-between items-center">
                       <span>Refund Amount:</span>
-                      <span className="font-semibold text-red-900">KSH {selectedBooking.refundAmount.toLocaleString()}</span>
+                      <span className="font-semibold text-red-900">{formatCurrencyContext(convertBookingPrice(selectedBooking.refundAmount))}</span>
                     </div>
                   )}
                   {selectedBooking.refundNotes && (
@@ -1523,10 +1740,21 @@ export default function AdminBookings() {
                           name="paymentMethod"
                           value="mpesa"
                           checked={paymentMethod === 'mpesa'}
-                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa')}
+                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa' | 'card')}
                           className="mr-2"
                         />
                         <span className="text-brown-dark">M-Pesa</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="card"
+                          checked={paymentMethod === 'card'}
+                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa' | 'card')}
+                          className="mr-2"
+                        />
+                        <span className="text-brown-dark">Card</span>
                       </label>
                     </div>
                   </div>
@@ -1536,19 +1764,19 @@ export default function AdminBookings() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-semibold text-brown-dark mb-2">
-                          Amount Paid (KSH)
+                          Amount Paid ({currency})
                         </label>
                         <input
                           type="number"
                           value={cashAmount}
                           onChange={(e) => setCashAmount(e.target.value)}
-                          placeholder={`Balance: KSH ${balance.toLocaleString()}`}
+                          placeholder={`Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
                           min="0"
                           max={balance}
                           className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Balance due: KSH {balance.toLocaleString()}
+                          Balance due: {formatCurrencyContext(convertBookingPrice(balance))}
                         </p>
                       </div>
                       <button
@@ -1581,7 +1809,7 @@ export default function AdminBookings() {
                       </div>
                       <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800">
-                          <strong>Amount:</strong> KSH {balance.toLocaleString()}
+                          <strong>Amount:</strong> {formatCurrencyContext(convertBookingPrice(balance))}
                         </p>
                         <p className="text-xs text-blue-700 mt-1">
                           An M-Pesa STK push will be sent to the phone number above
@@ -1592,7 +1820,37 @@ export default function AdminBookings() {
                         disabled={sendingPayment || !mpesaPhone.trim()}
                         className="w-full px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {sendingPayment ? 'Sending M-Pesa Prompt...' : `Send M-Pesa Prompt (KSH ${balance.toLocaleString()})`}
+                        {sendingPayment ? 'Sending M-Pesa Prompt...' : `Send M-Pesa Prompt (${formatCurrencyContext(convertBookingPrice(balance))})`}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Card Payment */}
+                  {paymentMethod === 'card' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-brown-dark mb-2">
+                          Amount Paid ({currency})
+                        </label>
+                        <input
+                          type="number"
+                          value={cashAmount}
+                          onChange={(e) => setCashAmount(e.target.value)}
+                          placeholder={`Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
+                          min="0"
+                          max={balance}
+                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Balance due: {formatCurrencyContext(convertBookingPrice(balance))}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleMarkAsPaid(selectedBooking, parseFloat(cashAmount) || 0, 'card')}
+                        disabled={markingPaid || !cashAmount || parseFloat(cashAmount) <= 0}
+                        className="w-full px-6 py-3 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {markingPaid ? 'Recording...' : 'Paid in Card'}
                       </button>
                     </div>
                   )}
@@ -1704,13 +1962,13 @@ export default function AdminBookings() {
                   <p className="text-sm text-gray-600">
                     Deposit on file:{' '}
                     <span className="font-semibold text-brown-dark">
-                      KSH {selectedBooking.deposit.toLocaleString()}
+                      {formatCurrencyContext(convertBookingPrice(selectedBooking.deposit))}
                     </span>
                   </p>
                 )}
                 <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
                   <li>Suggest the next available date and encourage the client to pick a new slot.</li>
-                  <li>If they can’t make it, note who will come in their place so the experience stays seamless.</li>
+                  <li>If they can't make it, note who will come in their place so the experience stays seamless.</li>
                   <li>Log any follow-up tasks in your own workflow to keep customer service tight.</li>
                 </ul>
               </div>

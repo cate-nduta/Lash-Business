@@ -1,4 +1,5 @@
 {
+  "minimumBookingDate": "2026-01-15",
   "bookingWindow": {
     "current": {
       "startDate": "2025-11-03",
@@ -13,7 +14,7 @@
       "emailSubject": "✨ December Bookings Are Now Open!"
     },
     "bookingLink": "https://lashdiary.com/booking",
-    "note": "VIP waitlist clients receive early access codes. Email us if you’d like to join.",
+    "note": "VIP waitlist clients receive early access codes. Email us if you'd like to join.",
     "bannerMessage": "Bookings open monthly.\nCurrent calendar: November 3 – November 30.\n\nDecember 3 – December 31 opens November 29.",
     "bannerEnabled": null
   },

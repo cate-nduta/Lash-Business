@@ -18,17 +18,24 @@ export default function Gallery() {
   })
 
   useEffect(() => {
-    // Fetch gallery images from API
-    fetch('/api/gallery', { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
+    // Fetch gallery images from API with cache busting
+    const fetchGallery = async () => {
+      try {
+        const response = await fetch(`/api/gallery?t=${Date.now()}`, { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        })
+        const data = await response.json()
         setGalleryImages(data.images || [])
         setLoading(false)
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error('Error loading gallery:', error)
         setLoading(false)
-      })
+      }
+    }
+    fetchGallery()
   }, [])
 
   if (loading) {
@@ -40,14 +47,14 @@ export default function Gallery() {
   }
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-20">
+    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-display text-brown mb-6">
+        <div className="text-center mb-8 sm:mb-12 md:mb-16">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-brown mb-4 sm:mb-6">
             Our Gallery
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto px-2">
             Explore our stunning transformations and see the fabulous artistry 
             of LashDiary! Get ready to be inspired!
           </p>
@@ -62,7 +69,7 @@ export default function Gallery() {
         ) : (
           <div 
             ref={ref}
-            className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 ${
               inView ? 'animate-fade-in-up' : 'opacity-0'
             }`}
           >

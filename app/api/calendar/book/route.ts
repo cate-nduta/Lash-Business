@@ -92,6 +92,32 @@ async function sendFullyBookedEmail(dateStr: string) {
   }
 }
 
+type LookSelection = {
+  id: string
+  label: string
+  imageUrl: string
+  description: string | null
+  recommendedStyles: string[]
+}
+
+const normalizeLookSelection = (selection: any): LookSelection | null => {
+  if (!selection || typeof selection !== 'object') return null
+  const id = typeof selection.id === 'string' ? selection.id.trim() : ''
+  const label = typeof selection.label === 'string' ? selection.label.trim() : ''
+  const imageUrl = typeof selection.imageUrl === 'string' ? selection.imageUrl.trim() : ''
+  if (!id || !label || !imageUrl) return null
+  const description =
+    typeof selection.description === 'string' && selection.description.trim().length > 0
+      ? selection.description.trim()
+      : null
+  const recommendedStyles: string[] = Array.isArray(selection.recommendedStyles)
+    ? selection.recommendedStyles
+        .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter((entry: string) => entry.length > 0)
+    : []
+  return { id, label, imageUrl, description, recommendedStyles }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -113,7 +139,8 @@ export async function POST(request: NextRequest) {
       promoCode,
       promoCodeType,
       salonReferral,
-      clientPhoto,
+      eyeShapeSelection,
+      desiredLook,
     } = body
     const bookingLocation = location || STUDIO_LOCATION
 
@@ -124,6 +151,39 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    if (typeof desiredLook !== 'string' || desiredLook.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Desired look is required.' },
+        { status: 400 },
+      )
+    }
+
+    const eyeShape = normalizeLookSelection(eyeShapeSelection)
+    if (!eyeShape) {
+      return NextResponse.json(
+        { error: 'Eye shape selection is required.' },
+        { status: 400 },
+      )
+    }
+
+    const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const desiredLookNormalized = desiredLook.trim()
+    const desiredLookComparable = normalizeStyleName(desiredLookNormalized)
+    const desiredLookLabel = desiredLookNormalized
+      .split('-')
+      .join(' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+
+    const desiredLookMatchesRecommendation = eyeShape.recommendedStyles.some(
+      (style) => normalizeStyleName(style) === desiredLookComparable,
+    )
+    const lashMapStatus = desiredLookMatchesRecommendation
+      ? 'recommended'
+      : 'custom'
+    const lashMapStatusMessage = desiredLookMatchesRecommendation
+      ? 'Lash map ready, can plan before arrival.'
+      : 'Picked outside recommended, map will be decided at appointment.'
 
     // Try to get calendar client, but handle gracefully if credentials aren't set up
     let calendar
@@ -176,6 +236,10 @@ export async function POST(request: NextRequest) {
             Email: ${email}
             Phone: ${phone}
             Service: ${service || 'Lash Service'}
+            Eye Shape: ${eyeShape.label}
+            Desired lash look: ${desiredLookLabel}
+            Recommended Styles: ${eyeShape.recommendedStyles.join(', ') || 'Not specified'}
+            Lash Map Status: ${lashMapStatusMessage}
             Location: ${bookingLocation}
             ${notes ? `Special Notes: ${notes}` : ''}
             Deposit: KSH ${deposit || 0}
@@ -243,6 +307,10 @@ export async function POST(request: NextRequest) {
         manageToken,
         policyWindowHours,
         notes: typeof notes === 'string' ? notes : undefined,
+        eyeShape,
+        desiredLook: desiredLookLabel,
+        desiredLookStatus: lashMapStatus,
+        desiredLookMatchesRecommendation,
       })
       if (!emailResult) {
         console.warn('Email notification service did not return a response.')
@@ -302,6 +370,10 @@ export async function POST(request: NextRequest) {
         date,
         timeSlot,
         location: bookingLocation,
+        desiredLook: desiredLookLabel,
+        desiredLookStatus: lashMapStatus,
+        desiredLookStatusMessage: lashMapStatusMessage,
+        desiredLookMatchesRecommendation,
         notes: notes || '',
         originalPrice: originalPrice || 0,
         discount: discount || 0,
@@ -312,24 +384,7 @@ export async function POST(request: NextRequest) {
         referralType: promoCodeType || null,
         salonReferral: salonReferral || null,
         mpesaCheckoutRequestID: mpesaCheckoutRequestID || null,
-        clientPhoto: clientPhoto?.url
-          ? {
-              url: clientPhoto.url.trim(),
-              filename:
-                typeof clientPhoto.filename === 'string' && clientPhoto.filename.trim().length > 0
-                  ? clientPhoto.filename.trim()
-                  : null,
-              originalName:
-                typeof clientPhoto.originalName === 'string' && clientPhoto.originalName.trim().length > 0
-                  ? clientPhoto.originalName.trim()
-                  : null,
-              mimeType:
-                typeof clientPhoto.mimeType === 'string' && clientPhoto.mimeType.trim().length > 0
-                  ? clientPhoto.mimeType.trim()
-                  : null,
-              size: typeof clientPhoto.size === 'number' ? clientPhoto.size : null,
-            }
-          : null,
+        eyeShape: { ...eyeShape },
         createdAt,
         testimonialRequested: false,
         testimonialRequestedAt: null,
@@ -379,32 +434,6 @@ export async function POST(request: NextRequest) {
       bookings.push(newBooking)
 
       await writeDataFile('bookings.json', { bookings })
-
-      if (clientPhoto?.url) {
-        try {
-          const existingPhotos = await readDataFile<{ entries?: any[] }>('client-photos.json', { entries: [] })
-          const photoEntries = Array.isArray(existingPhotos.entries) ? existingPhotos.entries : []
-          const photoEntry = {
-            id: `${bookingId}-photo`,
-            bookingId,
-            name,
-            email,
-            phone,
-            service: service || '',
-            appointmentDate: date,
-            uploadedAt: createdAt,
-            photoUrl: clientPhoto.url.trim(),
-            filename:
-              typeof clientPhoto.filename === 'string' && clientPhoto.filename.trim().length > 0
-                ? clientPhoto.filename.trim()
-                : null,
-          }
-          photoEntries.push(photoEntry)
-          await writeDataFile('client-photos.json', { entries: photoEntries })
-        } catch (photoError) {
-          console.error('Failed to persist client photo entry:', photoError)
-        }
-      }
 
       try {
         await updateFullyBookedState(date, bookings, {

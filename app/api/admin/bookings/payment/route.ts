@@ -23,7 +23,7 @@ interface Booking {
   testimonialRequestedAt?: string
   payments?: Array<{
     amount: number
-    method: 'cash' | 'mpesa'
+    method: 'cash' | 'mpesa' | 'card'
     date: string
     mpesaCheckoutRequestID?: string
   }>
@@ -63,9 +63,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (paymentMethod === 'cash' && (!amount || amount <= 0)) {
+    if ((paymentMethod === 'cash' || paymentMethod === 'card') && (!amount || amount <= 0)) {
       return NextResponse.json(
-        { error: 'Amount is required for cash payments' },
+        { error: 'Amount is required for cash and card payments' },
         { status: 400 }
       )
     }
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       mpesaCheckoutRequestID: mpesaCheckoutRequestID || undefined,
     })
 
-    if (paymentMethod === 'cash' && amount > 0) {
+    if ((paymentMethod === 'cash' || paymentMethod === 'card') && amount > 0) {
       booking.deposit = (booking.deposit || 0) + amount
     }
 

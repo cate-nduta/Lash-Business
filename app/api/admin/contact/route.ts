@@ -23,9 +23,20 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
     const contact = await request.json()
+    
+    // Log what we're saving for debugging
+    console.log('Saving contact data:', JSON.stringify(contact, null, 2))
+    
     await writeDataFile('contact.json', contact)
+    
+    // Verify it was saved
+    const saved = await readDataFile('contact.json', {})
+    console.log('Verified saved data:', JSON.stringify(saved, null, 2))
+    
     revalidatePath('/contact')
-    return NextResponse.json({ success: true })
+    revalidatePath('/api/contact')
+    
+    return NextResponse.json({ success: true, saved: saved })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -25,11 +25,17 @@ type BookingWindowConfig = {
 }
 
 type AvailabilityData = {
+  minimumBookingDate?: string
   businessHours?: {
     [key: string]: { open: string; close: string; enabled: boolean }
   }
   timeSlots?: {
     weekdays?: Array<{ hour: number; minute: number; label: string }>
+    monday?: Array<{ hour: number; minute: number; label: string }>
+    tuesday?: Array<{ hour: number; minute: number; label: string }>
+    wednesday?: Array<{ hour: number; minute: number; label: string }>
+    thursday?: Array<{ hour: number; minute: number; label: string }>
+    friday?: Array<{ hour: number; minute: number; label: string }>
     saturday?: Array<{ hour: number; minute: number; label: string }>
     sunday?: Array<{ hour: number; minute: number; label: string }>
   }
@@ -68,10 +74,18 @@ function deriveWindowRange(bookingWindow?: BookingWindowConfig) {
   return { start, end }
 }
 
-function isDateWithinWindow(dateStr: string, bookingWindow?: BookingWindowConfig) {
-  if (!bookingWindow?.current) return true
+function isDateWithinWindow(dateStr: string, bookingWindow?: BookingWindowConfig, minimumBookingDate?: string) {
   const target = parseDateOnly(dateStr)
   if (!target) return false
+  
+  // Check minimum booking date first
+  if (minimumBookingDate) {
+    const minimumDate = parseDateOnly(minimumBookingDate)
+    if (minimumDate && target < minimumDate) return false
+  }
+  
+  // Then check booking window
+  if (!bookingWindow?.current) return true
   const start = parseDateOnly(bookingWindow.current.startDate)
   const end = parseDateOnly(bookingWindow.current.endDate)
   if (start && target < start) return false
@@ -133,9 +147,10 @@ function getDayOfWeek(year: number, month: number, day: number): number {
 }
 
 // Generate time slots for a specific date
-// Weekdays (Mon-Fri): 9:30 AM, 12:00 PM, 2:30 PM, 4:30 PM
-// Sunday: 12:30 PM, 3:00 PM
-// Saturday: Closed (no slots)
+// Monday-Thursday: Use weekdays time slots (shared)
+// Friday: Use friday-specific time slots
+// Saturday: Use saturday-specific time slots
+// Sunday: Use sunday-specific time slots
 // dateStr should be in YYYY-MM-DD format
 async function generateTimeSlotsForDate(dateStr: string, availabilityData?: AvailabilityData | null): Promise<string[]> {
   const slots: string[] = []
@@ -148,11 +163,13 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
   const dayOfWeek = getDayOfWeek(year, month, day)
   const isSunday = dayOfWeek === 0
   const isSaturday = dayOfWeek === 6
+  const isFriday = dayOfWeek === 5
+  const isMondayToThursday = dayOfWeek >= 1 && dayOfWeek <= 4 // Monday=1, Tuesday=2, Wednesday=3, Thursday=4
   const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
   
   console.log(`[DEBUG generateTimeSlotsForDate] Date: ${dateStr}, Year: ${year}, Month: ${month}, Day: ${day}`)
   console.log(`[DEBUG generateTimeSlotsForDate] DayOfWeek: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
-  console.log(`[DEBUG generateTimeSlotsForDate] isSunday: ${isSunday}, isSaturday: ${isSaturday}`)
+  console.log(`[DEBUG generateTimeSlotsForDate] isSunday: ${isSunday}, isSaturday: ${isSaturday}, isFriday: ${isFriday}, isMondayToThursday: ${isMondayToThursday}`)
   
   // Load availability data from availability.json first to check if Saturday is enabled
   if (availabilityData === undefined) {
@@ -193,6 +210,7 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
   let timeSlots: Array<{ hour: number; minute: number; label: string }>
   
   if (isSunday) {
+    // Sunday: Use sunday-specific slots
     timeSlots = availabilityData?.timeSlots?.sunday && availabilityData.timeSlots.sunday.length > 0
       ? availabilityData.timeSlots.sunday
       : [
@@ -200,10 +218,22 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
       { hour: 15, minute: 0, label: '3:00 PM' },
       ]
   } else if (isSaturday && saturdayEnabled) {
-    // Use Saturday-specific slots if available, otherwise use weekday slots
+    // Saturday: Use saturday-specific slots
     timeSlots =
       (availabilityData?.timeSlots?.saturday && availabilityData.timeSlots.saturday.length > 0
         ? availabilityData.timeSlots.saturday
+        : undefined) ??
+      [
+      { hour: 9, minute: 30, label: '9:30 AM' },
+      { hour: 12, minute: 0, label: '12:00 PM' },
+      { hour: 14, minute: 30, label: '2:30 PM' },
+      { hour: 16, minute: 30, label: '4:30 PM' },
+      ]
+  } else if (isFriday) {
+    // Friday: Use friday-specific slots
+    timeSlots =
+      (availabilityData?.timeSlots?.friday && availabilityData.timeSlots.friday.length > 0
+        ? availabilityData.timeSlots.friday
         : undefined) ??
       (availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
         ? availabilityData.timeSlots.weekdays
@@ -214,17 +244,30 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
       ]
-  } else {
-    // Weekdays (Mon-Fri)
+  } else if (isMondayToThursday) {
+    // Monday-Thursday: Use weekdays slots (shared across all four days)
+    // Check for individual day slots first (for backward compatibility), then fall back to weekdays
+    const daySpecificSlots = availabilityData?.timeSlots?.[dayKey as keyof typeof availabilityData.timeSlots]
     timeSlots =
-      availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
+      (Array.isArray(daySpecificSlots) && daySpecificSlots.length > 0
+        ? daySpecificSlots
+        : undefined) ??
+      (availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
         ? availabilityData.timeSlots.weekdays
         : [
       { hour: 9, minute: 30, label: '9:30 AM' },
       { hour: 12, minute: 0, label: '12:00 PM' },
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
-        ]
+        ])
+  } else {
+    // Fallback (shouldn't happen, but just in case)
+    timeSlots = [
+      { hour: 9, minute: 30, label: '9:30 AM' },
+      { hour: 12, minute: 0, label: '12:00 PM' },
+      { hour: 14, minute: 30, label: '2:30 PM' },
+      { hour: 16, minute: 30, label: '4:30 PM' },
+    ]
   }
   
   for (const slot of timeSlots) {
@@ -252,6 +295,7 @@ export async function GET(request: NextRequest) {
     const availabilityData = await loadAvailabilityData()
     const localBookings = await loadLocalBookings()
     const bookingWindow = availabilityData?.bookingWindow
+    const minimumBookingDate = availabilityData?.minimumBookingDate
     const { start: windowStartDate, end: windowEndDate } = deriveWindowRange(bookingWindow)
     
     // If only fully booked dates are requested, return them quickly
@@ -267,12 +311,12 @@ export async function GET(request: NextRequest) {
       const rangeEnd = windowEndDate ? new Date(windowEndDate) : defaultEnd
 
       if (rangeEnd < rangeStart) {
-        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null })
+        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null, minimumBookingDate: minimumBookingDate ?? null })
       }
       
       const calendar = getCalendarClient()
       if (!calendar) {
-        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet) })
+        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), minimumBookingDate: minimumBookingDate ?? null })
       }
       
       // Batch check dates (check multiple dates in one API call if possible)
@@ -281,7 +325,7 @@ export async function GET(request: NextRequest) {
       
       while (currentDate <= rangeEnd) {
         const dateStr = currentDate.toISOString().split('T')[0]
-        if (!isDateWithinWindow(dateStr, bookingWindow)) {
+        if (!isDateWithinWindow(dateStr, bookingWindow, minimumBookingDate)) {
           currentDate.setDate(currentDate.getDate() + 1)
           continue
         }
@@ -366,148 +410,79 @@ export async function GET(request: NextRequest) {
     
     // If no date provided, return available dates instead
     if (!dateParam) {
-      // Return available dates for the next 30 days (weekdays only)
-      // Check which dates have all slots booked
+      // Return available dates quickly (no calendar check on initial load)
+      // Calendar check happens on-demand when user selects a date
       const availableDates: { value: string; label: string }[] = []
       const fullyBookedSet = new Set<string>(
         Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
       )
       const today = new Date()
       today.setHours(0, 0, 0, 0)
+      // Reduce initial range to 14 days for faster loading (can be expanded later)
       const defaultEnd = new Date(today)
-      defaultEnd.setDate(defaultEnd.getDate() + 30)
+      defaultEnd.setDate(defaultEnd.getDate() + 14)
       const windowStart = windowStartDate && windowStartDate > today ? new Date(windowStartDate) : new Date(today)
       const endDate = windowEndDate ? new Date(windowEndDate) : defaultEnd
       if (endDate < windowStart) {
-        return NextResponse.json({
-          dates: [],
-          fullyBookedDates: Array.from(fullyBookedSet),
-          bookingWindow: bookingWindow ?? null,
-        })
+      return NextResponse.json({
+        dates: [],
+        fullyBookedDates: Array.from(fullyBookedSet),
+        bookingWindow: bookingWindow ?? null,
+        minimumBookingDate: minimumBookingDate ?? null,
+      })
       }
       // Clone start for iteration
       let currentDate = new Date(windowStart)
 
-      const calendar = getCalendarClient()
-      const localBookedByDate = new Map<string, Set<string>>()
-      localBookings.forEach((booking) => {
-        if (!booking?.timeSlot || booking.status === 'cancelled') return
-        const normalized = normalizeSlotForComparison(booking.timeSlot)
-        const dateKey = booking.date ? booking.date : booking.timeSlot.split('T')[0]
-        if (!localBookedByDate.has(dateKey)) {
-          localBookedByDate.set(dateKey, new Set())
-        }
-        localBookedByDate.get(dateKey)!.add(normalized)
-      })
+      // Skip local bookings processing for initial load - it's not used for date filtering
+      // Local bookings are only checked when fetching time slots for a specific date
+      // This makes the initial date list load much faster
 
-      const calendarBookedByDate = new Map<string, Set<string>>()
-
-      if (calendar) {
-        const calendarStart = new Date(windowStart)
-        calendarStart.setHours(0, 0, 0, 0)
-        const calendarEnd = new Date(endDate)
-        calendarEnd.setHours(23, 59, 59, 999)
-
-        const addCalendarSlot = (slotIso: string | undefined | null) => {
-          if (!slotIso) return
-          const dateKey = slotIso.substring(0, 10)
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return
-          if (!calendarBookedByDate.has(dateKey)) {
-            calendarBookedByDate.set(dateKey, new Set())
-          }
-          const normalized = normalizeSlotForComparison(slotIso)
-          if (normalized) {
-            calendarBookedByDate.get(dateKey)!.add(normalized)
-          }
-        }
-
-        let pageToken: string | undefined
-        do {
-          const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
-            timeMin: calendarStart.toISOString(),
-            timeMax: calendarEnd.toISOString(),
-            singleEvents: true,
-            orderBy: 'startTime',
-            pageToken,
-          })
-          const events = response.data.items || []
-          events.forEach((event) => {
-            if (event.start?.dateTime) {
-              addCalendarSlot(event.start.dateTime)
-            } else if (event.start?.date) {
-              // All-day event: mark entire day as blocked
-              addCalendarSlot(`${event.start.date}T00:00:00+03:00`)
-            }
-          })
-          pageToken = response.data.nextPageToken ?? undefined
-        } while (pageToken)
-      }
-      
+      // Generate dates based on business hours only (fast, no API calls, no booking checks)
       const formatLocalDateKey = (date: Date) =>
         `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
       while (currentDate <= endDate) {
-        // Get date string in YYYY-MM-DD format using local calendar (avoid UTC shift)
         const dateStr = formatLocalDateKey(currentDate)
-        if (!isDateWithinWindow(dateStr, bookingWindow)) {
+        if (!isDateWithinWindow(dateStr, bookingWindow, minimumBookingDate)) {
           currentDate.setDate(currentDate.getDate() + 1)
           continue
         }
         const [year, month, day] = dateStr.split('-').map(Number)
         
-        // Calculate day of week using timezone-independent method
         const dayOfWeek = getDayOfWeek(year, month, day)
         const isSaturday = dayOfWeek === 6
         
-        // Skip Saturdays (closed)
-        if (isSaturday) {
+        const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
+        
+        if (isSaturday && !saturdayEnabled) {
           currentDate.setDate(currentDate.getDate() + 1)
           continue
         }
-          
-          const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
-          if (allSlots.length === 0) {
-            currentDate.setDate(currentDate.getDate() + 1)
-            continue
-          }
 
-          const bookedSlots = new Set<string>()
-          const calendarBooked = calendarBookedByDate.get(dateStr)
-          if (calendarBooked) {
-            calendarBooked.forEach((slot) => bookedSlots.add(slot))
-          }
-          const localBooked = localBookedByDate.get(dateStr)
-          if (localBooked) {
-            localBooked.forEach((slot) => bookedSlots.add(slot))
-          }
+        const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
+        const dayEnabled =
+          availabilityData?.businessHours?.[dayKey]?.enabled ??
+          (dayKey === 'saturday' ? false : true)
 
-          const availableSlotsForDay = allSlots.filter((slot) => {
-            const normalizedSlot = normalizeSlotForComparison(slot)
-            return !bookedSlots.has(normalizedSlot)
+        if (dayEnabled && !fullyBookedSet.has(dateStr)) {
+          const dateLabel = currentDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
           })
-          const isFullyBooked = availableSlotsForDay.length === 0
-          
-        if (isFullyBooked) {
-          fullyBookedSet.add(dateStr)
-        } else {
-          availableDates.push({
-            value: dateStr,
-            label: currentDate.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            }),
-          })
+          availableDates.push({ value: dateStr, label: dateLabel })
         }
         currentDate.setDate(currentDate.getDate() + 1)
       }
-      
-      return NextResponse.json({ 
+
+      // Return quickly with dates, calendar check happens asynchronously if needed
+      // The calendar check can be done on-demand when user selects a date
+      return NextResponse.json({
         dates: availableDates,
         fullyBookedDates: Array.from(fullyBookedSet),
         bookingWindow: bookingWindow ?? null,
+        minimumBookingDate: minimumBookingDate ?? null,
       })
     }
 
@@ -519,7 +494,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (!isDateWithinWindow(dateParam, bookingWindow)) {
+    if (!isDateWithinWindow(dateParam, bookingWindow, minimumBookingDate)) {
       return NextResponse.json({ slots: [] })
     }
 

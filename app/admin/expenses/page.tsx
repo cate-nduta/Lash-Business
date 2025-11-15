@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import Toast from '@/components/Toast'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 interface Expense {
   id: string
@@ -52,6 +54,7 @@ const PAYMENT_METHODS = [
 ]
 
 export default function AdminExpenses() {
+  const { currency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [archivedExpenses, setArchivedExpenses] = useState<ArchivedExpense[]>([])
   const [loading, setLoading] = useState(true)
@@ -300,8 +303,17 @@ export default function AdminExpenses() {
     })
   }
 
+  // Helper function to convert expense amount to selected currency
+  // Note: Expenses are stored in KES, so we convert if USD is selected
+  const convertExpenseAmount = (amount: number): number => {
+    if (currency === 'USD') {
+      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+    }
+    return amount
+  }
+  
   const formatCurrency = (amount: number) => {
-    return `KSH ${amount.toLocaleString()}`
+    return formatCurrencyContext(convertExpenseAmount(amount))
   }
 
   // Get categories available to current user
@@ -477,7 +489,7 @@ export default function AdminExpenses() {
       )}
 
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex justify-between items-center">
+        <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <Link 
             href="/admin/dashboard" 
             className="text-brown hover:text-brown-dark"
@@ -490,7 +502,7 @@ export default function AdminExpenses() {
         {/* Period Selector */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-lg font-display text-brown-dark mb-4">View Period</h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={() => setSelectedPeriod('day')}
               className={`px-6 py-3 rounded-lg font-semibold transition-all ${
@@ -582,7 +594,7 @@ export default function AdminExpenses() {
             {editingId ? 'Edit Expense' : 'Add New Expense'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label htmlFor="category" className="block text-sm font-semibold text-brown-dark mb-2">
                   Category *
@@ -849,7 +861,7 @@ export default function AdminExpenses() {
 
           {/* Search and Filters */}
           <div className="mb-6 p-4 bg-pink-light/20 rounded-lg border border-brown-light">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div>
                 <label className="block text-xs font-semibold text-brown-dark mb-2">
                   Search
@@ -937,7 +949,7 @@ export default function AdminExpenses() {
           {Object.keys(categoryTotals).length > 0 && (
             <div className="mb-6 p-4 bg-pink-light/30 rounded-lg border-2 border-brown-light">
               <h3 className="text-lg font-semibold text-brown-dark mb-3">Expenses by Category</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
                 {Object.entries(categoryTotals)
                   .sort(([, a], [, b]) => b - a)
                   .map(([category, total]) => (

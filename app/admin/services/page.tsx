@@ -6,6 +6,8 @@ import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import { type ServiceCatalog, type ServiceCategory, type Service } from '@/lib/services-utils'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
@@ -21,6 +23,7 @@ const blankService = (): Service => ({
   id: generateId('service'),
   name: '',
   price: 0,
+  priceUSD: undefined,
   duration: 60,
 })
 
@@ -33,6 +36,7 @@ const blankCategory = (): ServiceCategory => ({
 })
 
 export default function AdminServices() {
+  const { currency, formatCurrency } = useCurrency()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [originalCatalog, setOriginalCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [loading, setLoading] = useState(true)
@@ -47,6 +51,17 @@ export default function AdminServices() {
     () => JSON.stringify(catalog) !== JSON.stringify(originalCatalog),
     [catalog, originalCatalog],
   )
+
+  // Helper function to get display price in selected currency
+  const getDisplayPrice = (service: Service): number => {
+    if (currency === 'USD' && service.priceUSD !== undefined) {
+      return service.priceUSD
+    }
+    if (currency === 'USD' && service.price) {
+      return convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+    }
+    return service.price
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -218,7 +233,7 @@ const addService = (categoryId: string) => {
   }))
 }
 
-const updateService = (categoryId: string, serviceId: string, field: keyof Service, value: string | number) => {
+const updateService = (categoryId: string, serviceId: string, field: keyof Service, value: string | number | undefined) => {
   updateCategory(categoryId, (category) => ({
     ...category,
     services: category.services.map((service) =>
@@ -282,7 +297,7 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-4">
           {hasUnsavedChanges && (
             <div className="text-sm text-orange-600 font-medium flex items-center gap-2">
               <span role="img" aria-label="warning">
@@ -316,7 +331,7 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
         )}
 
         <div className="bg-white rounded-2xl shadow-lg p-8">
-          <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
             {catalog.categories.map((category, index) => (
               <div key={category.id} className="flex items-center gap-2">
                 <button
@@ -363,7 +378,7 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
 
           {activeCategory ? (
             <div className="border border-brown-light rounded-2xl p-6 space-y-6 bg-pink-light/30">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-brown-dark mb-2">
                     Category Name
@@ -445,7 +460,7 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
                       key={service.id}
                       className="bg-white border border-brown-light rounded-xl p-4 shadow-sm space-y-4"
                     >
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                         <div>
                           <label className="block text-sm font-semibold text-brown-dark mb-1">
                             Service Name
@@ -462,22 +477,101 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-brown-dark mb-1">
-                            Price (KSH)
+                            Price ({currency === 'KES' ? 'KES' : 'USD'}) *
+                            {currency === 'USD' && (
+                              <span className="ml-2 text-xs font-normal text-green-600">
+                                Display: {formatCurrency(getDisplayPrice(service))}
+                              </span>
+                            )}
                           </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={service.price}
-                            onChange={(event) =>
-                              updateService(
-                                activeCategory.id,
-                                service.id,
-                                'price',
-                                Number(event.target.value) || 0,
-                              )
-                            }
-                            className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                          />
+                          {currency === 'KES' ? (
+                            <input
+                              type="number"
+                              min={0}
+                              value={service.price}
+                              onChange={(event) =>
+                                updateService(
+                                  activeCategory.id,
+                                  service.id,
+                                  'price',
+                                  Number(event.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={service.priceUSD ?? ''}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                updateService(
+                                  activeCategory.id,
+                                  service.id,
+                                  'priceUSD',
+                                  value === '' ? undefined : Number(value) || undefined,
+                                )
+                              }}
+                              placeholder="Leave empty to auto-convert from KES"
+                              className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                            />
+                          )}
+                          {currency === 'USD' && (
+                            <p className="mt-1 text-xs text-brown-dark/60">
+                              Set a specific USD price, or leave empty to auto-convert from KES using exchange rate
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-1">
+                            {currency === 'KES' ? 'Price (USD)' : 'Price (KES)'} <span className="text-xs font-normal text-brown-dark/60">(Optional)</span>
+                            {currency === 'KES' && service.priceUSD !== undefined && (
+                              <span className="ml-2 text-xs font-normal text-green-600">
+                                Set: {formatCurrency(service.priceUSD)}
+                              </span>
+                            )}
+                          </label>
+                          {currency === 'KES' ? (
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={service.priceUSD ?? ''}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                updateService(
+                                  activeCategory.id,
+                                  service.id,
+                                  'priceUSD',
+                                  value === '' ? undefined : Number(value) || undefined,
+                                )
+                              }}
+                              placeholder="Leave empty to auto-convert from KES"
+                              className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              min={0}
+                              value={service.price}
+                              onChange={(event) =>
+                                updateService(
+                                  activeCategory.id,
+                                  service.id,
+                                  'price',
+                                  Number(event.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                            />
+                          )}
+                          {currency === 'KES' && (
+                            <p className="mt-1 text-xs text-brown-dark/60">
+                              Set a specific USD price, or leave empty to auto-convert from KES using exchange rate
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-brown-dark mb-1">

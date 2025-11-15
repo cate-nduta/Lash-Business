@@ -3,9 +3,12 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import Logo from './Logo'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { Currency } from '@/lib/currency-utils'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
+  const { currency, setCurrency } = useCurrency()
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -35,6 +38,33 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            
+            {/* Currency Selector */}
+            <div className="flex items-center space-x-2 border-l border-brown-light pl-6 ml-2">
+              <button
+                onClick={() => setCurrency('KES')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'KES'
+                    ? 'bg-brown-dark text-white'
+                    : currency === 'USD'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                KES
+              </button>
+              <span className="text-brown-dark/40">|</span>
+              <button
+                onClick={() => setCurrency('USD')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'USD'
+                    ? 'bg-amber-500 text-white shadow-md brightness-110'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                USD
+              </button>
+            </div>
           </div>
 
           {/* Mobile menu button */}
@@ -74,6 +104,40 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            
+            {/* Mobile Currency Selector */}
+            <div className="flex items-center space-x-2 pt-2 border-t border-brown-light mt-2">
+              <span className="text-brown-dark font-medium text-sm">Currency:</span>
+              <button
+                onClick={() => {
+                  setCurrency('KES')
+                  setIsOpen(false)
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'KES'
+                    ? 'bg-brown-dark text-white'
+                    : currency === 'USD'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                KES
+              </button>
+              <span className="text-brown-dark/40">|</span>
+              <button
+                onClick={() => {
+                  setCurrency('USD')
+                  setIsOpen(false)
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'USD'
+                    ? 'bg-amber-500 text-white shadow-md brightness-110'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                USD
+              </button>
+            </div>
           </div>
         )}
       </div>
