@@ -1,11 +1,7 @@
 {
-  "phone": "",
-  "email": "hello@lashdiary.co.ke",
+  "phone": "+254 488 638 882",
+  "email": "hello@thelashdiary.ke",
   "instagram": "@thelashdiary.ke",
   "instagramUrl": "https://instagram.com/thelashdiary.ke",
-  "location": "LashDiary Studio, Nairobi, Kenya",
-  "showPhone": false,
-  "showEmail": true,
-  "showInstagram": true,
-  "showLocation": true
+  "location": "LashDiary Studio, Nairobi, Kenya"
 }

@@ -23,8 +23,8 @@ export default function Navbar() {
     <nav className="bg-white shadow-soft w-full relative z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
-          <Link href="/" className="flex items-center space-x-2 hover:scale-105 transition-transform">
-            <Logo imageClassName="h-16 md:h-20 object-contain" />
+          <Link href="/" className="flex items-center space-x-2 hover:scale-105 transition-transform group relative">
+            <Logo imageClassName="h-16 md:h-20 object-contain group-hover:animate-wiggle transition-transform duration-300" />
           </Link>
 
           {/* Desktop Navigation */}
@@ -33,9 +33,10 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform"
+                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform relative group"
               >
                 {link.label}
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[var(--color-primary)] group-hover:w-full transition-all duration-300"></span>
               </Link>
             ))}
             

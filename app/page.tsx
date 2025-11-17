@@ -160,6 +160,20 @@ export default function Home() {
             }}
           />
           <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[color-mix(in srgb,var(--color-background) 90%, transparent 10%)] to-transparent" />
+          
+          {/* Cartoon Stickers */}
+          <div className="cartoon-sticker top-20 left-10 animate-float-sticker opacity-60 hidden md:block" style={{ animationDelay: '0s' }}>
+            <div className="sticker-lash"></div>
+          </div>
+          <div className="cartoon-sticker top-32 right-16 animate-float-sticker opacity-50 hidden lg:block" style={{ animationDelay: '1s' }}>
+            <div className="sticker-star"></div>
+          </div>
+          <div className="cartoon-sticker bottom-40 left-20 animate-float-sticker opacity-40 hidden md:block" style={{ animationDelay: '2s' }}>
+            <div className="sticker-heart"></div>
+          </div>
+          <div className="cartoon-sticker top-1/2 right-12 animate-float-sticker opacity-50 hidden xl:block" style={{ animationDelay: '1.5s' }}>
+            <div className="sticker-sparkle animate-rotate-slow"></div>
+          </div>
         </div>
 
         <div
@@ -171,7 +185,7 @@ export default function Home() {
             <span className="inline-block w-2 h-2 rounded-full bg-[var(--color-primary)]" />
             {hero.badge}
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title">
             {hero.title}
           </h1>
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2">
@@ -187,32 +201,36 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
             <Link
               href="/booking"
-              className="hover-soft inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation"
+              className="btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
             >
-              Book Now
-              <span aria-hidden>→</span>
+              <span className="relative z-10 flex items-center gap-2">
+                Book Now
+                <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+              </span>
             </Link>
             <Link
               href="/gallery"
-              className="hover-soft inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation"
+              className="hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
             >
-              View Gallery
+              <span className="relative z-10">View Gallery</span>
             </Link>
           </div>
         </div>
 
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-          <svg
-            className="w-6 h-6 text-[var(--color-text)]/70"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-gentle-bounce cursor-pointer group">
+          <div className="relative">
+            <svg
+              className="w-6 h-6 text-[var(--color-text)]/70 group-hover:text-[var(--color-primary)] transition-colors duration-300"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </div>
         </div>
       </section>
 
@@ -353,19 +371,23 @@ export default function Home() {
             {features.map((feature, index) => (
               <div
                 key={index}
-                className="interactive-card group relative p-8 rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-xl border border-[var(--color-primary)]/20"
+                className="interactive-card hover-lift group relative p-8 rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-xl border border-[var(--color-primary)]/20 animate-slide-in-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
               >
                 <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
                   background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%)'
                 }} />
-                <div className="relative">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg shadow-[var(--color-primary)]/30 mb-5">
+                <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="sticker-sparkle"></div>
+                </div>
+                <div className="relative z-10">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg shadow-[var(--color-primary)]/30 mb-5 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">
                     <span className="text-lg font-semibold">0{index + 1}</span>
                   </div>
-                  <h3 className="text-2xl font-display text-[var(--color-text)] mb-3">
+                  <h3 className="text-2xl font-display text-[var(--color-text)] mb-3 group-hover:text-[var(--color-primary)] transition-colors duration-300">
                     {feature.title}
                   </h3>
-                  <p className="text-[var(--color-text)]/80 leading-relaxed">
+                  <p className="text-[var(--color-text)]/80 leading-relaxed group-hover:text-[var(--color-text)] transition-colors duration-300">
                     {feature.description}
                   </p>
                 </div>
@@ -388,13 +410,14 @@ export default function Home() {
               What Our Clients Say
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-              {testimonials.slice(0, 3).map((testimonial) => (
+              {testimonials.slice(0, 3).map((testimonial, index) => (
                 <div
                   key={testimonial.id}
-                  className="interactive-card relative rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-2xl border border-[var(--color-text)]/10 overflow-hidden"
+                  className="interactive-card hover-lift relative rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-2xl border border-[var(--color-text)]/10 overflow-hidden animate-scale-in group"
+                  style={{ animationDelay: `${index * 0.15}s` }}
                 >
-                  <div className="absolute inset-x-10 -top-10 h-20 bg-[var(--color-primary)]/20 blur-3xl" />
-                  <div className="relative p-8">
+                  <div className="absolute inset-x-10 -top-10 h-20 bg-[var(--color-primary)]/20 blur-3xl group-hover:bg-[var(--color-primary)]/30 transition-colors duration-300" />
+                  <div className="relative p-8 z-10">
                     {testimonial.rating && (
                       <div className="flex gap-1 mb-3">
                         {[1, 2, 3, 4, 5].map((star) => (
@@ -481,16 +504,18 @@ export default function Home() {
             <div className="flex flex-wrap justify-center gap-4 pt-4">
               <Link
                 href="/booking"
-                className="hover-soft inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl"
+                className="btn-cute hover-lift inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl group relative overflow-hidden"
               >
-                {cta.buttonText}
-                <span aria-hidden>→</span>
+                <span className="relative z-10 flex items-center gap-2">
+                  {cta.buttonText}
+                  <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                </span>
               </Link>
               <Link
                 href="/services"
-                className="hover-soft inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30"
+                className="hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
               >
-                Browse Services
+                <span className="relative z-10">Browse Services</span>
               </Link>
             </div>
           </div>

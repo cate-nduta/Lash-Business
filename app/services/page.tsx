@@ -100,13 +100,32 @@ export default function Services() {
   }
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-8 sm:mb-12 md:mb-16">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-[var(--color-primary)] mb-4 sm:mb-6">Our Services</h1>
+    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20 relative overflow-hidden">
+      {/* Floating Decorative Elements */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="cartoon-sticker top-20 left-10 animate-float-sticker opacity-40 hidden md:block" style={{ animationDelay: '0s' }}>
+          <div className="sticker-lash"></div>
+        </div>
+        <div className="cartoon-sticker top-32 right-16 animate-float-sticker opacity-35 hidden lg:block" style={{ animationDelay: '1.2s' }}>
+          <div className="sticker-star"></div>
+        </div>
+        <div className="cartoon-sticker bottom-40 left-20 animate-float-sticker opacity-30 hidden md:block" style={{ animationDelay: '2.3s' }}>
+          <div className="sticker-heart"></div>
+        </div>
+        <div className="cartoon-sticker top-1/2 right-12 animate-float-sticker opacity-35 hidden xl:block" style={{ animationDelay: '0.8s' }}>
+          <div className="sticker-sparkle animate-rotate-slow"></div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="text-center mb-8 sm:mb-12 md:mb-16 relative">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-[var(--color-primary)] mb-4 sm:mb-6 relative inline-block">
+            Our Services
+            <span className="absolute -top-2 -right-8 text-2xl opacity-50 hidden lg:inline-block">✨</span>
+          </h1>
           <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto px-2">
             Discover our range of premium lash and brow treatments. Select a category to explore services crafted to
-            enhance your natural beauty.
+            enhance your natural beauty. 💅
           </p>
         </div>
 
@@ -146,11 +165,14 @@ export default function Services() {
                   ref={ref}
                   className={`space-y-6 transition-opacity ${inView ? 'animate-fade-in-up' : 'opacity-0'}`}
                 >
-                  {toDisplayServices(activeCategory, currency, formatCurrency).map((service) => (
+                  {toDisplayServices(activeCategory, currency, formatCurrency).map((service, index) => (
                 <div
                   key={service.id}
-                  className="rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-4 sm:p-6 md:p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover:scale-[1.02] transform cursor-pointer group"
+                  className="rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-4 sm:p-6 md:p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover:scale-[1.02] transform cursor-pointer group relative overflow-hidden"
                 >
+                  <div className="cartoon-sticker top-3 right-3 opacity-0 group-hover:opacity-30 transition-opacity duration-300 hidden sm:block">
+                    <div className="sticker-sparkle"></div>
+                  </div>
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3">
@@ -185,20 +207,23 @@ export default function Services() {
           </>
         )}
 
-        <div className="mt-16 bg-[var(--color-surface)] rounded-lg shadow-soft p-8 border-t-4 border-[var(--color-primary)]/60">
-          <h3 className="text-2xl font-display text-[var(--color-text)] mb-4">Additional Information</h3>
+        <div className="mt-16 bg-[var(--color-surface)] rounded-lg shadow-soft p-8 border-t-4 border-[var(--color-primary)]/60 relative overflow-hidden hover-lift">
+          <div className="cartoon-sticker top-4 right-4 opacity-25 hidden sm:block">
+            <div className="sticker-star animate-float-sticker"></div>
+          </div>
+          <h3 className="text-2xl font-display text-[var(--color-text)] mb-4">Additional Information 📝</h3>
           <div className="space-y-3 text-[var(--color-text)]/80">
             <p>
               <strong className="text-[var(--color-primary)]">Fill Appointments:</strong> Recommended every 2-3 weeks to maintain your
-              lashes.
+              lashes. 💖
             </p>
             <p>
               <strong className="text-[var(--color-primary)]">Consultation:</strong> Free consultation available for first-time clients
-              to help you choose the perfect lash style.
+              to help you choose the perfect lash style. ✨
             </p>
             <p>
               <strong className="text-[var(--color-primary)]">Aftercare:</strong> Detailed aftercare instructions provided to ensure
-              longevity and maintain the quality of your lashes.
+              longevity and maintain the quality of your lashes. 🌟
             </p>
             <p>
               <strong className="text-[var(--color-primary)]">Pricing:</strong> Prices are displayed in {currency === 'KES' ? 'Kenyan Shillings (KES)' : 'US Dollars (USD)'}. You can switch currencies on the booking page. Contact us for

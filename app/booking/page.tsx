@@ -1602,7 +1602,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   };
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
+    <div className="min-h-screen bg-gradient-to-b from-[var(--color-background)] via-[color-mix(in srgb,var(--color-background) 88%,var(--color-surface) 12%)] to-[var(--color-surface)] py-8 sm:py-12 md:py-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div
@@ -1611,9 +1611,17 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             inView ? 'animate-fade-in-up' : 'opacity-0'
           }`}
         >
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-brown-dark mb-4 sm:mb-6">
-            Book Your Appointment
-          </h1>
+          <div className="relative inline-block">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display text-brown-dark mb-4 sm:mb-6 relative z-10">
+              Book Your Appointment
+            </h1>
+            <div className="cartoon-sticker -top-2 -right-8 opacity-40 hidden lg:block">
+              <div className="sticker-star animate-float-sticker"></div>
+            </div>
+            <div className="cartoon-sticker -bottom-2 -left-6 opacity-30 hidden md:block">
+              <div className="sticker-sparkle animate-rotate-slow"></div>
+            </div>
+          </div>
           <p className="text-base sm:text-lg md:text-xl text-gray-700 max-w-2xl mx-auto leading-relaxed mb-4 px-2">
             Schedule your luxury studio appointment with ease. Select a date and time below, share your contact details, and we'll prepare a bespoke lash experience waiting for you at {STUDIO_LOCATION}.
           </p>
@@ -1661,7 +1669,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         </div>
 
         {/* Calendar Picker */}
-        <div className="mb-8">
+        <div className="mb-8 interactive-card hover-lift rounded-3xl bg-white/80 border border-brown-light/70 shadow-soft p-4 sm:p-6 animate-slide-in-up relative overflow-hidden">
+          <div className="cartoon-sticker top-2 right-2 opacity-30 hidden sm:block">
+            <div className="sticker-heart animate-float-sticker"></div>
+          </div>
           <CalendarPicker
             selectedDate={formData.date}
             onDateSelect={handleDateSelect}
@@ -1674,7 +1685,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         </div>
 
         {/* Booking Form */}
-        <div className="bg-white border-2 border-brown-light rounded-lg shadow-soft p-4 sm:p-6 md:p-8 lg:p-10">
+        <div className="bg-white/95 border-2 border-brown-light rounded-3xl shadow-soft interactive-card hover-lift p-4 sm:p-6 md:p-8 lg:p-10 animate-scale-in relative overflow-hidden">
+          <div className="cartoon-sticker top-3 left-3 opacity-20 hidden md:block">
+            <div className="sticker-lash animate-float-sticker" style={{ animationDelay: '0.5s' }}></div>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             {/* Time Slot Field */}
             {formData.date && (
@@ -1700,7 +1714,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     required
                     value={formData.timeSlot}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation"
+                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.02] relative"
                   >
                     <option value="">Select a time</option>
                     {timeSlots.map((slot) => (
@@ -1721,16 +1735,18 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               >
                 Full Name *
               </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                required
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
-                placeholder="Enter your full name"
-              />
+              <div className="relative group">
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  required
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                  placeholder="Enter your full name"
+                />
+              </div>
             </div>
 
             {/* Email Field */}
@@ -1741,16 +1757,19 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               >
                 Email Address *
               </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
-                placeholder="your.email@example.com"
-              />
+              <div className="relative group">
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                  placeholder="your.email@example.com"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none">💌</span>
+              </div>
             </div>
 
             {/* Phone Field */}
@@ -1804,8 +1823,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             {/* Eye Shape Selection */}
             <div
               id="eye-shape-section"
-              className="rounded-2xl border-2 border-brown-light/60 bg-white px-5 py-6 space-y-4"
+              className="rounded-2xl border-2 border-brown-light/60 bg-white px-5 py-6 space-y-4 relative overflow-hidden"
             >
+              <div className="cartoon-sticker top-3 right-3 opacity-20 hidden sm:block">
+                <div className="sticker-lash animate-float-sticker" style={{ animationDelay: '1s' }}></div>
+              </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <label className="block text-sm font-semibold text-brown-dark mb-1">
@@ -2465,9 +2487,21 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 !termsAccepted ||
                 (currency === 'USD' && paymentMethod === 'mpesa')
               }
-              className="w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation"
+              className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group"
             >
-              {loading || mpesaStatus.loading ? 'Processing...' : paymentMethod === 'none' ? 'Book Appointment (Pay Later)' : 'Book Appointment & Pay Deposit'}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {loading || mpesaStatus.loading ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {paymentMethod === 'none' ? 'Book Appointment (Pay Later)' : 'Book Appointment & Pay Deposit'}
+                    <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                  </>
+                )}
+              </span>
             </button>
             {!formData.service && (
               <p className="text-sm text-red-600 text-center mt-2">
@@ -2478,7 +2512,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         </div>
 
         {/* Additional Information */}
-        <div className="mt-8 bg-white border-2 border-brown-light rounded-lg shadow-soft p-8 text-center">
+        <div className="mt-8 bg-white border-2 border-brown-light rounded-lg shadow-soft p-8 text-center hover-lift animate-slide-in-up relative overflow-hidden">
+          <div className="cartoon-sticker top-4 left-4 opacity-25 hidden sm:block">
+            <div className="sticker-heart animate-float-sticker"></div>
+          </div>
           <h3 className="text-2xl font-display text-brown-dark mb-4">
             Need Assistance?
           </h3>
@@ -2488,9 +2525,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href="mailto:hello@lashdiary.co.ke"
-              className="inline-block bg-brown-dark text-white font-semibold px-6 py-3 rounded-full hover:bg-brown transition-colors"
+              className="btn-cute hover-lift inline-block bg-brown-dark text-white font-semibold px-6 py-3 rounded-full hover:bg-brown transition-colors relative overflow-hidden group"
             >
-              Email Us
+              <span className="relative z-10 flex items-center gap-2">
+                Email Us
+                <span className="text-lg group-hover:scale-110 transition-transform">💌</span>
+              </span>
             </a>
           </div>
         </div>
@@ -2511,15 +2551,22 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </svg>
             </button>
 
-            <div className="max-h-[85vh] overflow-y-auto p-6 sm:p-8">
+            <div className="max-h-[85vh] overflow-y-auto p-6 sm:p-8 relative">
+              <div className="cartoon-sticker top-8 right-8 opacity-30 hidden sm:block">
+                <div className="sticker-star animate-float-sticker"></div>
+              </div>
               {/* Success Icon */}
               <div className="text-center mb-6 sm:mb-8">
-                <div className="mx-auto w-18 h-18 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-10 h-10 sm:w-12 sm:h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mx-auto w-18 h-18 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center mb-4 animate-scale-in relative">
+                  <svg className="w-10 h-10 sm:w-12 sm:h-12 text-green-600 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
+                  <span className="absolute -bottom-1 -left-1 text-xl animate-gentle-bounce">🎉</span>
+                  <div className="cartoon-sticker -top-2 -right-2 opacity-50">
+                    <div className="sticker-sparkle"></div>
+                  </div>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-display text-brown-dark font-bold mb-2">
+                <h2 className="text-2xl sm:text-3xl font-display text-brown-dark font-bold mb-2 animate-slide-in-up">
                   Appointment Confirmed!
                 </h2>
                 <p className="text-gray-600 text-sm sm:text-base">
@@ -2625,9 +2672,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               {/* Close Button */}
               <button
                 onClick={handleCloseSuccessModal}
-                className="w-full bg-brown-dark hover:bg-brown text-white font-semibold px-5 py-3 rounded-full transition-all duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-brown-dark focus:ring-offset-2"
+                className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold px-5 py-3 rounded-full transition-all duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-brown-dark focus:ring-offset-2 relative overflow-hidden group"
               >
-                Got it!
+                <span className="relative z-10">
+                  Got it!
+                </span>
               </button>
             </div>
           </div>

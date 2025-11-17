@@ -27,28 +27,33 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2">
               <li>
-                <Link href="/services" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                <Link href="/services" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Services
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
               <li>
-                <Link href="/gallery" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                <Link href="/gallery" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Gallery
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
               <li>
-                <Link href="/booking" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                <Link href="/booking" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Book Appointment
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                <Link href="/terms" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Terms &amp; Conditions
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="text-gray-600 hover:text-brown transition-colors text-sm">
+                <Link href="/contact" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Contact Us
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
             </ul>

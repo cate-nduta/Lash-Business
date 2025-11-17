@@ -317,12 +317,321 @@
     }
   }
 
+  @keyframes sparkle {
+    0%, 100% {
+      opacity: 0;
+      transform: scale(0) rotate(0deg);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1) rotate(180deg);
+    }
+  }
+
+  @keyframes gentleBounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(139, 69, 19, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(139, 69, 19, 0.6), 0 0 40px rgba(139, 69, 19, 0.4);
+    }
+  }
+
+  @keyframes wiggle {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-3deg);
+    }
+    75% {
+      transform: rotate(3deg);
+    }
+  }
+
+  @keyframes scaleIn {
+    0% {
+      transform: scale(0.9);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInUp {
+    0% {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
   .floats {
     animation: floatSoft 6s ease-in-out infinite;
   }
 
   .animate-shimmer {
     animation: shimmer 3s infinite;
+  }
+
+  .animate-sparkle {
+    animation: sparkle 2s ease-in-out infinite;
+  }
+
+  .animate-gentle-bounce {
+    animation: gentleBounce 2s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  .animate-wiggle {
+    animation: wiggle 0.5s ease-in-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.4s ease-out;
+  }
+
+  .animate-slide-in-up {
+    animation: slideInUp 0.5s ease-out;
+  }
+
+  /* Cute hover effects */
+  .hover-lift {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px -12px color-mix(in srgb, var(--color-primary) 50%, transparent 50%);
+  }
+
+  .hover-glow {
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .hover-glow:hover {
+    box-shadow: 0 0 25px color-mix(in srgb, var(--color-primary) 40%, transparent 60%);
+    transform: scale(1.05);
+  }
+
+  .hover-sparkle {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hover-sparkle::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.6s ease;
+    transform: scale(0);
+  }
+
+  .hover-sparkle:hover::before {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+
+  /* Cute button animations */
+  .btn-cute {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .btn-cute::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+  }
+
+  .btn-cute:hover::after {
+    width: 300px;
+    height: 300px;
+  }
+
+  .btn-cute:active {
+    transform: scale(0.95);
+  }
+
+  /* Cartoon Stickers */
+  .cartoon-sticker {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .sticker-lash {
+    width: 40px;
+    height: 40px;
+    position: relative;
+  }
+
+  .sticker-lash::before {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 20px;
+    background: var(--color-primary);
+    border-radius: 4px;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) rotate(-15deg);
+    box-shadow: 
+      12px 0 0 var(--color-primary),
+      -12px 0 0 var(--color-primary),
+      6px 0 0 var(--color-primary),
+      -6px 0 0 var(--color-primary);
+  }
+
+  .sticker-lash::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: var(--color-text);
+    border-radius: 50%;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .sticker-star {
+    width: 30px;
+    height: 30px;
+    position: relative;
+  }
+
+  .sticker-star::before {
+    content: '⭐';
+    font-size: 30px;
+    display: block;
+  }
+
+  .sticker-heart {
+    width: 24px;
+    height: 24px;
+    position: relative;
+  }
+
+  .sticker-heart::before {
+    content: '💖';
+    font-size: 24px;
+    display: block;
+  }
+
+  .sticker-sparkle {
+    width: 20px;
+    height: 20px;
+    position: relative;
+  }
+
+  .sticker-sparkle::before {
+    content: '✨';
+    font-size: 20px;
+    display: block;
+  }
+
+  @keyframes floatSticker {
+    0%, 100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-15px) rotate(5deg);
+    }
+  }
+
+  .animate-float-sticker {
+    animation: floatSticker 4s ease-in-out infinite;
+  }
+
+  @keyframes rotateSticker {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-rotate-slow {
+    animation: rotateSticker 8s linear infinite;
+  }
+
+  /* Animated Title */
+  @keyframes titleGlow {
+    0%, 100% {
+      text-shadow: 0 0 20px rgba(139, 69, 19, 0.3), 0 0 40px rgba(139, 69, 19, 0.2);
+    }
+    50% {
+      text-shadow: 0 0 30px rgba(139, 69, 19, 0.5), 0 0 60px rgba(139, 69, 19, 0.3);
+    }
+  }
+
+  @keyframes titleFloat {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  @keyframes gradientShift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  .animate-title {
+    background: linear-gradient(90deg, var(--color-text) 0%, var(--color-primary) 50%, var(--color-text) 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: titleFloat 3s ease-in-out infinite, gradientShift 3s ease infinite, titleGlow 4s ease-in-out infinite;
+  }
+
+  /* Fallback for browsers that don't support background-clip */
+  @supports not (-webkit-background-clip: text) {
+    .animate-title {
+      background: none;
+      -webkit-text-fill-color: var(--color-text);
+      color: var(--color-text);
+      animation: titleFloat 3s ease-in-out infinite, titleGlow 4s ease-in-out infinite;
+    }
   }
 
   [class*='shadow-soft'],
