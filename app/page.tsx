@@ -69,8 +69,8 @@ export default function Home() {
 
   useEffect(() => {
     const timestamp = Date.now()
-    const fetchOptions = { 
-      cache: 'no-store',
+    const fetchOptions: RequestInit = { 
+      cache: 'no-store' as RequestCache,
       headers: {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',

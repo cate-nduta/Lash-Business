@@ -5,6 +5,13 @@ import { sendShopOrderConfirmationEmail } from '@/app/api/shop/email/utils'
 // This endpoint receives callbacks from M-Pesa after payment processing
 export async function POST(request: NextRequest) {
   try {
+    // Safety check: If M-Pesa is not configured, just acknowledge the callback
+    const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || ''
+    if (!MPESA_CONSUMER_KEY) {
+      console.log('M-Pesa callback received but M-Pesa is not configured. Acknowledging callback.')
+      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Callback received' })
+    }
+    
     const body = await request.json()
     
     // Log the callback for debugging
@@ -45,9 +52,20 @@ export async function POST(request: NextRequest) {
       // Try to find and update shop purchase first (check pending purchases by checkoutRequestID)
       let shopPurchaseHandled = false
       try {
-        const shopData = await readDataFile<{ products: any[]; pendingPurchases?: any[] }>('shop-products.json', {
+        const shopData = await readDataFile<{ 
+          products: any[]; 
+          pendingPurchases?: any[]; 
+          orders?: any[]; 
+          transportationFee?: number;
+          pickupLocation?: string;
+          pickupDays?: string[];
+        }>('shop-products.json', {
           products: [],
           pendingPurchases: [],
+          orders: [],
+          transportationFee: 150,
+          pickupLocation: 'Pick up Mtaani',
+          pickupDays: ['Monday', 'Wednesday', 'Friday'],
         })
         
         // Check if this checkoutRequestID matches a pending shop purchase

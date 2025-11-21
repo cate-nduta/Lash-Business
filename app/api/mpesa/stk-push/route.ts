@@ -62,6 +62,16 @@ function generatePassword(): string {
 }
 
 export async function POST(request: NextRequest) {
+  // COMMENTED OUT: M-Pesa payment will be fixed later
+  return NextResponse.json(
+    { 
+      error: 'M-Pesa payment is currently unavailable',
+      message: 'M-Pesa payment integration is being updated. Please check back later.',
+    },
+    { status: 503 }
+  )
+  
+  /* COMMENTED OUT - TO BE FIXED LATER
   try {
     // Check if M-Pesa is configured
     if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET || !MPESA_SHORTCODE || !MPESA_PASSKEY) {
@@ -176,5 +186,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+  */
 }
 

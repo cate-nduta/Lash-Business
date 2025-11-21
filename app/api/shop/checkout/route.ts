@@ -98,7 +98,17 @@ export async function POST(request: NextRequest) {
     const total = subtotal + transportCost
 
     // For M-Pesa payments, initiate STK push
+    // COMMENTED OUT: M-Pesa payment will be fixed later
     if (paymentMethod === 'mpesa') {
+      return NextResponse.json(
+        { 
+          error: 'M-Pesa payment is currently unavailable',
+          message: 'M-Pesa payment integration is being updated. Please check back later or use card payment.',
+        },
+        { status: 503 }
+      )
+      
+      /* COMMENTED OUT - TO BE FIXED LATER
       if (!phoneNumber) {
         return NextResponse.json({ error: 'Phone number is required for M-Pesa payment' }, { status: 400 })
       }
@@ -181,11 +191,21 @@ export async function POST(request: NextRequest) {
         transportationFee: transportCost,
         total,
       })
+      */
     }
 
     // For card payments, you would integrate with a payment gateway here
-    // For now, we'll simulate successful payment
+    // COMMENTED OUT: Card payment will be fixed later
     if (paymentMethod === 'card') {
+      return NextResponse.json(
+        { 
+          error: 'Card payment is currently unavailable',
+          message: 'Card payment integration is being updated. Please check back later.',
+        },
+        { status: 503 }
+      )
+      
+      /* COMMENTED OUT - TO BE FIXED LATER
       if (!email && !phoneNumber) {
         return NextResponse.json(
           { error: 'Email or phone number is required so we can notify you when your order is ready' },
@@ -282,6 +302,8 @@ export async function POST(request: NextRequest) {
           total,
         })
       }
+      */
+    }
 
     return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 })
   } catch (error: any) {

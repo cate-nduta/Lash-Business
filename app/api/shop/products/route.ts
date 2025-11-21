@@ -18,7 +18,7 @@ interface ProductsPayload {
   transportationFee?: number
   shopNotice?: string
   pickupLocation?: string
-  updatedAt?: string
+  updatedAt?: string | null
 }
 
 const DEFAULT_PRODUCTS: ProductsPayload = { 
