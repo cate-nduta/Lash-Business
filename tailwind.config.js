@@ -43,6 +43,7 @@ module.exports = {
         'wiggle': 'wiggle 1s ease-in-out infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'bounce-slow': 'bounce 2s infinite',
+        'bounce-subtle': 'bounceSubtle 2s ease-in-out infinite',
         'scroll': 'scroll 30s linear infinite',
       },
       keyframes: {
@@ -61,6 +62,10 @@ module.exports = {
         wiggle: {
           '0%, 100%': { transform: 'rotate(-3deg)' },
           '50%': { transform: 'rotate(3deg)' },
+        },
+        bounceSubtle: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
         },
         scroll: {
           '0%': { transform: 'translateX(0)' },

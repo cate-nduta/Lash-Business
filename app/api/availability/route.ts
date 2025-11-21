@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
     const availability = await readDataFile('availability.json', {})
     return NextResponse.json(availability, {
       headers: {
-        'Cache-Control': 'no-store, max-age=0',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {
@@ -21,7 +23,14 @@ export async function GET(request: NextRequest) {
         bookingWindow: {},
         fullyBookedDates: [],
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     )
   }
 }

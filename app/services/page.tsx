@@ -5,6 +5,8 @@ import { useInView } from 'react-intersection-observer'
 import { type ServiceCatalog, type ServiceCategory } from '@/lib/services-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { useServiceCart } from '@/contexts/ServiceCartContext'
+import Link from 'next/link'
 
 interface DisplayService {
   id: string
@@ -28,6 +30,7 @@ const serviceDescriptions: Record<string, string> = {
   'Mega Volume Infill': 'Maintain your mega volume lashes with a fill appointment every 2-3 weeks.',
   'Wispy Infill': 'Refresh your wispy lashes to keep that soft, fluttery look.',
   'Lash Lift': 'Enhance your natural lashes with a perm that curls and lifts, no extensions needed.',
+  'Lash Removal': 'Professional removal of existing lash extensions. Recommended before getting a new full set for best results.',
 }
 
 const toDisplayServices = (category: ServiceCategory, currency: 'KES' | 'USD', formatCurrency: (amount: number) => string): DisplayService[] =>
@@ -48,9 +51,11 @@ const toDisplayServices = (category: ServiceCategory, currency: 'KES' | 'USD', f
 
 export default function Services() {
   const { currency, setCurrency, formatCurrency } = useCurrency()
+  const { addService, hasService, items, getTotalItems } = useServiceCart()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [addedServiceId, setAddedServiceId] = useState<string | null>(null)
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -141,10 +146,10 @@ export default function Services() {
                   key={category.id}
                   type="button"
                   onClick={() => setActiveCategoryId(category.id)}
-                  className={`px-4 sm:px-5 py-2 rounded-full border text-xs sm:text-sm font-semibold transition-all touch-manipulation ${
+                  className={`btn-fun px-4 sm:px-5 py-2 rounded-full border text-xs sm:text-sm font-semibold transition-all touch-manipulation ${
                     category.id === activeCategoryId
-                      ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border-[var(--color-primary)] shadow-lg'
-                      : 'bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-text)]/20 hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)]'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border-[var(--color-primary)] shadow-lg hover-bounce'
+                      : 'bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-text)]/20 hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)] hover-grow'
                   }`}
                 >
                   {category.name}
@@ -165,38 +170,86 @@ export default function Services() {
                   ref={ref}
                   className={`space-y-6 transition-opacity ${inView ? 'animate-fade-in-up' : 'opacity-0'}`}
                 >
-                  {toDisplayServices(activeCategory, currency, formatCurrency).map((service, index) => (
-                <div
-                  key={service.id}
-                  className="rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-4 sm:p-6 md:p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover:scale-[1.02] transform cursor-pointer group relative overflow-hidden"
-                >
-                  <div className="cartoon-sticker top-3 right-3 opacity-0 group-hover:opacity-30 transition-opacity duration-300 hidden sm:block">
-                    <div className="sticker-sparkle"></div>
-                  </div>
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3">
-                        <h3 className="text-xl sm:text-2xl md:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">
-                          {service.name}
-                        </h3>
-                        <span className="text-[var(--color-primary)] font-semibold text-lg sm:text-xl bg-[color-mix(in srgb,var(--color-primary) 8%, var(--color-surface) 92%)] px-3 py-1 rounded-full border border-[var(--color-primary)]/40 group-hover:border-[var(--color-primary)] transition-colors inline-block w-fit">
-                          {service.price}
-                        </span>
+                  {toDisplayServices(activeCategory, currency, formatCurrency).map((displayService, index) => {
+                    const fullService = activeCategory.services.find(s => s.id === displayService.id)
+                    const isInCart = hasService(displayService.id)
+                    const justAdded = addedServiceId === displayService.id
+                    
+                    const handleAddToCart = () => {
+                      if (fullService) {
+                        addService({
+                          serviceId: fullService.id,
+                          name: fullService.name,
+                          price: currency === 'USD' && fullService.priceUSD !== undefined 
+                            ? fullService.priceUSD 
+                            : currency === 'USD' && fullService.price
+                            ? convertCurrency(fullService.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+                            : fullService.price || 0,
+                          priceUSD: fullService.priceUSD,
+                          duration: fullService.duration,
+                          categoryId: activeCategory.id,
+                          categoryName: activeCategory.name,
+                        })
+                        setAddedServiceId(displayService.id)
+                        setTimeout(() => setAddedServiceId(null), 2000)
+                      }
+                    }
+                    
+                    return (
+                      <div
+                        key={displayService.id}
+                        className="card-interactive rounded-2xl border border-[var(--color-text)]/10 bg-[var(--color-surface)] shadow-soft p-4 sm:p-6 md:p-8 transition-all duration-300 hover:shadow-soft-lg hover:border-[var(--color-primary)]/40 hover-glow-fun group relative overflow-hidden"
+                      >
+                        <div className="cartoon-sticker top-3 right-3 opacity-0 group-hover:opacity-30 transition-opacity duration-300 hidden sm:block">
+                          <div className="sticker-sparkle"></div>
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3">
+                              <h3 className="text-xl sm:text-2xl md:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">
+                                {displayService.name}
+                              </h3>
+                              <span className="text-[var(--color-primary)] font-semibold text-lg sm:text-xl bg-[color-mix(in srgb,var(--color-primary) 8%, var(--color-surface) 92%)] px-3 py-1 rounded-full border border-[var(--color-primary)]/40 group-hover:border-[var(--color-primary)] transition-colors inline-block w-fit">
+                                {displayService.price}
+                              </span>
+                            </div>
+                            {displayService.description && (
+                              <p className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors">
+                                {displayService.description}
+                              </p>
+                            )}
+                            {displayService.duration && (
+                              <p className="text-sm font-semibold text-[var(--color-primary)]/80 mb-3">
+                                Duration: {displayService.duration}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {isInCart ? (
+                              <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold text-sm text-center border border-green-300">
+                                ✓ In Cart
+                              </div>
+                            ) : (
+                              <button
+                                onClick={handleAddToCart}
+                                className="btn-fun px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+                              >
+                                {justAdded ? <span className="animate-bounce-fun">✓ Added!</span> : 'Add to Cart'}
+                              </button>
+                            )}
+                            {getTotalItems() > 0 && (
+                              <Link
+                                href="/booking"
+                                className="btn-fun px-4 py-2 bg-[var(--color-accent)] text-[var(--color-text)] rounded-lg font-semibold text-sm hover:bg-[var(--color-accent)]/80 transition-colors text-center border border-[var(--color-primary)]/20"
+                              >
+                                Book ({getTotalItems()})
+                              </Link>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      {service.description && (
-                        <p className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors">
-                          {service.description}
-                        </p>
-                      )}
-                      {service.duration && (
-                        <p className="text-sm font-semibold text-[var(--color-primary)]/80">
-                          Duration: {service.duration}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             ) : (

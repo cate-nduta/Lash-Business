@@ -206,6 +206,13 @@ export default function AdminDashboard() {
       icon: '💄',
       ownerOnly: false,
     },
+    {
+      title: 'Shop',
+      description: 'Manage products, prices, and inventory for your online shop',
+      href: '/admin/shop',
+      icon: '🛍️',
+      ownerOnly: false,
+    },
   ]
 
   // Filter menu items based on user role

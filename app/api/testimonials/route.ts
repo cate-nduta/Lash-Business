@@ -31,10 +31,23 @@ export async function GET(request: NextRequest) {
         status: testimonial.status || 'approved',
       }))
 
-    return NextResponse.json({ testimonials: approvedTestimonials })
+    return NextResponse.json({ testimonials: approvedTestimonials }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   } catch (error) {
     console.error('Error loading testimonials:', error)
-    return NextResponse.json({ testimonials: [] }, { status: 500 })
+    return NextResponse.json({ testimonials: [] }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   }
 }
 

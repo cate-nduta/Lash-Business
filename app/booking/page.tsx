@@ -6,6 +6,7 @@ import CalendarPicker from '@/components/CalendarPicker'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { useServiceCart } from '@/contexts/ServiceCartContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,13 +36,6 @@ interface ServiceOptionGroup {
   options: ServiceOption[]
 }
 
-interface LookOption {
-  id: string
-  label: string
-  imageUrl: string
-  description?: string | null
-  recommendedStyles: string[]
-}
 
 // Service price and duration mappings will be loaded from API
 
@@ -106,6 +100,7 @@ const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z
 
 export default function Booking() {
   const { currency, setCurrency, formatCurrency: formatCurrencyContext } = useCurrency()
+  const { items: cartItems, removeService, getTotalItems, getTotalPrice, getTotalDuration, clearCart } = useServiceCart()
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -154,8 +149,6 @@ export default function Booking() {
     time: string
     endTime: string
     service: string
-    eyeShape: string
-    recommendedStyles: string[]
     deposit: string
     originalPrice: string
     discount: string
@@ -186,11 +179,6 @@ const [returningInfoError, setReturningInfoError] = useState<string | null>(null
     fridayNightDepositPercentage?: number
   } | null>(null)
 const [discountsLoaded, setDiscountsLoaded] = useState(false)
-const [eyeShapeOptions, setEyeShapeOptions] = useState<LookOption[]>([])
-const [loadingLookOptions, setLoadingLookOptions] = useState(true)
-const [lookOptionsError, setLookOptionsError] = useState<string | null>(null)
-const [selectedEyeShapeId, setSelectedEyeShapeId] = useState<string>('')
-const [eyeShapeError, setEyeShapeError] = useState<string | null>(null)
 const [termsAccepted, setTermsAccepted] = useState(false)
 const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false)
 
@@ -213,7 +201,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
       setCheckingFirstTime(true)
       try {
-        const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}`, {
+        const timestamp = Date.now()
+        const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}&t=${timestamp}`, {
           cache: 'no-store',
         })
         if (!response.ok) {
@@ -235,11 +224,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     return () => clearTimeout(timeoutId)
   }, [formData.email])
 
-  useEffect(() => {
-    if (selectedEyeShapeId && !eyeShapeOptions.some((option) => option.id === selectedEyeShapeId)) {
-      setSelectedEyeShapeId('')
-    }
-  }, [eyeShapeOptions, selectedEyeShapeId])
 
   useEffect(() => {
     if (!formData.email) {
@@ -305,7 +289,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     let cancelled = false
     setLoadingReturningDiscount(true)
 
-    fetch(`/api/booking/returning-discount?email=${encodeURIComponent(email)}&date=${formData.date}`, {
+    const timestamp = Date.now()
+    fetch(`/api/booking/returning-discount?email=${encodeURIComponent(email)}&date=${formData.date}&t=${timestamp}`, {
       cache: 'no-store',
     })
       .then(async (response) => {
@@ -347,7 +332,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   }, [formData.email, formData.date, formData.service, isFirstTimeClient, serviceCategoryMap, discounts])
 
   useEffect(() => {
-    fetch('/api/discounts', { cache: 'no-store' })
+    const timestamp = Date.now()
+    fetch(`/api/discounts?t=${timestamp}`, { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Failed to load discounts: ${res.status}`)
@@ -375,7 +361,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 0,
             ),
           },
-          depositPercentage: Number(data?.depositPercentage ?? 30),
+          depositPercentage: Number(data?.depositPercentage ?? 40),
           fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
         }
         setDiscounts(normalized)
@@ -386,7 +372,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setDiscounts({
           firstTimeClientDiscount: { enabled: false, percentage: 0 },
           returningClientDiscount: { enabled: false, tier30Percentage: 0, tier45Percentage: 0 },
-          depositPercentage: 30,
+          depositPercentage: 40,
           fridayNightDepositPercentage: 50,
         })
       })
@@ -397,7 +383,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   const firstTimeDiscountEnabled = discounts?.firstTimeClientDiscount?.enabled ?? false
   const firstTimeDiscountPercentage = discounts?.firstTimeClientDiscount?.percentage ?? 0
-  const depositPercentage = discounts?.depositPercentage ?? 30
+  const depositPercentage = discounts?.depositPercentage ?? 40
   const fridayNightDepositPercentage = discounts?.fridayNightDepositPercentage ?? 50
   const returningClientDiscountConfig = discounts?.returningClientDiscount
   const returningClientDiscountEnabled = returningClientDiscountConfig?.enabled ?? false
@@ -452,7 +438,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   useEffect(() => {
     const loadServices = async () => {
       try {
-        const response = await fetch('/api/services', { cache: 'no-store' })
+        const timestamp = Date.now()
+        const response = await fetch(`/api/services?t=${timestamp}`, { cache: 'no-store' })
         if (!response.ok) {
           throw new Error('Failed to load services')
         }
@@ -525,86 +512,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     loadServices()
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const mapLookOption = (option: any): LookOption | null => {
-      if (!option || typeof option !== 'object') return null
-      const id = typeof option.id === 'string' ? option.id.trim() : ''
-      const label = typeof option.label === 'string' ? option.label.trim() : ''
-      const imageUrl = typeof option.imageUrl === 'string' ? option.imageUrl.trim() : ''
-      if (!id || !label || !imageUrl) return null
-      return {
-        id,
-        label,
-        imageUrl,
-        description:
-          typeof option.description === 'string' && option.description.trim().length > 0
-            ? option.description.trim()
-            : null,
-        recommendedStyles: Array.isArray(option.recommendedStyles)
-          ? option.recommendedStyles
-              .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
-              .filter((entry: string) => entry.length > 0)
-          : [],
-      }
-    }
-
-    const loadLookOptions = async () => {
-      setLoadingLookOptions(true)
-      setLookOptionsError(null)
-      try {
-        // Add timestamp to prevent caching
-        const timestamp = Date.now()
-        const response = await fetch(`/api/booking/look-options?t=${timestamp}`, { 
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-          },
-        })
-        if (!response.ok) {
-          throw new Error(`Failed to load look options (status ${response.status})`)
-        }
-        const data = await response.json()
-        if (cancelled) return
-
-        console.log('Loaded eye shape options:', data)
-
-        const eyeShapes = Array.isArray(data?.eyeShapes)
-          ? data.eyeShapes
-              .map(mapLookOption)
-              .filter((option: LookOption | null): option is LookOption => Boolean(option))
-          : []
-
-        console.log('Mapped eye shapes:', eyeShapes)
-
-        setEyeShapeOptions(eyeShapes)
-
-        if (eyeShapes.length === 0) {
-          setLookOptionsError(
-            "We're refreshing our eye shape gallery. Please check back shortly or contact us to complete your booking.",
-          )
-        }
-      } catch (error: any) {
-        if (cancelled) return
-        console.error('Error loading look options:', error)
-        setEyeShapeOptions([])
-        setLookOptionsError(
-          "We couldn't load the eye shape references. Please refresh the page or reach out to us directly to finish your booking.",
-        )
-      } finally {
-        if (!cancelled) {
-          setLoadingLookOptions(false)
-        }
-      }
-    }
-
-    loadLookOptions()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('')
@@ -674,7 +581,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     setPromoError('')
 
     try {
-      const response = await fetch('/api/promo-codes/validate', {
+      const timestamp = Date.now()
+      const response = await fetch(`/api/promo-codes/validate?t=${timestamp}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -875,25 +783,40 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   }
 
   // Calculate pricing with discount (first-time OR promo code, not both)
-  const calculatePricing = (service: string) => {
-    // Get price in selected currency
-    const getServicePrice = (): number => {
-      if (!service) return 0
-      if (currency === 'USD' && servicePricesUSD[service] !== undefined) {
-        return servicePricesUSD[service]
-      }
-      if (currency === 'KES') {
-        return servicePrices[service] || 0
-      }
-      // Fallback: convert KES to USD if USD price not set
-      if (currency === 'USD' && servicePrices[service]) {
-        return convertCurrency(servicePrices[service], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
-      }
-      return servicePrices[service] || 0
+  const calculatePricing = (services: string[] | string) => {
+    // Handle both single service (backward compatibility) and multiple services
+    const serviceList = Array.isArray(services) ? services : services ? [services] : []
+    
+    // Get total price for all services in selected currency
+    const getTotalServicePrice = (): number => {
+      if (serviceList.length === 0) return 0
+      
+      return serviceList.reduce((total, serviceName) => {
+        // Try to find service in cart items first (more accurate)
+        const cartItem = cartItems.find(item => item.name === serviceName)
+        if (cartItem) {
+          return total + (currency === 'USD' && cartItem.priceUSD !== undefined 
+            ? cartItem.priceUSD 
+            : cartItem.price)
+        }
+        
+        // Fallback to service prices map
+        if (currency === 'USD' && servicePricesUSD[serviceName] !== undefined) {
+          return total + servicePricesUSD[serviceName]
+        }
+        if (currency === 'KES') {
+          return total + (servicePrices[serviceName] || 0)
+        }
+        // Fallback: convert KES to USD if USD price not set
+        if (currency === 'USD' && servicePrices[serviceName]) {
+          return total + convertCurrency(servicePrices[serviceName], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        }
+        return total + (servicePrices[serviceName] || 0)
+      }, 0)
     }
 
-    const originalPrice = getServicePrice()
-    if (!service || originalPrice === 0) {
+    const originalPrice = getTotalServicePrice()
+    if (serviceList.length === 0 || originalPrice === 0) {
       return {
         originalPrice: 0,
         discount: 0,
@@ -904,13 +827,15 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         depositPercentage: depositPercentage,
       }
     }
+    
+    // Check if any service is a fill service (for discount eligibility)
+    const hasFillService = serviceList.some(serviceName => isFillService(serviceName, serviceCategoryMap))
     const isReferralPromo = Boolean(promoCodeData?.valid && promoCodeData?.isReferral)
     const isSalonReferralPromo = Boolean(promoCodeData?.valid && promoCodeData?.isSalonReferral)
     const referralPromoApplied = isReferralPromo || isSalonReferralPromo
-    const isFill = isFillService(service, serviceCategoryMap)
 
     const firstTimeEligible =
-      !isFill &&
+      !hasFillService &&
       firstTimeDiscountEnabled &&
       effectiveIsFirstTimeClient === true &&
       !referralPromoApplied
@@ -918,7 +843,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     // Promo codes and automatic discounts are mutually exclusive
     const promoEligible = Boolean(
       promoCodeData?.valid &&
-      !isFill &&
+      !hasFillService &&
       appliedReturningDiscountPercent === 0 && // Cannot use promo if returning discount is active
       !firstTimeEligible && // Cannot use promo if first-time discount is active
       (
@@ -929,7 +854,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     )
 
     const returningEligible =
-      !isFill &&
+      !hasFillService &&
       appliedReturningDiscountPercent > 0 &&
       !promoEligible && // Cannot use returning discount if promo is active
       !firstTimeEligible
@@ -977,7 +902,37 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }
 
-  const pricing = calculatePricing(formData.service)
+  // Get service names from cart or fallback to formData.service for backward compatibility
+  const selectedServiceNames = cartItems.length > 0 
+    ? cartItems.map(item => item.name)
+    : formData.service 
+    ? [formData.service]
+    : []
+  
+  // Debug: Log cart items to help diagnose issues
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (cartItems.length > 0) {
+        console.log('✅ Cart items loaded:', cartItems)
+        console.log('✅ Selected service names:', selectedServiceNames)
+      } else {
+        const savedCart = localStorage.getItem('serviceCart')
+        if (savedCart) {
+          console.warn('⚠️ Cart appears empty but localStorage has data:', savedCart)
+          try {
+            const parsed = JSON.parse(savedCart)
+            console.warn('⚠️ Parsed cart data:', parsed)
+          } catch (e) {
+            console.error('❌ Error parsing cart from localStorage:', e)
+          }
+        } else {
+          console.log('ℹ️ Cart is empty and no data in localStorage')
+        }
+      }
+    }
+  }, [cartItems, selectedServiceNames])
+  
+  const pricing = calculatePricing(selectedServiceNames)
   const depositAmount = pricing.deposit
 
   const formatDateDisplay = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
@@ -1037,7 +992,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   // Load availability data
   useEffect(() => {
-    fetch('/api/availability', { cache: 'no-store' })
+    const timestamp = Date.now()
+    fetch(`/api/availability?t=${timestamp}`, { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Failed to load availability: ${res.status}`)
@@ -1074,7 +1030,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     const loadAvailableDates = async () => {
       setLoadingDates(true)
       try {
-        const response = await fetch('/api/calendar/available-slots', { cache: 'no-store' })
+        const timestamp = Date.now()
+        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'no-store' })
         if (!response.ok) {
           throw new Error(`Failed to load available dates: ${response.status}`)
         }
@@ -1153,7 +1110,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     setSubmitStatus({ type: null, message: '' })
     
     try {
-      const response = await fetch(`/api/calendar/available-slots?date=${date}`, {
+      const timestamp = Date.now()
+      const response = await fetch(`/api/calendar/available-slots?date=${date}&t=${timestamp}`, {
         cache: 'no-store',
       })
       const data = await response.json()
@@ -1196,10 +1154,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     setSubmitStatus({ type: null, message: '' })
   }
 
-  const handleSelectEyeShape = (optionId: string) => {
-    setSelectedEyeShapeId(optionId)
-    setEyeShapeError(null)
-  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     if (e.target.name === 'phone') {
@@ -1262,7 +1216,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           phone,
           amount,
           accountReference: bookingReference,
-          transactionDesc: `LashDiary Deposit - ${formData.service || 'Service'}`,
+          transactionDesc: `LashDiary Deposit - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
         }),
       })
 
@@ -1311,13 +1265,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
     setLoading(true)
 
-    const selectedEyeShape = eyeShapeOptions.find((option) => option.id === selectedEyeShapeId)
-    if (!selectedEyeShape) {
-      setLoading(false)
-      setEyeShapeError('Please select the eye shape that best matches you.')
-      document.getElementById('eye-shape-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return
-    }
 
     // Validate promo code if one is entered
     if (promoCode.trim() && !promoCodeData?.valid) {
@@ -1334,7 +1281,34 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
 
     try {
-      const pricingDetails = calculatePricing(formData.service)
+      // Check if cart is empty - if so, show helpful error message
+      if (cartItems.length === 0 && !formData.service) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select at least one service to continue. You can add services from the Services page.',
+        })
+        // Scroll to service selection area
+        setTimeout(() => {
+          const serviceSection = document.getElementById('service-cart-section')
+          if (serviceSection) {
+            serviceSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 100)
+        return
+      }
+      
+      // Ensure we have at least one service
+      if (selectedServiceNames.length === 0) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select at least one service to continue.',
+        })
+        return
+      }
+      
+      const pricingDetails = calculatePricing(selectedServiceNames)
       const referralType = referralMode === 'friend' ? 'friend' : referralMode === 'salon' ? 'salon' : null
       const salonReferralContext = promoCodeData?.isSalonReferral
         ? {
@@ -1368,13 +1342,27 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       // Proceed with booking creation (with or without payment)
       if (paymentResult.success || paymentMethod === 'none') {
         // Proceed with booking creation
-        const response = await fetch('/api/calendar/book', {
+        const timestamp = Date.now()
+        const response = await fetch(`/api/calendar/book?t=${timestamp}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             ...formData,
+            service: selectedServiceNames.length > 0 
+              ? selectedServiceNames.join(' + ') 
+              : formData.service || 'Lash Service',
+            services: selectedServiceNames, // Array of service names
+            serviceDetails: cartItems.map(item => ({
+              serviceId: item.serviceId,
+              name: item.name,
+              price: item.price,
+              priceUSD: item.priceUSD,
+              duration: item.duration,
+              categoryId: item.categoryId,
+              categoryName: item.categoryName,
+            })),
             location: STUDIO_LOCATION,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
@@ -1387,16 +1375,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             salonReferral: salonReferralContext,
             mpesaCheckoutRequestID: paymentResult.checkoutRequestID || null,
             currency: currency,
-            eyeShapeSelection: {
-              id: selectedEyeShape.id,
-              label: selectedEyeShape.label,
-              imageUrl: selectedEyeShape.imageUrl,
-              description: selectedEyeShape.description ?? null,
-              recommendedStyles: selectedEyeShape.recommendedStyles ?? [],
-            },
-            desiredLook: selectedEyeShape.recommendedStyles.length > 0 
-              ? selectedEyeShape.recommendedStyles[0] 
-              : 'Custom',
+            eyeShapeSelection: null,
+            desiredLook: 'Custom',
           }),
         })
 
@@ -1418,8 +1398,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           hour12: true,
         })
         
-        // Calculate end time based on service duration
-        const serviceDuration = serviceDurations[formData.service] || 90 // Default to 90 minutes
+        // Calculate end time based on total service duration
+        const serviceDuration = getTotalDuration() || 90 // Default to 90 minutes
         const endTime = new Date(appointmentTime)
         endTime.setMinutes(endTime.getMinutes() + serviceDuration)
         const formattedEndTime = endTime.toLocaleTimeString('en-US', {
@@ -1441,9 +1421,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           date: formattedDate,
           time: formattedTime,
           endTime: formattedEndTime,
-          service: formData.service || 'Lash Service',
-          eyeShape: selectedEyeShape.label,
-          recommendedStyles: selectedEyeShape.recommendedStyles ?? [],
+          service: selectedServiceNames.length > 0 
+            ? selectedServiceNames.join(' + ') 
+            : 'Lash Service',
           deposit: depositFormatted,
           originalPrice: originalPriceFormatted,
           discount: discountFormatted,
@@ -1521,7 +1501,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 email: formData.email,
                 bookingId: data.bookingId,
                 clientName: formData.name,
-                service: formData.service,
+                service: selectedServiceNames.length > 0 
+                  ? selectedServiceNames.join(' + ') 
+                  : formData.service || 'Lash Service',
                 appointmentDate: formData.date,
                 appointmentTime: formData.timeSlot,
                 originalPrice: pricingDetails.originalPrice,
@@ -1549,6 +1531,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setReferralMessage('')
         setReferralError('')
         
+        // Clear service cart after successful booking
+        clearCart()
+        
         // Reset form
         setFormData({
           name: '',
@@ -1562,12 +1547,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         setTimeSlots([])
         setTermsAccepted(false)
         setTermsAcknowledgementError(false)
-        setSelectedEyeShapeId('')
-        setEyeShapeError(null)
         
         // Refresh available dates and time slots after booking
         // This ensures the booked slot disappears and dates update if fully booked
-        const refreshResponse = await fetch('/api/calendar/available-slots', { cache: 'no-store' })
+        const timestamp = Date.now()
+        const refreshResponse = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'no-store' })
         const refreshData = await refreshResponse.json()
         if (refreshData.dates) {
           setAvailableDates(refreshData.dates)
@@ -1587,17 +1571,23 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           type: 'error',
           message: data.error || 'Failed to book appointment. Please try again.',
           details: data.details,
-        });
+        })
       }
-      }
-    } catch (error) {
-      console.error('Failed to book appointment:', error);
+    } else {
+      // Payment failed
+      setSubmitStatus({
+        type: 'error',
+        message: paymentResult.error || 'Payment failed. Please try again.',
+      })
+    }
+    } catch (error: any) {
+      console.error('Failed to book appointment:', error)
       setSubmitStatus({
         type: 'error',
         message: 'An error occurred. Please try again later.',
-      });
+      })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 
@@ -1727,6 +1717,88 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </div>
             )}
 
+            {/* Service Cart - STEP 2 */}
+            <div id="service-cart-section" className="mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-brown-dark">
+                  Selected Services *
+                </label>
+                {cartItems.length > 0 && (
+                  <Link
+                    href="/services"
+                    className="text-sm text-[var(--color-primary)] hover:underline font-medium"
+                  >
+                    + Add More Services
+                  </Link>
+                )}
+              </div>
+              {cartItems.length === 0 ? (
+                <div className="w-full px-4 py-6 border-2 border-dashed border-brown-light rounded-lg bg-white/50 text-center">
+                  <p className="text-sm text-brown-dark/70 mb-3">No services selected</p>
+                  <Link
+                    href="/services"
+                    className="inline-block px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors text-sm font-semibold"
+                  >
+                    Browse & Add Services
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cartItems.map((item) => {
+                    const price = currency === 'USD' && item.priceUSD !== undefined 
+                      ? item.priceUSD 
+                      : item.price
+                    return (
+                      <div
+                        key={item.serviceId}
+                        className="flex items-center justify-between p-4 border-2 border-brown-light rounded-lg bg-white"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-brown-dark">{item.name}</h4>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-brown-dark/70">
+                            <span>{formatCurrencyContext(price)}</span>
+                            <span>•</span>
+                            <span>{item.duration} min</span>
+                            <span>•</span>
+                            <span className="text-xs bg-brown-light/30 px-2 py-0.5 rounded">{item.categoryName}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeService(item.serviceId)}
+                          className="ml-4 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+                          aria-label={`Remove ${item.name}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
+                  })}
+                  <div className="mt-4 p-4 bg-brown-light/20 rounded-lg border border-brown-light">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-semibold text-brown-dark">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
+                        <span className="font-semibold text-brown-dark">{formatCurrencyContext(getTotalPrice(currency))}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-brown-dark/70 pt-2 border-t border-brown-light/50">
+                        <span>Total Duration:</span>
+                        <span>{getTotalDuration()} minutes</span>
+                      </div>
+                      {cartItems.length > 1 && (
+                        <div className="text-xs text-brown-dark/60 italic pt-1">
+                          💡 Deposit will be calculated as {depositPercentage}% of the total
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Personal Details Section - STEP 3 */}
+            <div className="mt-6 space-y-4 sm:space-y-6">
+              <h2 className="text-xl font-display text-brown-dark mb-4">Personal Details</h2>
+
             {/* Name Field */}
             <div>
               <label
@@ -1814,103 +1886,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </p>
             </div>
 
-            {lookOptionsError && (
-              <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 px-5 py-4 text-sm text-orange-800">
-                {lookOptionsError}
-              </div>
-            )}
-
-            {/* Eye Shape Selection */}
-            <div
-              id="eye-shape-section"
-              className="rounded-2xl border-2 border-brown-light/60 bg-white px-5 py-6 space-y-4 relative overflow-hidden"
-            >
-              <div className="cartoon-sticker top-3 right-3 opacity-20 hidden sm:block">
-                <div className="sticker-lash animate-float-sticker" style={{ animationDelay: '1s' }}></div>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <label className="block text-sm font-semibold text-brown-dark mb-1">
-                    Eye Shape *
-                  </label>
-                  <p className="text-sm text-brown-dark/70">
-                    Choose the eye shape that most closely matches your features so we can plan a custom lash map before you arrive.
-                  </p>
-                </div>
-                {loadingLookOptions && (
-                  <span className="text-sm text-brown-dark/60">Loading references...</span>
-                )}
-              </div>
-              {!loadingLookOptions && eyeShapeOptions.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {eyeShapeOptions.map((option) => {
-                    const selected = selectedEyeShapeId === option.id
-                    return (
-                      <div
-                        key={option.id}
-                        className={`rounded-2xl border-2 bg-white shadow-sm transition-all ${
-                          selected
-                            ? 'border-brown-dark shadow-lg'
-                            : 'border-brown-light hover:border-brown-dark/50 hover:shadow-md'
-                        }`}
-                      >
-                        <label htmlFor={`eye-shape-${option.id}`} className="block cursor-pointer">
-                          <div className="w-full aspect-[8/3] overflow-hidden rounded-t-2xl bg-brown-light/10">
-                            <img
-                              src={option.imageUrl}
-                              alt={`Eye shape option: ${option.label}`}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          </div>
-                          <div className="space-y-2 px-4 py-3">
-                            <p className="text-sm font-semibold text-brown-dark">{option.label}</p>
-                            {option.description && (
-                              <p className="text-xs leading-relaxed text-brown-dark/70">{option.description}</p>
-                            )}
-                            {option.recommendedStyles.length > 0 && (
-                              <div className="text-xs text-brown-dark/70 leading-relaxed space-y-1">
-                                <p className="font-semibold text-brown-dark/80">Recommended lash styles</p>
-                                <ul className="list-disc pl-4 space-y-0.5">
-                                  {option.recommendedStyles.map((style) => (
-                                    <li key={`${option.id}-style-${style}`} className="text-brown-dark/70">
-                                      {style}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 pt-2">
-                              <input
-                                id={`eye-shape-${option.id}`}
-                                type="radio"
-                                name="eyeShape"
-                                value={option.id}
-                                checked={selected}
-                                onChange={() => handleSelectEyeShape(option.id)}
-                                className="h-4 w-4 accent-brown-dark"
-                              />
-                              <span className="text-xs font-medium text-brown-dark">
-                                Select this eye shape
-                              </span>
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : null}
-              {!loadingLookOptions && eyeShapeOptions.length === 0 && (
-                <div className="rounded-lg border border-brown-light bg-brown-light/30 p-4 text-sm text-brown-dark/80">
-                  Eye shape references are not available right now. Please contact us directly to complete your booking.
-                </div>
-              )}
-              {eyeShapeError && (
-                <p className="text-sm font-semibold text-red-600">{eyeShapeError}</p>
-              )}
-            </div>
-
             {/* Notes Field */}
             <div>
               <label
@@ -1932,53 +1907,88 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 Share any additional information that will help us provide the best service (e.g., building access codes, where to park, specific preferences, etc.)
               </p>
             </div>
+            </div>
 
-            {/* Service Field */}
-            <div>
-              <label
-                htmlFor="service"
-                className="block text-sm font-semibold text-brown-dark mb-2"
-              >
-                Service Type *
-              </label>
-              {loadingServices ? (
-                <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
-                  Loading services...
-                </div>
-              ) : serviceOptionGroups.reduce((count, group) => count + group.options.length, 0) === 0 ? (
-                <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
-                  <p className="text-sm">No services available. Please contact us directly or refresh the page.</p>
+            {/* Service Calculation & Pricing Summary - STEP 4 */}
+            <div className="mt-6">
+              <h2 className="text-xl font-display text-brown-dark mb-4">Service Calculation</h2>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-brown-dark">
+                  Selected Services *
+                </label>
+                {cartItems.length > 0 && (
+                  <Link
+                    href="/services"
+                    className="text-sm text-[var(--color-primary)] hover:underline font-medium"
+                  >
+                    + Add More Services
+                  </Link>
+                )}
+              </div>
+              {cartItems.length === 0 ? (
+                <div className="w-full px-4 py-6 border-2 border-dashed border-brown-light rounded-lg bg-white/50 text-center">
+                  <p className="text-sm text-brown-dark/70 mb-3">No services selected</p>
+                  <Link
+                    href="/services"
+                    className="inline-block px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors text-sm font-semibold"
+                  >
+                    Browse & Add Services
+                  </Link>
                 </div>
               ) : (
-                <select
-                  id="service"
-                  name="service"
-                  required
-                  value={formData.service}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation"
-                >
-                  <option value="">Select a service</option>
-                  {serviceOptionGroups.map((group) => (
-                    <optgroup key={group.categoryId} label={group.categoryName}>
-                      {group.options.map((option) => {
-                        const price = currency === 'USD' && servicePricesUSD[option.name] !== undefined
-                          ? servicePricesUSD[option.name]
-                          : currency === 'USD' && servicePrices[option.name]
-                          ? convertCurrency(servicePrices[option.name], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
-                          : servicePrices[option.name] || 0
-                        return (
-                          <option key={option.id} value={option.name}>
-                            {option.name} — {formatCurrencyContext(price)}
-                          </option>
-                        )
-                      })}
-                    </optgroup>
-                  ))}
-                </select>
+                <div className="space-y-3">
+                  {cartItems.map((item) => {
+                    const price = currency === 'USD' && item.priceUSD !== undefined 
+                      ? item.priceUSD 
+                      : item.price
+                    return (
+                      <div
+                        key={item.serviceId}
+                        className="flex items-center justify-between p-4 border-2 border-brown-light rounded-lg bg-white"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-brown-dark">{item.name}</h4>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-brown-dark/70">
+                            <span>{formatCurrencyContext(price)}</span>
+                            <span>•</span>
+                            <span>{item.duration} min</span>
+                            <span>•</span>
+                            <span className="text-xs bg-brown-light/30 px-2 py-0.5 rounded">{item.categoryName}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeService(item.serviceId)}
+                          className="ml-4 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+                          aria-label={`Remove ${item.name}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
+                  })}
+                  <div className="mt-4 p-4 bg-brown-light/20 rounded-lg border border-brown-light">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-semibold text-brown-dark">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
+                        <span className="font-semibold text-brown-dark">{formatCurrencyContext(getTotalPrice(currency))}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-brown-dark/70 pt-2 border-t border-brown-light/50">
+                        <span>Total Duration:</span>
+                        <span>{getTotalDuration()} minutes</span>
+                      </div>
+                      {cartItems.length > 1 && (
+                        <div className="text-xs text-brown-dark/60 italic pt-1">
+                          💡 Deposit will be calculated as {depositPercentage}% of the total
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
+
               {/* Promo Code / Referral Code Field */}
-              {formData.service && (
+              {cartItems.length > 0 && (
                 <div className="mt-4">
                   <label
                     htmlFor="promoCode"
@@ -2102,7 +2112,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </div>
               )}
 
-              {formData.service && depositAmount > 0 && (
+              {cartItems.length > 0 && depositAmount > 0 && (
                 <div className="mt-3 p-4 bg-brown-light/20 border-2 border-brown-light rounded-lg">
                   {checkingFirstTime && formData.email && (
                     <div className="mb-3 text-sm text-brown-dark/70 italic">
@@ -2232,7 +2242,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                         {referralDetails?.code && (
                           <div className="mt-3 text-sm" style={{ color: '#111827' }}>
                             <div className="font-semibold">
-                              Your referral code: <span className="text-brown-dark">{referralDetails.code}</span>
+                              Your referral code: <span className="text-brown-dark">{referralDetails?.code}</span>
                             </div>
                             <p className="mt-1">
                               Share this code with a friend. They get 10% off, and you can use the same code after they book.
@@ -2271,8 +2281,30 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     </div>
                   )}
                   <div className="space-y-2 text-sm sm:text-base">
+                    {cartItems.length > 1 && (
+                      <div className="mb-2 pb-2 border-b border-brown-light/50">
+                        <div className="text-xs text-brown-dark/70 mb-1">Services Breakdown:</div>
+                        {cartItems.map((item, idx) => {
+                          const itemPrice = currency === 'USD' && item.priceUSD !== undefined 
+                            ? item.priceUSD 
+                            : item.price
+                          return (
+                            <div key={item.serviceId} className="flex justify-between items-center text-xs text-brown-dark/80 mb-1">
+                              <span>{idx + 1}. {item.name}</span>
+                              <span>{formatCurrencyContext(itemPrice)}</span>
+                            </div>
+                          )
+                        })}
+                        <div className="flex justify-between items-center text-xs font-semibold text-brown-dark mt-2 pt-2 border-t border-brown-light/30">
+                          <span>Subtotal:</span>
+                          <span>{formatCurrencyContext(pricing.originalPrice)}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center flex-wrap gap-1">
-                      <span className="text-brown-dark font-semibold">Service Price:</span>
+                      <span className="text-brown-dark font-semibold">
+                        {cartItems.length > 1 ? 'Total Service Price:' : 'Service Price:'}
+                      </span>
                       <span className="text-brown-dark font-bold">{formatCurrencyContext(pricing.originalPrice)}</span>
                     </div>
                     {pricing.discountType === 'first-time' && (
@@ -2311,12 +2343,22 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                       </span>
                       <span className="text-brown-dark font-bold text-base sm:text-lg">{formatCurrencyContext(depositAmount)}</span>
                     </div>
+                    {cartItems.length > 1 && (
+                      <div className="text-xs text-brown-dark/60 italic pt-1">
+                        💡 Calculation: {pricing.depositPercentage}% of {formatCurrencyContext(pricing.finalPrice)} = {formatCurrencyContext(depositAmount)}
+                      </div>
+                    )}
                   </div>
                   <p className="text-sm text-brown-dark/70 mt-3 pt-3 border-t border-brown-light/50">
                     You will receive payment instructions via email after booking. The remaining balance will be paid on the day of your appointment.
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Checkout Section - STEP 5 */}
+            <div className="mt-6">
+              <h2 className="text-xl font-display text-brown-dark mb-4">Checkout</h2>
             </div>
 
             {/* Status Message */}
@@ -2478,11 +2520,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 loading ||
                 loadingDates ||
                 loadingSlots ||
-                loadingLookOptions ||
                 !formData.date ||
                 !formData.timeSlot ||
-                !formData.service ||
-                !selectedEyeShapeId ||
+                cartItems.length === 0 ||
                 mpesaStatus.loading ||
                 !termsAccepted ||
                 (currency === 'USD' && paymentMethod === 'mpesa')
@@ -2503,9 +2543,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 )}
               </span>
             </button>
-            {!formData.service && (
+            {cartItems.length === 0 && (
               <p className="text-sm text-red-600 text-center mt-2">
-                Please select a service to continue
+                Please add at least one service to continue. <Link href="/services" className="underline">Browse services</Link>
               </p>
             )}
           </form>
@@ -2580,40 +2620,30 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm sm:text-base">
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Name</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails.name}</dd>
+                    <dd className="text-brown-dark font-semibold">{bookingDetails!.name}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Date</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails.date}</dd>
+                    <dd className="text-brown-dark font-semibold">{bookingDetails!.date}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Time</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails.time} – {bookingDetails.endTime}</dd>
+                    <dd className="text-brown-dark font-semibold">{bookingDetails!.time} – {bookingDetails!.endTime}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Service</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails.service}</dd>
+                    <dd className="text-brown-dark font-semibold">{bookingDetails!.service}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
-                    <dt className="text-brown-dark/70 font-medium">Eye Shape</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails.eyeShape}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Deposit Required</dt>
-                    <dd className="text-brown-dark font-bold">{bookingDetails.deposit}</dd>
+                    <dd className="text-brown-dark font-bold">{bookingDetails!.deposit}</dd>
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Final Price</dt>
-                    <dd className="text-brown-dark font-bold">{bookingDetails.finalPrice}</dd>
+                    <dd className="text-brown-dark font-bold">{bookingDetails!.finalPrice}</dd>
                   </div>
-                  {bookingDetails.recommendedStyles.length > 0 && (
-                    <div className="sm:col-span-2">
-                      <dt className="text-brown-dark/70 font-medium">Recommended styles for this eye shape</dt>
-                      <dd className="text-brown-dark">
-                        {bookingDetails.recommendedStyles.join(', ')}
-                      </dd>
-                    </div>
-                  )}
                 </dl>
               </div>
 
@@ -2623,7 +2653,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   Payment Instructions:
                 </p>
                 <p className="text-brown-dark/80">
-                  You will receive payment instructions via email. Please pay the {bookingDetails.deposit} deposit to secure your appointment. The remaining balance will be handled on the day of your appointment.
+                  You will receive payment instructions via email. Please pay the {bookingDetails!.deposit} deposit to secure your appointment. The remaining balance will be handled on the day of your appointment.
                 </p>
               </div>
 
@@ -2634,7 +2664,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </p>
               </div>
 
-              {bookingDetails.returningClientEligible && (
+              {bookingDetails!.returningClientEligible && (
                 <div className="rounded-xl p-5 sm:p-6 mb-6 border border-[var(--color-primary)]/20 bg-white text-[var(--color-text)] shadow-md">
                   <h3 className="font-display text-lg sm:text-xl font-semibold mb-2">
                     Share 10% with a friend ✨
@@ -2644,16 +2674,16 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   </p>
                   <button
                     type="button"
-                    onClick={() => handleGenerateReferralCode(bookingDetails.email, bookingDetails.name)}
+                    onClick={() => handleGenerateReferralCode(bookingDetails!.email, bookingDetails!.name)}
                     disabled={referralStatus === 'loading'}
                     className="inline-flex items-center justify-center px-5 py-3 rounded-full font-semibold shadow-sm transition-colors disabled:opacity-60 bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-dark)]"
                   >
                     {referralStatus === 'loading' ? 'Preparing your code…' : 'Send me my referral code'}
                   </button>
-                  {referralDetails?.code && (
+                  {referralDetails && referralDetails?.code && (
                     <div className="mt-4 rounded-lg border border-[var(--color-primary)]/25 bg-[var(--color-background)] px-4 py-3">
                       <p className="text-sm font-semibold">
-                        Your code: <span className="text-[var(--color-primary)]">{referralDetails.code}</span>
+                        Your code: <span className="text-[var(--color-primary)]">{referralDetails?.code}</span>
                       </p>
                       <p className="text-xs sm:text-sm text-[var(--color-text)]/70 mt-1">
                         Share this with a friend. Once they book, come back and use it for your loyalty reward.

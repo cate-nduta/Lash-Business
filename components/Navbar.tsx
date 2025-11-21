@@ -4,11 +4,14 @@ import Link from 'next/link'
 import { useState } from 'react'
 import Logo from './Logo'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useCart } from '@/contexts/CartContext'
 import { Currency } from '@/lib/currency-utils'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const { currency, setCurrency } = useCurrency()
+  const { getTotalItems } = useCart()
+  const cartItemCount = getTotalItems()
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -33,12 +36,44 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform relative group"
+                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-110 transform relative group text-wiggle"
               >
                 {link.label}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[var(--color-primary)] group-hover:w-full transition-all duration-300"></span>
               </Link>
             ))}
+            
+            {/* Shop Button */}
+            <Link
+              href="/shop"
+              className="btn-fun bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
+            >
+              Shop
+            </Link>
+            
+            {/* Cart Icon */}
+            <Link
+              href="/cart"
+              className="relative p-2 text-brown-dark hover:text-brown transition-colors"
+              aria-label="Shopping cart"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              {cartItemCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {cartItemCount > 9 ? '9+' : cartItemCount}
+                </span>
+              )}
+            </Link>
             
             {/* Currency Selector */}
             <div className="flex items-center space-x-2 border-l border-brown-light pl-6 ml-2">
@@ -105,6 +140,29 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            
+            {/* Mobile Shop Button */}
+            <Link
+              href="/shop"
+              className="block bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md text-center animate-bounce-subtle"
+              onClick={() => setIsOpen(false)}
+            >
+              Shop
+            </Link>
+            
+            {/* Mobile Cart Link */}
+            <Link
+              href="/cart"
+              className="flex items-center justify-between py-2 text-brown-dark hover:text-brown transition-colors border-t border-brown-light mt-2 pt-2"
+              onClick={() => setIsOpen(false)}
+            >
+              <span className="font-medium">Cart</span>
+              {cartItemCount > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
+                  {cartItemCount > 9 ? '9+' : cartItemCount}
+                </span>
+              )}
+            </Link>
             
             {/* Mobile Currency Selector */}
             <div className="flex items-center space-x-2 pt-2 border-t border-brown-light mt-2">

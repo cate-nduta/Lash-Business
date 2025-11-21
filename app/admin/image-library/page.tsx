@@ -292,7 +292,9 @@ export default function AdminImageLibrary() {
 
       const data = await response.json()
       if (!response.ok || !data.success || typeof data.url !== 'string') {
-        throw new Error(data.error || 'Failed to upload image')
+        const errorMessage = data.error || 'Failed to upload image'
+        const errorDetails = data.details ? ` ${data.details}` : ''
+        throw new Error(`${errorMessage}.${errorDetails}`)
       }
 
       const newOption: EyeShapeOption = {
@@ -353,7 +355,9 @@ export default function AdminImageLibrary() {
 
       const data = await response.json()
       if (!response.ok || !data.success || typeof data.url !== 'string') {
-        throw new Error(data.error || 'Failed to upload image')
+        const errorMessage = data.error || 'Failed to upload image'
+        const errorDetails = data.details ? ` ${data.details}` : ''
+        throw new Error(`${errorMessage}.${errorDetails}`)
       }
 
       setLibrary((prev) => ({

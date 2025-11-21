@@ -127,6 +127,8 @@ export async function POST(request: NextRequest) {
       phone,
       timeSlot,
       service,
+      services, // Array of service names (new)
+      serviceDetails, // Array of service details (new)
       date,
       location,
       notes,
@@ -220,8 +222,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Calculate total duration from service details or use default
+    let totalDuration = 2 // Default 2 hours
+    if (Array.isArray(serviceDetails) && serviceDetails.length > 0) {
+      totalDuration = Math.ceil(serviceDetails.reduce((sum, s) => sum + (s.duration || 0), 0) / 60) // Convert minutes to hours
+    } else if (service) {
+      // Fallback: try to estimate from service name (legacy support)
+      totalDuration = 2
+    }
+    
     const endTime = new Date(startTime)
-    endTime.setHours(endTime.getHours() + 2) // 2-hour appointment default
+    endTime.setHours(endTime.getHours() + totalDuration)
 
     let eventId = null
 
@@ -229,13 +240,22 @@ export async function POST(request: NextRequest) {
     if (calendar && calendarConfigured) {
       try {
         // Create calendar event
+        // Format service information
+        const serviceInfo = Array.isArray(services) && services.length > 0
+          ? services.join(' + ')
+          : service || 'Lash Service'
+        
+        const serviceDetailsText = Array.isArray(serviceDetails) && serviceDetails.length > 0
+          ? `\nServices:\n${serviceDetails.map((s, idx) => `  ${idx + 1}. ${s.name} - ${s.duration} min - ${s.categoryName}`).join('\n')}`
+          : ''
+        
         const event = {
           summary: `Lash Appointment - ${name}`,
           description: `
             Client: ${name}
             Email: ${email}
             Phone: ${phone}
-            Service: ${service || 'Lash Service'}
+            Service: ${serviceInfo}${serviceDetailsText}
             Eye Shape: ${eyeShape.label}
             Desired lash look: ${desiredLookLabel}
             Recommended Styles: ${eyeShape.recommendedStyles.join(', ') || 'Not specified'}
@@ -294,7 +314,9 @@ export async function POST(request: NextRequest) {
         name,
         email,
         phone,
-        service: service || '',
+        service: Array.isArray(services) && services.length > 0
+          ? services.join(' + ')
+          : service || '',
         date,
         timeSlot,
         location: bookingLocation,
@@ -366,7 +388,11 @@ export async function POST(request: NextRequest) {
         name,
         email,
         phone,
-        service: service || '',
+        service: Array.isArray(services) && services.length > 0
+          ? services.join(' + ')
+          : service || '',
+        services: Array.isArray(services) ? services : (service ? [service] : []),
+        serviceDetails: Array.isArray(serviceDetails) ? serviceDetails : null,
         date,
         timeSlot,
         location: bookingLocation,

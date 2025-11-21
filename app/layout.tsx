@@ -7,6 +7,8 @@ import Footer from '@/components/Footer'
 import PromoBanner from '@/components/PromoBanner'
 import ThemeProvider from './theme-provider'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
+import { CartProvider } from '@/contexts/CartContext'
+import { ServiceCartProvider } from '@/contexts/ServiceCartContext'
 import { readDataFile } from '@/lib/data-utils'
 import { DEFAULT_THEME_DATA, withDefaultThemeData, type ThemeFile } from '@/lib/theme-defaults'
 
@@ -15,11 +17,15 @@ export const dynamic = 'force-dynamic'
 const inter = Inter({ 
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
+  preload: true,
 })
 
 const playfair = Playfair_Display({ 
   subsets: ['latin'],
   variable: '--font-playfair',
+  display: 'swap',
+  preload: true,
 })
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -77,14 +83,18 @@ export default async function RootLayout({
       <body className={`${inter.variable} ${playfair.variable} font-body antialiased`} suppressHydrationWarning>
         <ThemeProvider colors={colors}>
           <CurrencyProvider>
-            <div className="sticky top-0 z-[70]">
-              <PromoBanner />
-              <Navbar />
-            </div>
-            <main className="min-h-screen">
-              {children}
-            </main>
-            <Footer />
+            <CartProvider>
+              <ServiceCartProvider>
+                <div className="sticky top-0 z-[70]">
+                  <PromoBanner />
+                  <Navbar />
+                </div>
+                <main className="min-h-screen">
+                  {children}
+                </main>
+                <Footer />
+              </ServiceCartProvider>
+            </CartProvider>
           </CurrencyProvider>
         </ThemeProvider>
         <Script id="interaction-guard" strategy="afterInteractive">

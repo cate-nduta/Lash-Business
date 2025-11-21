@@ -100,7 +100,7 @@ export default function Gallery() {
             {galleryImages.map((image, index) => (
               <div
                 key={index}
-                className="group relative overflow-hidden rounded-2xl shadow-soft hover:shadow-soft-lg transition-all duration-300 cursor-pointer transform hover:scale-110 hover:rotate-2"
+                className="card-interactive group relative overflow-hidden rounded-2xl shadow-soft hover:shadow-soft-lg transition-all duration-300 cursor-pointer hover-glow-fun"
                 onClick={() => setSelectedImage(image)}
               >
                 <div className="cartoon-sticker top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
