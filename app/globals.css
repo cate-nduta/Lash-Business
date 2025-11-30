@@ -960,6 +960,80 @@
     z-index: 1;
     background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background) 12%);
   }
+
+  /* Watermark and Protection Styles - Disabled for copy/paste */
+  img {
+    position: relative;
+    /* user-select and pointer-events removed to allow interaction */
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+  }
+
+  /* Allow shop product images to be interactive */
+  img.shop-product-image {
+    pointer-events: auto;
+  }
+
+  /* Watermark overlay for all images - using background pattern with tiny text */
+  /* Exclude logo images and shop product images from watermark */
+  img:not(.logo-image):not(.shop-product-image) {
+    position: relative;
+  }
+  
+  img:not(.logo-image):not(.shop-product-image)::before {
+    content: 'the lashdiary kenya the lashdiary kenya the lashdiary kenya the lashdiary kenya the lashdiary kenya the lashdiary kenya the lashdiary kenya the lashdiary kenya ';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    font-size: 2px;
+    color: rgba(115, 61, 38, 0.008);
+    letter-spacing: 0.2px;
+    line-height: 4px;
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 1;
+    font-family: Arial, sans-serif;
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 30px,
+      rgba(115, 61, 38, 0.05) 30px,
+      rgba(115, 61, 38, 0.05) 60px
+    );
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Allow text selection everywhere except images */
+  * {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Keep images non-selectable for protection */
+  img {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Ensure input fields and textareas are selectable */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
 }
 /* stylelint-enable */
 

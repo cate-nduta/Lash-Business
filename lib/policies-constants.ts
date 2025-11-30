@@ -73,6 +73,7 @@ export const POLICY_VARIABLE_CONFIG: Array<{
 export const DEFAULT_POLICIES: PolicyData = {
   version: 1,
   updatedAt: new Date().toISOString(),
+  introText: 'These guidelines keep appointments running smoothly and ensure every client—and partner—enjoys the signature LashDiary experience. Reach out if you have any questions or need clarification.',
   variables: {
     cancellationWindowHours: 72,
     depositPercentage: 35,

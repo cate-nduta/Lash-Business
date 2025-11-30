@@ -74,14 +74,14 @@ function createOrderReadyEmailTemplate(data: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:32px 32px 24px 32px; background:${card}; text-align:center;">
-              <h1 style="margin:0; font-size:28px; color:${brand}; font-weight:600;">Your order is ready! 🎉</h1>
+              <h1 style="margin:0; font-size:28px; color:${brand}; font-weight:600;">Your order is ready! 🥰</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:24px 32px; background:${card};">
               <p style="margin:0 0 18px 0; font-size:16px; color:${textPrimary}; line-height:1.6;">
-                Great news! Your order for <strong>${data.productName}</strong> is ready for pickup.
+                🥰 Great news! Your order for <strong>${data.productName}</strong> is ready for pickup. 💋
               </p>
 
               <div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:1px solid ${accent};">
@@ -109,8 +109,8 @@ function createOrderReadyEmailTemplate(data: {
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">We're so excited to see you!</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">The LashDiary Team</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We're so excited to see you! 💋</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
             </td>
           </tr>
         </table>
@@ -156,14 +156,14 @@ function createOrderConfirmationEmailTemplate(data: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:32px 32px 24px 32px; background:${card}; text-align:center;">
-              <h1 style="margin:0; font-size:28px; color:${brand}; font-weight:600;">Order Confirmed! ✅</h1>
+              <h1 style="margin:0; font-size:28px; color:${brand}; font-weight:600;">Order Confirmed! 🌈</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:24px 32px; background:${card};">
               <p style="margin:0 0 18px 0; font-size:16px; color:${textPrimary}; line-height:1.6;">
-                Thank you for your purchase! Your order for <strong>${data.productName}</strong> has been confirmed.
+                🥰 Thank you for your purchase! Your order for <strong>${data.productName}</strong> has been confirmed. 💋
               </p>
 
               <div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:1px solid ${accent};">
@@ -225,8 +225,8 @@ function createOrderConfirmationEmailTemplate(data: {
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">Thank you for shopping with us!</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">The LashDiary Team</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 Thank you for shopping with us! 💋</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
             </td>
           </tr>
         </table>
@@ -268,7 +268,7 @@ export async function sendShopOrderConfirmationEmail(data: {
     await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: data.email,
-      subject: `Order Confirmation - ${data.productName}`,
+      subject: `Your Order is Confirmed 🤎`,
       html: htmlContent,
       text: `Thank you for your purchase! Order ID: ${data.orderId}, Product: ${data.productName}, Total: ${data.amount.toLocaleString()} KES. ${data.deliveryOption === 'pickup' ? `Pickup Location: ${data.pickupLocation}. Available for pickup: ${data.pickupDays.join(', ')}.` : `Delivery Address: ${data.deliveryAddress || 'Not provided'}.`} You'll receive another email when your order is ready.`,
     })
@@ -298,7 +298,7 @@ export async function sendShopOrderReadyEmail(data: {
     await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: data.email,
-      subject: `Your ${data.productName} order is ready for pickup!`,
+      subject: `Your Order is Ready for Pickup 🤎`,
       html: htmlContent,
       text: `Your order for ${data.productName} is ready for pickup at ${data.pickupLocation}. Available on: ${data.pickupDays.join(', ')}. Order ID: ${data.orderId}`,
     })

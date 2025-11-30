@@ -2,8 +2,18 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
+import { readDataFile } from '@/lib/data-utils'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+
+interface UnsubscribeRecord {
+  email: string
+  name?: string
+  reason?: string
+  token: string
+  unsubscribedAt: string
+  originallyUnsubscribedAt?: string // Track when they first unsubscribed (permanent)
+}
 
 // Initialize Google Calendar API
 function getCalendarClient() {
@@ -33,6 +43,35 @@ export async function GET(request: NextRequest) {
         { error: 'Email is required' },
         { status: 400 }
       )
+    }
+
+    const normalizedEmail = email.toLowerCase().trim()
+
+    // CRITICAL: Check if email has ever unsubscribed
+    // If they've unsubscribed before (even if they resubscribed), they are NOT eligible for first-time discounts
+    try {
+      const unsubscribeData = await readDataFile<{ unsubscribes: UnsubscribeRecord[] }>(
+        'email-unsubscribes.json',
+        { unsubscribes: [] }
+      )
+      
+      const hasEverUnsubscribed = unsubscribeData.unsubscribes.some(
+        (record) => 
+          record.email.toLowerCase() === normalizedEmail &&
+          record.originallyUnsubscribedAt // If they've ever unsubscribed, mark them as not first-time
+      )
+
+      if (hasEverUnsubscribed) {
+        // They've unsubscribed before - NOT eligible for first-time discounts
+        return NextResponse.json({ 
+          isFirstTime: false,
+          email,
+          reason: 'Has previously unsubscribed from newsletter'
+        })
+      }
+    } catch (error) {
+      console.warn('Error checking unsubscribe records:', error)
+      // Continue with other checks if unsubscribe check fails
     }
 
     // Check if this email has made a booking before

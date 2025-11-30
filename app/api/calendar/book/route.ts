@@ -6,6 +6,16 @@ import { sendEmailNotification } from '../../booking/email/utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
+import { redeemGiftCard } from '@/lib/gift-card-utils'
+import {
+  sanitizeEmail,
+  sanitizeNotes,
+  sanitizeOptionalText,
+  sanitizePhone,
+  sanitizeStringArray,
+  sanitizeText,
+  ValidationError,
+} from '@/lib/input-validation'
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
   process.env.OWNER_EMAIL ||
@@ -25,6 +35,13 @@ const parseDateOnly = (value?: string | null) => {
   if (!value || typeof value !== 'string') return null
   const parsed = new Date(`${value}T00:00:00+03:00`)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const INFILL_MAX_DAYS = 14
+const isFillServiceName = (value?: string | null) => {
+  if (!value || typeof value !== 'string') return false
+  const normalized = value.toLowerCase()
+  return normalized.includes('fill')
 }
 
 const isWithinBookingWindow = (dateStr: string, bookingWindow?: any) => {
@@ -77,7 +94,7 @@ async function sendFullyBookedEmail(dateStr: string) {
     await resend.emails.send({
       from: `LashDiary Alerts <${FROM_EMAIL}>`,
       to: OWNER_NOTIFICATION_EMAIL,
-      subject: `Fully booked date: ${formattedDate}`,
+      subject: `Fully Booked Date Alert 🤎`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 24px; background: #FFF8FB; color: #2F1A16;">
           <h2 style="margin-top: 0; color: #733D26;">${formattedDate} is fully booked</h2>
@@ -92,100 +109,136 @@ async function sendFullyBookedEmail(dateStr: string) {
   }
 }
 
-type LookSelection = {
-  id: string
-  label: string
-  imageUrl: string
-  description: string | null
-  recommendedStyles: string[]
-}
-
-const normalizeLookSelection = (selection: any): LookSelection | null => {
-  if (!selection || typeof selection !== 'object') return null
-  const id = typeof selection.id === 'string' ? selection.id.trim() : ''
-  const label = typeof selection.label === 'string' ? selection.label.trim() : ''
-  const imageUrl = typeof selection.imageUrl === 'string' ? selection.imageUrl.trim() : ''
-  if (!id || !label || !imageUrl) return null
-  const description =
-    typeof selection.description === 'string' && selection.description.trim().length > 0
-      ? selection.description.trim()
-      : null
-  const recommendedStyles: string[] = Array.isArray(selection.recommendedStyles)
-    ? selection.recommendedStyles
-        .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
-        .filter((entry: string) => entry.length > 0)
-    : []
-  return { id, label, imageUrl, description, recommendedStyles }
-}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      name,
-      email,
-      phone,
-      timeSlot,
-      service,
-      services, // Array of service names (new)
-      serviceDetails, // Array of service details (new)
-      date,
-      location,
-      notes,
+      name: rawName,
+      email: rawEmail,
+      phone: rawPhone,
+      timeSlot: rawTimeSlot,
+      service: rawService,
+      services: rawServices, // Array of service names (new)
+      serviceDetails: rawServiceDetails, // Array of service details (new)
+      date: rawDate,
+      lastFullSetDate: rawLastFullSetDate,
+      location: rawLocation,
+      notes: rawNotes,
       isFirstTimeClient,
       originalPrice,
       discount,
       finalPrice,
       deposit,
-      mpesaCheckoutRequestID,
-      promoCode,
+      paymentType, // 'deposit' or 'full'
+      mpesaCheckoutRequestID: rawMpesaCheckoutRequestID,
+      promoCode: rawPromoCode,
       promoCodeType,
-      salonReferral,
-      eyeShapeSelection,
-      desiredLook,
+      salonReferral: rawSalonReferral,
+      giftCardCode: rawGiftCardCode,
+      desiredLook: rawDesiredLook,
     } = body
-    const bookingLocation = location || STUDIO_LOCATION
+    
+    // Fetch location from contact settings if not provided
+    let bookingLocationInput = rawLocation
+    if (!bookingLocationInput) {
+      try {
+        const contact = await readDataFile<{ location?: string | null }>('contact.json', {})
+        bookingLocationInput = contact?.location || STUDIO_LOCATION
+      } catch (error) {
+        console.error('Error loading location from contact settings:', error)
+        bookingLocationInput = STUDIO_LOCATION
+      }
+    }
 
     // Validate required fields
-    if (!name || !email || !phone || !timeSlot) {
+    if (!rawName || !rawEmail || !rawPhone || !rawTimeSlot) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    if (typeof desiredLook !== 'string' || desiredLook.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Desired look is required.' },
-        { status: 400 },
-      )
-    }
+    let name: string
+    let email: string
+    let phone: string
+    let timeSlot: string
+    let date: string
+    let service: string
+    let services: string[]
+    let bookingLocation: string
+    let notes: string
+    let promoCode: string
+    let salonReferral: string
+    let desiredLook: string
+    let mpesaCheckoutRequestID: string
+    let lastFullSetDate: string
+    let serviceDetails: Array<{ name?: string; categoryName?: string; duration?: number }>
 
-    const eyeShape = normalizeLookSelection(eyeShapeSelection)
-    if (!eyeShape) {
-      return NextResponse.json(
-        { error: 'Eye shape selection is required.' },
-        { status: 400 },
-      )
+    try {
+      name = sanitizeText(rawName, { fieldName: 'Name', maxLength: 80 })
+      email = sanitizeEmail(rawEmail)
+      phone = sanitizePhone(rawPhone)
+      timeSlot = sanitizeText(rawTimeSlot, { fieldName: 'Time slot', maxLength: 80 })
+      date = sanitizeOptionalText(rawDate, { fieldName: 'Booking date', maxLength: 32, optional: true })
+      service = sanitizeOptionalText(rawService, { fieldName: 'Service', maxLength: 120, optional: true })
+      services = sanitizeStringArray(rawServices, { fieldName: 'Service', maxLength: 120, maxItems: 8 })
+      bookingLocation =
+        sanitizeOptionalText(bookingLocationInput, { fieldName: 'Location', maxLength: 160, optional: true }) ||
+        STUDIO_LOCATION
+      notes = sanitizeNotes(rawNotes, 'Notes', 1500)
+      promoCode = sanitizeOptionalText(rawPromoCode, {
+        fieldName: 'Promo code',
+        maxLength: 40,
+        optional: true,
+        toLowerCase: true,
+      })
+      salonReferral = sanitizeOptionalText(rawSalonReferral, { fieldName: 'Salon referral', maxLength: 120, optional: true })
+      desiredLook = sanitizeOptionalText(rawDesiredLook, { fieldName: 'Desired look', maxLength: 160, optional: true })
+      mpesaCheckoutRequestID = sanitizeOptionalText(rawMpesaCheckoutRequestID, {
+        fieldName: 'M-Pesa checkout ID',
+        maxLength: 80,
+        optional: true,
+        allowSymbols: true,
+      })
+      lastFullSetDate = sanitizeOptionalText(rawLastFullSetDate, {
+        fieldName: 'Last full set date',
+        maxLength: 32,
+        optional: true,
+      })
+      serviceDetails = Array.isArray(rawServiceDetails)
+        ? rawServiceDetails.slice(0, 8).map((detail, index) => ({
+            ...detail,
+            name: sanitizeOptionalText(detail?.name, {
+              fieldName: `Service ${index + 1} name`,
+              maxLength: 120,
+              optional: true,
+            }),
+            categoryName: sanitizeOptionalText(detail?.categoryName, {
+              fieldName: `Service ${index + 1} category`,
+              maxLength: 120,
+              optional: true,
+            }),
+            duration: typeof detail?.duration === 'number' && detail.duration > 0 ? detail.duration : 0,
+          }))
+        : []
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      throw error
     }
 
     const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-    const desiredLookNormalized = desiredLook.trim()
-    const desiredLookComparable = normalizeStyleName(desiredLookNormalized)
+    const desiredLookNormalized = desiredLook || 'Custom'
+    const desiredLookMatchesRecommendation = desiredLookNormalized.toLowerCase() === 'recommended'
     const desiredLookLabel = desiredLookNormalized
       .split('-')
       .join(' ')
       .replace(/\b\w/g, (char) => char.toUpperCase())
 
-    const desiredLookMatchesRecommendation = eyeShape.recommendedStyles.some(
-      (style) => normalizeStyleName(style) === desiredLookComparable,
-    )
-    const lashMapStatus = desiredLookMatchesRecommendation
-      ? 'recommended'
-      : 'custom'
-    const lashMapStatusMessage = desiredLookMatchesRecommendation
-      ? 'Lash map ready, can plan before arrival.'
-      : 'Picked outside recommended, map will be decided at appointment.'
+    const lashMapStatus = 'custom'
+    const lashMapStatusMessage = 'Map will be decided at appointment.'
 
     // Try to get calendar client, but handle gracefully if credentials aren't set up
     let calendar
@@ -205,8 +258,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const appointmentDateStr =
-      (typeof date === 'string' && date.trim().length > 0) ? date : timeSlot.split('T')[0]
+    const appointmentDateStr = date ? date : timeSlot.split('T')[0]
     if (!appointmentDateStr) {
       return NextResponse.json(
         { error: 'Missing booking date' },
@@ -220,6 +272,41 @@ export async function POST(request: NextRequest) {
         { error: 'Bookings for this date are not open yet. Please choose another date.' },
         { status: 400 },
       )
+    }
+
+    const normalizedServices: string[] = services
+    let daysSinceLastFullSet: number | null = null
+    const hasFillServiceSelected =
+      normalizedServices.some((serviceName) => isFillServiceName(serviceName)) || isFillServiceName(service)
+
+    if (hasFillServiceSelected) {
+      if (!lastFullSetDate) {
+        return NextResponse.json(
+          { error: 'Please provide the date of your last full lash set to book an infill service.' },
+          { status: 400 },
+        )
+      }
+      const parsedLastFullSet = parseDateOnly(lastFullSetDate)
+      const parsedAppointmentDate = parseDateOnly(appointmentDateStr)
+      if (!parsedLastFullSet || !parsedAppointmentDate) {
+        return NextResponse.json(
+          { error: 'Invalid last full set date. Please pick a valid date to continue.' },
+          { status: 400 },
+        )
+      }
+      const diffDays = Math.max(
+        0,
+        Math.floor((parsedAppointmentDate.getTime() - parsedLastFullSet.getTime()) / (1000 * 60 * 60 * 24)),
+      )
+      daysSinceLastFullSet = diffDays
+      if (diffDays > INFILL_MAX_DAYS) {
+        return NextResponse.json(
+          {
+            error: `Fills are only available within ${INFILL_MAX_DAYS} days of your last full set. Please book a new full set so we can achieve the best retention.`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     // Calculate total duration from service details or use default
@@ -241,13 +328,13 @@ export async function POST(request: NextRequest) {
       try {
         // Create calendar event
         // Format service information
-        const serviceInfo = Array.isArray(services) && services.length > 0
-          ? services.join(' + ')
-          : service || 'Lash Service'
+        const serviceInfo =
+          normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || 'Lash Service'
         
         const serviceDetailsText = Array.isArray(serviceDetails) && serviceDetails.length > 0
           ? `\nServices:\n${serviceDetails.map((s, idx) => `  ${idx + 1}. ${s.name} - ${s.duration} min - ${s.categoryName}`).join('\n')}`
           : ''
+        const friendlyLastFullSet = lastFullSetDate ? formatFriendlyDate(lastFullSetDate) : null
         
         const event = {
           summary: `Lash Appointment - ${name}`,
@@ -256,11 +343,16 @@ export async function POST(request: NextRequest) {
             Email: ${email}
             Phone: ${phone}
             Service: ${serviceInfo}${serviceDetailsText}
-            Eye Shape: ${eyeShape.label}
             Desired lash look: ${desiredLookLabel}
-            Recommended Styles: ${eyeShape.recommendedStyles.join(', ') || 'Not specified'}
             Lash Map Status: ${lashMapStatusMessage}
             Location: ${bookingLocation}
+            ${
+              friendlyLastFullSet
+                ? `Last Full Set: ${friendlyLastFullSet}`
+                : lastFullSetDate
+                ? `Last Full Set: ${lastFullSetDate}`
+                : ''
+            }
             ${notes ? `Special Notes: ${notes}` : ''}
             Deposit: KSH ${deposit || 0}
             ${mpesaCheckoutRequestID ? `M-Pesa Checkout ID: ${mpesaCheckoutRequestID}` : ''}
@@ -304,6 +396,23 @@ export async function POST(request: NextRequest) {
     const policyWindowHours = CLIENT_MANAGE_WINDOW_HOURS
     const salonCommissionSettings = await getSalonCommissionSettings()
     const cancellationCutoff = new Date(startTime.getTime() - policyWindowHours * 60 * 60 * 1000)
+    
+    // Redeem gift card if provided
+    let giftCardRedeemed = false
+    let giftCardRemainingBalance = 0
+    const giftCardCode = typeof rawGiftCardCode === 'string' && rawGiftCardCode.trim() ? rawGiftCardCode.trim() : null
+    if (giftCardCode && deposit > 0) {
+      try {
+        const redeemResult = await redeemGiftCard(giftCardCode, deposit, bookingId, email)
+        if (redeemResult.success) {
+          giftCardRedeemed = true
+          giftCardRemainingBalance = redeemResult.remainingBalance || 0
+        }
+      } catch (error) {
+        console.error('Error redeeming gift card:', error)
+        // Don't fail booking if gift card redemption fails
+      }
+    }
 
     // Send email notifications via Resend
     let emailSent = false
@@ -314,9 +423,7 @@ export async function POST(request: NextRequest) {
         name,
         email,
         phone,
-        service: Array.isArray(services) && services.length > 0
-          ? services.join(' + ')
-          : service || '',
+        service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
         date,
         timeSlot,
         location: bookingLocation,
@@ -329,10 +436,9 @@ export async function POST(request: NextRequest) {
         manageToken,
         policyWindowHours,
         notes: typeof notes === 'string' ? notes : undefined,
-        eyeShape,
         desiredLook: desiredLookLabel,
         desiredLookStatus: lashMapStatus,
-        desiredLookMatchesRecommendation,
+        isGiftCardBooking: !!giftCardCode,
       })
       if (!emailResult) {
         console.warn('Email notification service did not return a response.')
@@ -388,11 +494,11 @@ export async function POST(request: NextRequest) {
         name,
         email,
         phone,
-        service: Array.isArray(services) && services.length > 0
-          ? services.join(' + ')
-          : service || '',
-        services: Array.isArray(services) ? services : (service ? [service] : []),
+        service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
+        services: normalizedServices.length > 0 ? normalizedServices : service ? [service] : [],
         serviceDetails: Array.isArray(serviceDetails) ? serviceDetails : null,
+        lastFullSetDate: typeof lastFullSetDate === 'string' ? lastFullSetDate : null,
+        lastFullSetDaysSince: typeof daysSinceLastFullSet === 'number' ? daysSinceLastFullSet : null,
         date,
         timeSlot,
         location: bookingLocation,
@@ -409,8 +515,10 @@ export async function POST(request: NextRequest) {
         promoCode: promoCode || null,
         referralType: promoCodeType || null,
         salonReferral: salonReferral || null,
+        giftCardCode: giftCardCode || null,
+        giftCardRedeemed: giftCardRedeemed || false,
+        giftCardRemainingBalance: giftCardRemainingBalance || 0,
         mpesaCheckoutRequestID: mpesaCheckoutRequestID || null,
-        eyeShape: { ...eyeShape },
         createdAt,
         testimonialRequested: false,
         testimonialRequestedAt: null,

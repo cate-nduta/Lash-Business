@@ -16,6 +16,16 @@ interface DisplayService {
   duration?: string
 }
 
+interface MassageInfo {
+  enabled: boolean
+  badge?: string
+  title: string
+  subtitle?: string
+  description?: string
+  benefits: string[]
+  whyItMatters?: string
+}
+
 const serviceDescriptions: Record<string, string> = {
   'Classic Lashes': 'One extension applied to each natural lash for a natural, elegant look. Perfect for everyday wear.',
   'Subtle Hybrid Lashes': 'A subtle blend of classic and volume lashes for a natural yet enhanced appearance.',
@@ -43,19 +53,20 @@ const toDisplayServices = (category: ServiceCategory, currency: 'KES' | 'USD', f
     return {
       id: service.id,
       name: service.name,
-      description: serviceDescriptions[service.name] || '',
+      description: service.description || serviceDescriptions[service.name] || '',
       price: formatCurrency(price),
       duration: service.duration ? `${service.duration} min` : undefined,
     }
   })
 
 export default function Services() {
-  const { currency, setCurrency, formatCurrency } = useCurrency()
-  const { addService, hasService, items, getTotalItems } = useServiceCart()
+  const { currency, formatCurrency } = useCurrency()
+  const { addService, hasService, getTotalItems } = useServiceCart()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [addedServiceId, setAddedServiceId] = useState<string | null>(null)
+  const [massageInfo, setMassageInfo] = useState<MassageInfo | null>(null)
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -79,6 +90,36 @@ export default function Services() {
         console.error('Error loading services:', error)
       })
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/homepage', { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to load homepage data')
+        }
+        return response.json()
+      })
+      .then((data) => {
+        const massage = data?.tsubokiMassage
+        if (massage && massage.enabled !== false) {
+          setMassageInfo({
+            enabled: true,
+            badge: massage.badge ?? 'Complimentary Ritual',
+            title: massage.title ?? 'Japanese Facial Massage',
+            subtitle: massage.subtitle ?? '',
+            description: massage.description ?? '',
+            benefits: Array.isArray(massage.benefits) ? massage.benefits : [],
+            whyItMatters: massage.whyItMatters ?? '',
+          })
+        } else {
+          setMassageInfo(null)
+        }
+      })
+      .catch((error) => {
+        console.error('Error loading massage info:', error)
+        setMassageInfo(null)
+      })
   }, [])
 
   const activeCategory = useMemo(() => {
@@ -162,7 +203,80 @@ export default function Services() {
                 {activeCategory.showNotice && activeCategory.notice.trim().length > 0 && (
                   <div className="bg-[var(--color-surface)] border-l-4 border-[var(--color-primary)] rounded-r-xl p-6 shadow-soft text-left">
                     <h2 className="text-xl font-semibold text-[var(--color-primary)] mb-2">Please note</h2>
-                    <p className="text-[var(--color-text)] whitespace-pre-line">{activeCategory.notice}</p>
+                    <p className="text-[var(--color-text)] whitespace-pre-line">
+                      {(() => {
+                        const notice = activeCategory.notice
+                        // Create a more sophisticated parser that handles links properly
+                        const parts: (string | { type: 'link'; text: string; href: string })[] = []
+                        let lastIndex = 0
+                        
+                        // Find all occurrences of linkable text
+                        const patterns = [
+                          { regex: /pre-appointment\s+guidelines?/gi, href: '/before-your-appointment' },
+                          { regex: /\bpolicies\b/gi, href: '/policies' },
+                        ]
+                        
+                        const matches: Array<{ index: number; length: number; text: string; href: string }> = []
+                        
+                        patterns.forEach(({ regex, href }) => {
+                          let match
+                          regex.lastIndex = 0 // Reset regex
+                          while ((match = regex.exec(notice)) !== null) {
+                            matches.push({
+                              index: match.index,
+                              length: match[0].length,
+                              text: match[0],
+                              href,
+                            })
+                          }
+                        })
+                        
+                        // Sort matches by index
+                        matches.sort((a, b) => a.index - b.index)
+                        
+                        // Build parts array
+                        matches.forEach((match) => {
+                          // Add text before the match
+                          if (match.index > lastIndex) {
+                            parts.push(notice.substring(lastIndex, match.index))
+                          }
+                          // Add the link
+                          parts.push({
+                            type: 'link',
+                            text: match.text,
+                            href: match.href,
+                          })
+                          lastIndex = match.index + match.length
+                        })
+                        
+                        // Add remaining text
+                        if (lastIndex < notice.length) {
+                          parts.push(notice.substring(lastIndex))
+                        }
+                        
+                        // If no matches, just return the notice as-is
+                        if (parts.length === 0) {
+                          parts.push(notice)
+                        }
+                        
+                        return parts.map((part, index) => {
+                          if (typeof part === 'object' && part.type === 'link') {
+                            return (
+                              <Link
+                                key={index}
+                                href={part.href}
+                                className="text-[var(--color-primary)] font-semibold hover:underline"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {part.text}
+                              </Link>
+                            )
+                          }
+                          return <span key={index}>{typeof part === 'string' ? part : String(part)}</span>
+                        })
+                      })()}
+                    </p>
                   </div>
                 )}
 
@@ -203,7 +317,7 @@ export default function Services() {
                         <div className="cartoon-sticker top-3 right-3 opacity-0 group-hover:opacity-30 transition-opacity duration-300 hidden sm:block">
                           <div className="sticker-sparkle"></div>
                         </div>
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 sm:gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3">
                               <h3 className="text-xl sm:text-2xl md:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors">
@@ -213,9 +327,9 @@ export default function Services() {
                                 {displayService.price}
                               </span>
                             </div>
-                            {displayService.description && (
-                              <p className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors">
-                                {displayService.description}
+                            {fullService?.description && (
+                              <p className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors whitespace-pre-line">
+                                {fullService.description}
                               </p>
                             )}
                             {displayService.duration && (
@@ -224,27 +338,38 @@ export default function Services() {
                               </p>
                             )}
                           </div>
-                          <div className="flex flex-col gap-2">
-                            {isInCart ? (
-                              <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold text-sm text-center border border-green-300">
-                                ✓ In Cart
+                          <div className="flex flex-col items-stretch gap-3 w-full sm:w-52 md:w-56">
+                            {fullService?.imageUrl && (
+                              <div className="order-first rounded-2xl overflow-hidden border border-[var(--color-text)]/10 shadow-soft-sm">
+                                <img
+                                  src={fullService.imageUrl}
+                                  alt={displayService.name}
+                                  className="w-full h-40 object-cover"
+                                />
                               </div>
-                            ) : (
-                              <button
-                                onClick={handleAddToCart}
-                                className="btn-fun px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
-                              >
-                                {justAdded ? <span className="animate-bounce-fun">✓ Added!</span> : 'Add to Cart'}
-                              </button>
                             )}
-                            {getTotalItems() > 0 && (
-                              <Link
-                                href="/booking"
-                                className="btn-fun px-4 py-2 bg-[var(--color-accent)] text-[var(--color-text)] rounded-lg font-semibold text-sm hover:bg-[var(--color-accent)]/80 transition-colors text-center border border-[var(--color-primary)]/20"
-                              >
-                                Book ({getTotalItems()})
-                              </Link>
-                            )}
+                            <div className="flex flex-col gap-2">
+                              {isInCart ? (
+                                <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-semibold text-sm text-center border border-green-300">
+                                  ✓ In Cart
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={handleAddToCart}
+                                  className="btn-fun px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+                                >
+                                  {justAdded ? <span className="animate-bounce-fun">✓ Added!</span> : 'Add to Cart'}
+                                </button>
+                              )}
+                              {getTotalItems() > 0 && (
+                                <Link
+                                  href="/booking"
+                                  className="btn-fun px-4 py-2 bg-[var(--color-accent)] text-[var(--color-text)] rounded-lg font-semibold text-sm hover:bg-[var(--color-accent)]/80 transition-colors text-center border border-[var(--color-primary)]/20"
+                                >
+                                  Book ({getTotalItems()})
+                                </Link>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -38,6 +38,28 @@ interface HomepageData {
     description: string
     images: string[]
   }
+  tsubokiMassage?: {
+    enabled?: boolean
+    badge?: string
+    title?: string
+    subtitle?: string
+    description?: string
+    benefits?: string[]
+    whyItMatters?: string
+    backgroundImage?: string
+  }
+  countdownBanner?: {
+    enabled?: boolean
+    eyebrow?: string
+    title?: string
+    message?: string
+    eventDate?: string
+    buttonText?: string
+    buttonUrl?: string
+  }
+  giftCardSection?: {
+    enabled?: boolean
+  }
   cta: {
     title: string
     description: string
@@ -71,6 +93,29 @@ const createDefaultDiscounts = (): DiscountsData => ({
   depositPercentage: 0,
 })
 
+const createDefaultMassage = () => ({
+  enabled: true,
+  badge: 'Complimentary Ritual',
+  title: 'Complimentary Japanese Facial Massage',
+  subtitle: 'Included with every lash service',
+  description: '',
+  benefits: [] as string[],
+  whyItMatters: '',
+  backgroundImage: '',
+})
+
+type MassageSettings = ReturnType<typeof createDefaultMassage>
+
+const createDefaultCountdownBanner = () => ({
+  enabled: false,
+  eyebrow: 'Limited Time',
+  title: 'New drop launches soon',
+  message: 'Secure your appointment before the slots disappear.',
+  eventDate: '',
+  buttonText: 'Book Now',
+  buttonUrl: '',
+})
+
 export default function AdminHomepage() {
   const [homepage, setHomepage] = useState<HomepageData>({
     hero: { title: '', subtitle: '', highlight: '', badge: '' },
@@ -90,6 +135,9 @@ export default function AdminHomepage() {
       description: '',
       images: [],
     },
+    tsubokiMassage: createDefaultMassage(),
+    countdownBanner: createDefaultCountdownBanner(),
+    giftCardSection: { enabled: true },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
@@ -112,6 +160,9 @@ export default function AdminHomepage() {
       description: '',
       images: [],
     },
+    tsubokiMassage: createDefaultMassage(),
+    countdownBanner: createDefaultCountdownBanner(),
+    giftCardSection: { enabled: true },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
@@ -123,9 +174,22 @@ export default function AdminHomepage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [uploadingImages, setUploadingImages] = useState<Record<number, boolean>>({})
   const [uploadingArtistPhoto, setUploadingArtistPhoto] = useState(false)
+  const [uploadingMassageBackground, setUploadingMassageBackground] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const router = useRouter()
+  const updateMassage = (partial: Partial<MassageSettings>) => {
+    setHomepage((prev) => {
+      const current = prev.tsubokiMassage ?? createDefaultMassage()
+      return { ...prev, tsubokiMassage: { ...current, ...partial } }
+    })
+  }
+  const updateCountdownBanner = (partial: Partial<ReturnType<typeof createDefaultCountdownBanner>>) => {
+    setHomepage((prev) => {
+      const current = prev.countdownBanner ?? createDefaultCountdownBanner()
+      return { ...prev, countdownBanner: { ...current, ...partial } }
+    })
+  }
   const hasUnsavedChanges =
     JSON.stringify(homepage) !== JSON.stringify(originalHomepage) ||
     JSON.stringify(discounts) !== JSON.stringify(originalDiscounts)
@@ -189,6 +253,24 @@ export default function AdminHomepage() {
             title: 'Our Studio',
             description: '',
             images: [],
+          },
+          tsubokiMassage: {
+            enabled: data?.tsubokiMassage?.enabled !== false,
+            badge: data?.tsubokiMassage?.badge ?? 'Complimentary Ritual',
+            title: data?.tsubokiMassage?.title ?? 'Complimentary Japanese Facial Massage',
+            subtitle: data?.tsubokiMassage?.subtitle ?? 'Included with every lash service',
+            description: data?.tsubokiMassage?.description ?? '',
+            benefits: Array.isArray(data?.tsubokiMassage?.benefits) ? data.tsubokiMassage.benefits : [],
+            whyItMatters: data?.tsubokiMassage?.whyItMatters ?? '',
+            backgroundImage: data?.tsubokiMassage?.backgroundImage ?? '',
+          },
+          countdownBanner: {
+            ...createDefaultCountdownBanner(),
+            ...(data?.countdownBanner || {}),
+            enabled: data?.countdownBanner?.enabled ?? false,
+          },
+          giftCardSection: {
+            enabled: data.giftCardSection?.enabled !== false,
           },
           showFridayBooking: data.showFridayBooking !== undefined ? data.showFridayBooking : true,
           fridayBookingMessage: data.fridayBookingMessage ?? 'Friday Night Bookings Available',
@@ -531,6 +613,39 @@ export default function AdminHomepage() {
     }
   }
 
+  const handleMassageBackgroundUpload = async (file: File) => {
+    if (!file) return
+
+    setUploadingMassageBackground(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload/studio', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to upload image')
+      }
+
+      updateMassage({ backgroundImage: data.url })
+      setMessage({ type: 'success', text: 'Background image uploaded successfully!' })
+    } catch (error) {
+      console.error('Error uploading background image:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to upload background image',
+      })
+    } finally {
+      setUploadingMassageBackground(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
@@ -538,6 +653,8 @@ export default function AdminHomepage() {
       </div>
     )
   }
+
+  const massageSettings = homepage.tsubokiMassage ?? createDefaultMassage()
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
@@ -726,6 +843,151 @@ export default function AdminHomepage() {
                   className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Countdown Banner */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-2">Homepage Countdown Banner</h2>
+            <p className="text-sm text-brown-dark/80 mb-4">
+              Highlight a launch, promo, or booking deadline with a live timer on the public homepage.
+              You can toggle it anytime from here.
+            </p>
+            <div className="space-y-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={homepage.countdownBanner?.enabled || false}
+                  onChange={(e) => updateCountdownBanner({ enabled: e.target.checked })}
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show countdown banner on homepage</span>
+              </label>
+              {homepage.countdownBanner?.enabled && (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-brown-dark mb-2">Eyebrow / Label</label>
+                      <input
+                        type="text"
+                        value={homepage.countdownBanner.eyebrow || ''}
+                        onChange={(e) => updateCountdownBanner({ eyebrow: e.target.value })}
+                        placeholder="Limited Time Offer"
+                        className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-brown-dark mb-2">Headline</label>
+                      <input
+                        type="text"
+                        value={homepage.countdownBanner.title || ''}
+                        onChange={(e) => updateCountdownBanner({ title: e.target.value })}
+                        placeholder="Skin Reset Ritual booking closes soon"
+                        className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Supporting message</label>
+                    <textarea
+                      value={homepage.countdownBanner.message || ''}
+                      onChange={(e) => updateCountdownBanner({ message: e.target.value })}
+                      rows={2}
+                      placeholder="Add a short note about the experience, perks, or deadline."
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-brown-dark mb-2">Event date &amp; time</label>
+                      <input
+                        type="datetime-local"
+                        value={
+                          homepage.countdownBanner.eventDate
+                            ? new Date(homepage.countdownBanner.eventDate).toISOString().slice(0, 16)
+                            : ''
+                        }
+                        onChange={(e) =>
+                          updateCountdownBanner({
+                            eventDate: e.target.value ? new Date(e.target.value).toISOString() : '',
+                          })
+                        }
+                        className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      />
+                      <p className="text-xs text-brown mt-1">
+                        The timer counts down to this exact date/time (browser timezone).
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-brown-dark mb-2">Button text</label>
+                        <input
+                          type="text"
+                          value={homepage.countdownBanner.buttonText || ''}
+                          onChange={(e) => updateCountdownBanner({ buttonText: e.target.value })}
+                          placeholder="Book Now"
+                          className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-brown-dark mb-2">Button link</label>
+                        <input
+                          type="text"
+                          value={homepage.countdownBanner.buttonUrl || ''}
+                          onChange={(e) => updateCountdownBanner({ buttonUrl: e.target.value })}
+                          placeholder="https://booking-link.com"
+                          className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-pink-light/20 border border-dashed border-brown-light rounded-lg">
+                    <p className="text-xs uppercase tracking-[0.2em] text-brown-dark font-semibold mb-1">
+                      Preview
+                    </p>
+                    <div className="text-sm text-brown space-y-1">
+                      <p className="font-semibold text-brown-dark">
+                        {homepage.countdownBanner.eyebrow || 'Limited Time Offer'}
+                      </p>
+                      <p className="text-lg font-display text-brown-dark">
+                        {homepage.countdownBanner.title || 'Add your headline'}
+                      </p>
+                      <p>{homepage.countdownBanner.message || 'Share a short message about your promo or launch.'}</p>
+                      {homepage.countdownBanner.eventDate ? (
+                        <p className="text-xs text-brown-dark/70">
+                          Counting down to {new Date(homepage.countdownBanner.eventDate).toLocaleString()}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-red-600">Add a date to enable the timer.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Gift Card Section */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Gift Card Section</h2>
+            <p className="text-sm text-brown mb-4">
+              Show or hide the "Buy a Gift Card" section on the homepage (appears after "Why Choose LashDiary").
+            </p>
+            <div className="space-y-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={homepage.giftCardSection?.enabled !== false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      giftCardSection: { enabled: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show gift card section on homepage</span>
+              </label>
             </div>
           </div>
 
@@ -1162,6 +1424,132 @@ export default function AdminHomepage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          {/* Complimentary Japanese Facial Massage Section */}
+          <div className="py-8 border-t border-brown-light mt-8">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Complimentary Japanese Facial Massage</h2>
+            <p className="text-sm text-brown-dark/70 mb-6">
+              Update the text that appears on the public site letting clients know every lash service now includes this relaxation ritual.
+            </p>
+            <div className="space-y-4">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={massageSettings.enabled}
+                  onChange={(e) => updateMassage({ enabled: e.target.checked })}
+                  className="h-5 w-5 rounded border-2 border-brown-light text-brown-dark focus:ring-brown-dark"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show this section on the website</span>
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Badge</label>
+                  <input
+                    type="text"
+                    value={massageSettings.badge}
+                    onChange={(e) => updateMassage({ badge: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    placeholder="Complimentary Ritual"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
+                  <input
+                    type="text"
+                    value={massageSettings.title}
+                    onChange={(e) => updateMassage({ title: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    placeholder="Complimentary Japanese Facial Massage"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">Subtitle</label>
+                <input
+                  type="text"
+                  value={massageSettings.subtitle}
+                  onChange={(e) => updateMassage({ subtitle: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  placeholder="Included with every lash service"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
+                <textarea
+                  value={massageSettings.description}
+                  onChange={(e) => updateMassage({ description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  placeholder="Explain what the Japanese facial massage feels like and when clients receive it."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">Background Image</label>
+                <p className="text-xs text-brown-dark/70 mb-3">
+                  This photo displays behind the badge and title on the homepage section. Use a wide studio or ritual photo for best results.
+                </p>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      handleMassageBackgroundUpload(file)
+                    }
+                  }}
+                  disabled={uploadingMassageBackground}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brown-dark file:text-white hover:file:bg-brown transition-colors cursor-pointer disabled:opacity-50"
+                />
+                {uploadingMassageBackground && (
+                  <p className="text-xs text-brown mt-1">Uploading...</p>
+                )}
+                <div className="mt-3">
+                  <label className="block text-xs text-brown-dark/70 mb-1">Or enter image URL:</label>
+                  <input
+                    type="text"
+                    value={massageSettings.backgroundImage ?? ''}
+                    onChange={(e) => updateMassage({ backgroundImage: e.target.value })}
+                    placeholder="/uploads/studio/..."
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm"
+                  />
+                </div>
+                {massageSettings.backgroundImage && (
+                  <div className="mt-4 rounded-xl overflow-hidden border border-brown-light h-40 bg-cover bg-center"
+                    style={{ backgroundImage: `url('${massageSettings.backgroundImage}')` }}
+                  >
+                    <div className="h-full w-full bg-gradient-to-t from-black/40 to-transparent" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">Benefits (one per line)</label>
+                <textarea
+                  value={(massageSettings.benefits || []).join('\n')}
+                  onChange={(e) =>
+                    updateMassage({
+                      benefits: e.target.value
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  rows={4}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  placeholder={'Reduces facial tension before lash application\nBoosts lymphatic drainage and glow'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-brown-dark mb-2">Why it matters</label>
+                <textarea
+                  value={massageSettings.whyItMatters}
+                  onChange={(e) => updateMassage({ whyItMatters: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  placeholder="Share why the massage supports lash retention or the client experience."
+                />
+              </div>
             </div>
           </div>
 

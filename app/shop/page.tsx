@@ -138,7 +138,7 @@ export default function Shop() {
                   </div>
                   <div className="aspect-square w-full bg-brown-light/20 overflow-hidden flex-shrink-0">
                     {primaryImage ? (
-                      <img src={primaryImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <img src={primaryImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 shop-product-image" />
                     ) : (
                       <div className="flex h-full items-center justify-center text-brown-dark/50 text-sm">No image available</div>
                     )}
@@ -151,7 +151,7 @@ export default function Shop() {
                             key={`${product.id}-thumb-${index}`}
                             className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-brown-light bg-brown-light/10"
                           >
-                            <img src={imageUrl} alt={`${product.name} alternate view ${index + 2}`} className="h-full w-full object-cover" />
+                            <img src={imageUrl} alt={`${product.name} alternate view ${index + 2}`} className="h-full w-full object-cover shop-product-image" />
                           </div>
                         ))}
                       </div>

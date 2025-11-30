@@ -1,12 +1,3 @@
 {
-  "images": [
-    {
-      "url": "https://fupeswciiyubidltlnwd.supabase.co/storage/v1/object/public/gallery/gallery/1762447484287-lash1.jpg",
-      "name": "Whispy Lash Extension"
-    },
-    {
-      "url": "https://fupeswciiyubidltlnwd.supabase.co/storage/v1/object/public/gallery/gallery/1762448559560-kl.jpg",
-      "name": "Lash extension"
-    }
-  ]
+  "images": []
 }

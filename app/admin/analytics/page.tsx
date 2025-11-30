@@ -25,6 +25,15 @@ interface Expense {
   createdAt: string
 }
 
+interface RevenueEntry {
+  id: string
+  bookingId: string
+  amount: number
+  paymentMethod: 'cash' | 'card' | 'mpesa'
+  date: string
+  createdAt: string
+}
+
 interface DailyStats {
   date: string
   servicesCount: number
@@ -32,6 +41,8 @@ interface DailyStats {
   deposits: number
   balance: number
   expenses: number
+  taxes: number
+  savings: number
   profit: number
 }
 
@@ -42,6 +53,8 @@ interface WeeklyStats {
   deposits: number
   balance: number
   expenses: number
+  taxes: number
+  savings: number
   profit: number
 }
 
@@ -52,6 +65,8 @@ interface MonthlyStats {
   deposits: number
   balance: number
   expenses: number
+  taxes: number
+  savings: number
   profit: number
 }
 
@@ -62,6 +77,8 @@ interface YearlyStats {
   deposits: number
   balance: number
   expenses: number
+  taxes: number
+  savings: number
   profit: number
 }
 
@@ -69,6 +86,8 @@ export default function AdminAnalytics() {
   const { currency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [revenue, setRevenue] = useState<RevenueEntry[]>([])
+  const [taxPercentage, setTaxPercentage] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day')
@@ -97,9 +116,11 @@ export default function AdminAnalytics() {
 
   const loadData = async () => {
     try {
-      const [bookingsRes, expensesRes] = await Promise.all([
+      const [bookingsRes, expensesRes, revenueRes, settingsRes] = await Promise.all([
         fetch('/api/admin/bookings'),
         fetch('/api/admin/expenses'),
+        fetch('/api/admin/revenue'),
+        fetch('/api/admin/settings'),
       ])
 
       if (bookingsRes.ok) {
@@ -110,6 +131,20 @@ export default function AdminAnalytics() {
       if (expensesRes.ok) {
         const expensesData = await expensesRes.json()
         setExpenses(expensesData.expenses || [])
+      }
+
+      if (revenueRes.ok) {
+        const revenueData = await revenueRes.json()
+        setRevenue(revenueData.revenue || [])
+      }
+
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json()
+        setTaxPercentage(settingsData.taxPercentage || 0)
+      } else {
+        // If settings fail to load, default to 0 and log error
+        console.warn('Failed to load tax percentage from settings, defaulting to 0')
+        setTaxPercentage(0)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -140,10 +175,41 @@ export default function AdminAnalytics() {
     })
   }
 
+  const filterRevenueByDateRange = (revenue: RevenueEntry[]) => {
+    const start = new Date(dateRange.start)
+    const end = new Date(dateRange.end)
+    end.setHours(23, 59, 59, 999) // Include the entire end date
+
+    return revenue.filter(entry => {
+      const entryDate = new Date(entry.date)
+      return entryDate >= start && entryDate <= end
+    })
+  }
+
   const calculateDailyStats = (): DailyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
+    const filteredRevenue = filterRevenueByDateRange(revenue)
     const dailyMap = new Map<string, DailyStats>()
+
+    // Use actual revenue from payments marked as paid
+    filteredRevenue.forEach(entry => {
+      const dateKey = entry.date
+      const existing = dailyMap.get(dateKey) || {
+        date: dateKey,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        taxes: 0,
+        savings: 0,
+        profit: 0,
+      }
+
+      existing.totalRevenue += entry.amount
+      dailyMap.set(dateKey, existing)
+    })
 
     filteredBookings.forEach(booking => {
       const dateKey = booking.date.split('T')[0]
@@ -154,11 +220,12 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
       existing.servicesCount += 1
-      existing.totalRevenue += booking.finalPrice
       existing.deposits += booking.deposit
       existing.balance += (booking.finalPrice - booking.deposit)
 
@@ -174,18 +241,20 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
       existing.expenses += expense.amount
-      existing.profit = existing.totalRevenue - existing.expenses
-
       dailyMap.set(dateKey, existing)
     })
 
-    // Calculate profit for all entries
+    // Calculate profit, taxes, and savings for all entries
     dailyMap.forEach((stat) => {
       stat.profit = stat.totalRevenue - stat.expenses
+      stat.taxes = stat.profit > 0 ? stat.profit * (taxPercentage / 100) : 0
+      stat.savings = stat.profit - stat.taxes
     })
 
     return Array.from(dailyMap.values())
@@ -195,7 +264,32 @@ export default function AdminAnalytics() {
   const calculateWeeklyStats = (): WeeklyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
+    const filteredRevenue = filterRevenueByDateRange(revenue)
     const weeklyMap = new Map<string, WeeklyStats>()
+
+    // Use actual revenue from payments marked as paid
+    filteredRevenue.forEach(entry => {
+      const date = new Date(entry.date)
+      const weekStart = new Date(date)
+      weekStart.setDate(date.getDate() - date.getDay())
+      const weekKey = weekStart.toISOString().split('T')[0]
+      const weekLabel = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+
+      const existing = weeklyMap.get(weekKey) || {
+        week: weekLabel,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        taxes: 0,
+        savings: 0,
+        profit: 0,
+      }
+
+      existing.totalRevenue += entry.amount
+      weeklyMap.set(weekKey, existing)
+    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -211,11 +305,12 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
       existing.servicesCount += 1
-      existing.totalRevenue += booking.finalPrice
       existing.deposits += booking.deposit
       existing.balance += (booking.finalPrice - booking.deposit)
 
@@ -236,6 +331,8 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
@@ -243,9 +340,11 @@ export default function AdminAnalytics() {
       weeklyMap.set(weekKey, existing)
     })
 
-    // Calculate profit for all entries
+    // Calculate profit, taxes, and savings for all entries
     weeklyMap.forEach((stat) => {
       stat.profit = stat.totalRevenue - stat.expenses
+      stat.taxes = stat.profit > 0 ? stat.profit * (taxPercentage / 100) : 0
+      stat.savings = stat.profit - stat.taxes
     })
 
     return Array.from(weeklyMap.values())
@@ -259,7 +358,30 @@ export default function AdminAnalytics() {
   const calculateMonthlyStats = (): MonthlyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
+    const filteredRevenue = filterRevenueByDateRange(revenue)
     const monthlyMap = new Map<string, MonthlyStats>()
+
+    // Use actual revenue from payments marked as paid
+    filteredRevenue.forEach(entry => {
+      const date = new Date(entry.date)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+      const existing = monthlyMap.get(monthKey) || {
+        month: monthLabel,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        taxes: 0,
+        savings: 0,
+        profit: 0,
+      }
+
+      existing.totalRevenue += entry.amount
+      monthlyMap.set(monthKey, existing)
+    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -273,11 +395,12 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
       existing.servicesCount += 1
-      existing.totalRevenue += booking.finalPrice
       existing.deposits += booking.deposit
       existing.balance += (booking.finalPrice - booking.deposit)
 
@@ -296,6 +419,8 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
@@ -303,9 +428,11 @@ export default function AdminAnalytics() {
       monthlyMap.set(monthKey, existing)
     })
 
-    // Calculate profit for all entries
+    // Calculate profit, taxes, and savings for all entries
     monthlyMap.forEach((stat) => {
       stat.profit = stat.totalRevenue - stat.expenses
+      stat.taxes = stat.profit > 0 ? stat.profit * (taxPercentage / 100) : 0
+      stat.savings = stat.profit - stat.taxes
     })
 
     return Array.from(monthlyMap.values())
@@ -319,7 +446,29 @@ export default function AdminAnalytics() {
   const calculateYearlyStats = (): YearlyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
+    const filteredRevenue = filterRevenueByDateRange(revenue)
     const yearlyMap = new Map<string, YearlyStats>()
+
+    // Use actual revenue from payments marked as paid
+    filteredRevenue.forEach(entry => {
+      const date = new Date(entry.date)
+      const year = date.getFullYear().toString()
+
+      const existing = yearlyMap.get(year) || {
+        year: year,
+        servicesCount: 0,
+        totalRevenue: 0,
+        deposits: 0,
+        balance: 0,
+        expenses: 0,
+        taxes: 0,
+        savings: 0,
+        profit: 0,
+      }
+
+      existing.totalRevenue += entry.amount
+      yearlyMap.set(year, existing)
+    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -332,11 +481,12 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
       existing.servicesCount += 1
-      existing.totalRevenue += booking.finalPrice
       existing.deposits += booking.deposit
       existing.balance += (booking.finalPrice - booking.deposit)
 
@@ -354,6 +504,8 @@ export default function AdminAnalytics() {
         deposits: 0,
         balance: 0,
         expenses: 0,
+        taxes: 0,
+        savings: 0,
         profit: 0,
       }
 
@@ -361,9 +513,11 @@ export default function AdminAnalytics() {
       yearlyMap.set(year, existing)
     })
 
-    // Calculate profit for all entries
+    // Calculate profit, taxes, and savings for all entries
     yearlyMap.forEach((stat) => {
       stat.profit = stat.totalRevenue - stat.expenses
+      stat.taxes = stat.profit > 0 ? stat.profit * (taxPercentage / 100) : 0
+      stat.savings = stat.profit - stat.taxes
     })
 
     return Array.from(yearlyMap.values())
@@ -373,25 +527,32 @@ export default function AdminAnalytics() {
   const getTotalStats = () => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
+    const filteredRevenue = filterRevenueByDateRange(revenue)
+    
+    // Use actual revenue from payments marked as paid
+    const totalRevenue = filteredRevenue.reduce((sum, entry) => sum + entry.amount, 0)
     
     const totals = filteredBookings.reduce((acc, booking) => {
       acc.servicesCount += 1
-      acc.totalRevenue += booking.finalPrice
       acc.deposits += booking.deposit
       acc.balance += (booking.finalPrice - booking.deposit)
       return acc
     }, {
       servicesCount: 0,
-      totalRevenue: 0,
+      totalRevenue: totalRevenue,
       deposits: 0,
       balance: 0,
       expenses: 0,
+      taxes: 0,
+      savings: 0,
       profit: 0,
     })
 
     const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0)
     totals.expenses = totalExpenses
     totals.profit = totals.totalRevenue - totals.expenses
+    totals.taxes = totals.profit > 0 ? totals.profit * (taxPercentage / 100) : 0
+    totals.savings = totals.profit - totals.taxes
 
     return totals
   }
@@ -573,7 +734,7 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
             <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
               <p className="text-sm text-gray-600 mb-2">Total Services</p>
               <p className="text-3xl font-bold text-brown-dark">{totalStats.servicesCount}</p>
@@ -586,10 +747,20 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
               <p className="text-sm text-gray-600 mb-2">Total Expenses</p>
               <p className="text-3xl font-bold text-red-700">{formatCurrency(totalStats.expenses)}</p>
             </div>
+            <div className="bg-purple-50 rounded-lg p-6 border-2 border-purple-200">
+              <p className="text-sm text-gray-600 mb-2">Total Taxes</p>
+              <p className="text-3xl font-bold text-purple-700">{formatCurrency(totalStats.taxes)}</p>
+            </div>
             <div className={`rounded-lg p-6 border-2 ${totalStats.profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
               <p className="text-sm text-gray-600 mb-2">Net Profit</p>
               <p className={`text-3xl font-bold ${totalStats.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
                 {formatCurrency(totalStats.profit)}
+              </p>
+            </div>
+            <div className={`rounded-lg p-6 border-2 ${totalStats.savings >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-orange-50 border-orange-200'}`}>
+              <p className="text-sm text-gray-600 mb-2">Savings</p>
+              <p className={`text-3xl font-bold ${totalStats.savings >= 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
+                {formatCurrency(totalStats.savings)}
               </p>
             </div>
             <div className="bg-blue-50 rounded-lg p-6 border-2 border-blue-200">
@@ -624,6 +795,8 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Services</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Revenue</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Expenses</th>
+                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Taxes</th>
+                    <th className="text-left py-3 px-4 text-brown-dark font-semibold">Savings</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Profit</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Deposits</th>
                     <th className="text-left py-3 px-4 text-brown-dark font-semibold">Balance</th>
@@ -638,6 +811,10 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
                       <td className="py-3 px-4 text-brown font-semibold">{stat.servicesCount}</td>
                       <td className="py-3 px-4 text-green-700 font-semibold">{formatCurrency(stat.totalRevenue)}</td>
                       <td className="py-3 px-4 text-red-700 font-semibold">{formatCurrency(stat.expenses)}</td>
+                      <td className="py-3 px-4 text-purple-700 font-semibold">{formatCurrency(stat.taxes)}</td>
+                      <td className={`py-3 px-4 font-semibold ${stat.savings >= 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
+                        {formatCurrency(stat.savings)}
+                      </td>
                       <td className={`py-3 px-4 font-semibold ${stat.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
                         {formatCurrency(stat.profit)}
                       </td>

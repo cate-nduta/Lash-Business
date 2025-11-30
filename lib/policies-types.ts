@@ -18,6 +18,7 @@ export interface PolicySection {
 export interface PolicyData {
   version: number
   updatedAt: string
+  introText?: string
   variables: PolicyVariables
   sections: PolicySection[]
 }

@@ -23,19 +23,27 @@ export default function AdminLogin() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ password, username }),
+        credentials: 'include', // Ensure cookies are included
+        body: JSON.stringify({ 
+          password: password.trim(), 
+          username: username.trim() || undefined 
+        }),
       })
 
       const data = await response.json()
 
       if (response.ok && data.success) {
-        router.push(redirectTo)
+        // Small delay to ensure cookies are set, then redirect with full page reload
+        setTimeout(() => {
+          window.location.href = redirectTo
+        }, 100)
       } else {
         setError(data.error || 'Invalid credentials')
+        setLoading(false)
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Login error:', error)
       setError('An error occurred. Please try again.')
-    } finally {
       setLoading(false)
     }
   }

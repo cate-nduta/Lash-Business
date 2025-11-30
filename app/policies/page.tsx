@@ -1,12 +1,15 @@
 import Link from 'next/link'
 import { loadPolicies, applyPolicyVariables } from '@/lib/policies-utils'
+import { loadFAQ } from '@/lib/faq-utils'
+import FAQSection from '@/components/FAQSection'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
 export default async function PoliciesPage() {
   const policies = await loadPolicies()
-  const { variables, sections, updatedAt } = policies
+  const faq = await loadFAQ()
+  const { variables, sections, updatedAt, introText } = policies
   const formattedUpdatedAt =
     typeof updatedAt === 'string' && updatedAt
       ? new Date(updatedAt).toLocaleDateString('en-GB', {
@@ -42,8 +45,7 @@ export default async function PoliciesPage() {
             <span className="absolute -top-2 -right-6 text-2xl opacity-50 hidden lg:inline-block">📋</span>
           </h1>
           <p className="text-brown text-lg leading-relaxed">
-            These guidelines keep appointments running smoothly and ensure every client—and partner—enjoys the signature
-            LashDiary experience. Reach out if you have any questions or need clarification.
+            {introText || 'These guidelines keep appointments running smoothly and ensure every client—and partner—enjoys the signature LashDiary experience. Reach out if you have any questions or need clarification.'}
           </p>
         </div>
 
@@ -73,6 +75,19 @@ export default async function PoliciesPage() {
           ))}
         </div>
 
+        {/* FAQ Section */}
+        {faq.questions.length > 0 && (
+          <div id="faq" className="bg-white rounded-3xl shadow-soft border border-brown-light/30 p-6 sm:p-10 relative overflow-hidden scroll-mt-20">
+            <div className="cartoon-sticker top-4 right-4 opacity-20 hidden sm:block">
+              <div className="sticker-sparkle"></div>
+            </div>
+            <div className="space-y-4">
+              <h2 className="text-3xl font-display text-brown-dark mb-6">Frequently Asked Questions</h2>
+              <FAQSection questions={faq.questions} />
+            </div>
+          </div>
+        )}
+
         <div className="bg-white/70 border border-brown-light/40 rounded-3xl px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative overflow-hidden hover-lift">
           <div className="cartoon-sticker top-2 left-2 opacity-25 hidden sm:block">
             <div className="sticker-heart animate-float-sticker"></div>
@@ -91,11 +106,20 @@ export default async function PoliciesPage() {
           </div>
         </div>
 
-        <div className="text-sm text-brown text-center">
-          Looking for appointment availability?{' '}
-          <Link href="/booking" className="text-brown-dark font-semibold hover:underline">
-            Head to the booking page.
-          </Link>
+        <div className="text-sm text-brown text-center space-y-2">
+          <p>
+            Looking for appointment availability?{' '}
+            <Link href="/booking" className="text-brown-dark font-semibold hover:underline">
+              Head to the booking page.
+            </Link>
+          </p>
+          <p>
+            Before your appointment, check out our{' '}
+            <Link href="/before-your-appointment" className="text-brown-dark font-semibold hover:underline">
+              pre-appointment guidelines
+            </Link>
+            {' '}to ensure the best experience.
+          </p>
           {formattedUpdatedAt && (
             <span className="block mt-2 text-xs text-brown/70">
               Last updated {formattedUpdatedAt}

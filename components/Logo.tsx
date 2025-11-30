@@ -88,7 +88,7 @@ export default function Logo({
       <img
         src={logoSettings.logoUrl}
         alt={logoSettings.logoText || 'Logo'}
-        className={imageClassName || 'h-16 md:h-20 object-contain'}
+        className={`logo-image ${imageClassName || 'h-16 md:h-20 object-contain'}`}
       />
     )
   }

@@ -90,6 +90,10 @@ export function normalizePolicies(raw: any): { policies: PolicyData; changed: bo
       typeof raw.updatedAt === 'string' && raw.updatedAt.trim().length > 0
         ? raw.updatedAt
         : defaultPolicies.updatedAt,
+    introText:
+      typeof raw.introText === 'string' && raw.introText.trim().length > 0
+        ? raw.introText.trim()
+        : defaultPolicies.introText || '',
     variables: { ...defaultPolicies.variables },
     sections: [],
   }

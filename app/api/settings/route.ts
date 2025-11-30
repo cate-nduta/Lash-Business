@@ -50,6 +50,9 @@ export async function GET() {
           faviconVersion: Date.now(),
         },
         social: {},
+        substack: {
+          url: '',
+        },
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     )

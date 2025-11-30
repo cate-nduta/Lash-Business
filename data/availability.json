@@ -1,21 +1,11 @@
 {
-  "minimumBookingDate": "2026-01-15",
+  "minimumBookingDate": null,
   "bookingWindow": {
-    "current": {
-      "startDate": "2025-11-03",
-      "endDate": "2025-11-30",
-      "label": "November 3 – November 30"
-    },
-    "next": {
-      "startDate": "2025-12-03",
-      "endDate": "2025-12-31",
-      "label": "December 3 – December 31",
-      "opensAt": "2025-11-29",
-      "emailSubject": "✨ December Bookings Are Now Open!"
-    },
-    "bookingLink": "https://lashdiary.com/booking",
-    "note": "VIP waitlist clients receive early access codes. Email us if you'd like to join.",
-    "bannerMessage": "Bookings open monthly.\nCurrent calendar: November 3 – November 30.\n\nDecember 3 – December 31 opens November 29.",
+    "current": null,
+    "next": null,
+    "bookingLink": "",
+    "note": "",
+    "bannerMessage": "",
     "bannerEnabled": null
   },
   "businessHours": {
@@ -56,47 +46,9 @@
     }
   },
   "timeSlots": {
-    "weekdays": [
-      {
-        "hour": 9,
-        "minute": 30,
-        "label": "9:30 AM"
-      },
-      {
-        "hour": 12,
-        "minute": 0,
-        "label": "12:00 PM"
-      },
-      {
-        "hour": 14,
-        "minute": 30,
-        "label": "2:30 PM"
-      },
-      {
-        "hour": 16,
-        "minute": 30,
-        "label": "4:30 PM"
-      }
-    ],
-    "sunday": [
-      {
-        "hour": 12,
-        "minute": 30,
-        "label": "12:30 PM"
-      },
-      {
-        "hour": 15,
-        "minute": 0,
-        "label": "3:00 PM"
-      }
-    ],
-    "saturday": [
-      {
-        "hour": 12,
-        "minute": 30,
-        "label": "12:30 PM"
-      }
-    ]
+    "weekdays": [],
+    "sunday": [],
+    "saturday": []
   },
   "fullyBookedDates": []
 }

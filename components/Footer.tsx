@@ -39,8 +39,20 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/blog" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
+                  Blog
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
+                </Link>
+              </li>
+              <li>
                 <Link href="/booking" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Book Appointment
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/before-your-appointment" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
+                  Pre-Appointment Guidelines
                   <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
                 </Link>
               </li>
@@ -63,7 +75,7 @@ export default function Footer() {
             <h4 className="font-display text-gray-800 font-semibold mb-4">
               Connect
             </h4>
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm text-gray-600 mb-6">
               <li>
                 <a 
                   href="https://instagram.com" 
@@ -81,10 +93,11 @@ export default function Footer() {
               </li>
             </ul>
           </div>
+
         </div>
 
-        <div className="mt-8 pt-8 border-t border-brown-light text-center text-sm text-gray-600">
-          <div className="flex items-center justify-center gap-1">
+        <div className="mt-8 pt-8 border-t border-brown-light text-center">
+          <div className="flex items-center justify-center gap-1 mb-2 text-sm text-gray-600">
             <span>&copy; {new Date().getFullYear()}</span>
             <Logo
               className="inline text-base font-display text-brown font-bold"
@@ -92,6 +105,9 @@ export default function Footer() {
             />
             <span>. All rights reserved.</span>
           </div>
+          <p className="text-xs text-gray-500">
+            This website and its content are protected by copyright law. Unauthorized copying, reproduction, or distribution is strictly prohibited.
+          </p>
         </div>
       </div>
     </footer>

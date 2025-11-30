@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { sendAftercareEmail } from '@/app/api/booking/email/utils'
 
 interface Booking {
   id: string
@@ -114,7 +115,10 @@ export async function POST(request: NextRequest) {
     }
 
     const totalPaid = booking.deposit || 0
-    if (totalPaid >= booking.finalPrice) {
+    const wasPaidInFull = (booking.deposit || 0) >= booking.finalPrice
+    const isNowPaidInFull = totalPaid >= booking.finalPrice
+    
+    if (isNowPaidInFull) {
       if (!booking.paidInFullAt) {
         booking.paidInFullAt = new Date().toISOString()
       }
@@ -125,6 +129,64 @@ export async function POST(request: NextRequest) {
 
     bookings[bookingIndex] = booking
     await writeDataFile('bookings.json', { bookings })
+
+    // Send aftercare email when booking is marked as paid (appointment completed)
+    if (isNowPaidInFull && !wasPaidInFull && booking.email) {
+      try {
+        // Check if aftercare email was already sent
+        const aftercareEmailSent = (booking as any).aftercareEmailSent
+        if (!aftercareEmailSent) {
+          // Send aftercare email
+          const date = booking.date || booking.timeSlot?.split('T')[0] || ''
+          await sendAftercareEmail({
+            name: booking.name,
+            email: booking.email,
+            service: booking.service,
+            date,
+            timeSlot: booking.timeSlot || '',
+            location: booking.location,
+          })
+          
+          // Mark as sent to avoid duplicates
+          ;(booking as any).aftercareEmailSent = true
+          bookings[bookingIndex] = booking
+          await writeDataFile('bookings.json', { bookings })
+        }
+      } catch (error) {
+        console.error('Error sending aftercare email:', error)
+        // Don't fail the payment if email fails
+      }
+    }
+
+    // Record revenue when payment is marked as paid (cash or card)
+    if ((paymentMethod === 'cash' || paymentMethod === 'card') && amount > 0) {
+      try {
+        const revenueData = await readDataFile<{ 
+          revenue: Array<{
+            id: string
+            bookingId: string
+            amount: number
+            paymentMethod: 'cash' | 'card' | 'mpesa'
+            date: string
+            createdAt: string
+          }>
+        }>('revenue.json', { revenue: [] })
+
+        revenueData.revenue.push({
+          id: `rev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          bookingId: bookingId,
+          amount: amount,
+          paymentMethod: paymentMethod,
+          date: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+        })
+
+        await writeDataFile('revenue.json', revenueData)
+      } catch (error) {
+        console.error('Error recording revenue:', error)
+        // Don't fail the payment if revenue recording fails
+      }
+    }
 
     return NextResponse.json({
       success: true,

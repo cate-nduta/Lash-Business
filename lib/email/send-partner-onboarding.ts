@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { Resend } from 'resend'
+import { formatEmailSubject } from '@/lib/email-subject-utils'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
@@ -55,7 +56,7 @@ export async function sendPartnerOnboardingEmail({
         from: fromAddress,
         to,
         replyTo: fromEmail,
-        subject,
+        subject: formatEmailSubject(subject),
         html,
         text,
       })
@@ -82,7 +83,7 @@ export async function sendPartnerOnboardingEmail({
       const result = await resendClient.emails.send({
         from: fromAddress,
         to,
-        subject,
+        subject: formatEmailSubject(subject),
         html,
         text,
       })

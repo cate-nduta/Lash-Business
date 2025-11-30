@@ -7,49 +7,9 @@ import {
 } from '@/lib/availability-utils'
 import { sendEmailNotification } from '../../email/utils'
 
-type EyeShapeSelection = {
-  id: string
-  label: string
-  imageUrl: string
-  description: string | null
-  recommendedStyles: string[]
-}
-
-const getEyeShapeSelection = (input: any, fallbackLabel: string, fallbackId: string): EyeShapeSelection => {
-  const base = {
-    id: fallbackId,
-    label: fallbackLabel,
-    imageUrl: '',
-    description: null,
-    recommendedStyles: [] as string[],
-  }
-
-  if (!input || typeof input !== 'object') {
-    return base
-  }
-
-  return {
-    id:
-      typeof input.id === 'string' && input.id.trim().length > 0 ? input.id.trim() : base.id,
-    label:
-      typeof input.label === 'string' && input.label.trim().length > 0 ? input.label.trim() : base.label,
-    imageUrl:
-      typeof input.imageUrl === 'string' && input.imageUrl.trim().length > 0 ? input.imageUrl.trim() : base.imageUrl,
-    description:
-      typeof input.description === 'string' && input.description.trim().length > 0
-        ? input.description.trim()
-        : base.description,
-    recommendedStyles: Array.isArray(input.recommendedStyles)
-      ? input.recommendedStyles
-          .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
-          .filter((entry: string) => entry.length > 0)
-      : base.recommendedStyles,
-  }
-}
-
 const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
 
-type ManageAction = 'reschedule' | 'transfer'
+type ManageAction = 'reschedule' | 'change-service'
 
 function computePolicyState(booking: any) {
   const now = new Date()
@@ -60,7 +20,7 @@ function computePolicyState(booking: any) {
       ? booking.cancellationWindowHours
       : CLIENT_MANAGE_WINDOW_HOURS
   const withinWindow = hoursUntil < windowHours
-  const within24Hours = hoursUntil < 24
+  const within24Hours = hoursUntil <= 24 // Exactly 24 hours or less - cannot reschedule
 
   return {
     now,
@@ -103,7 +63,6 @@ function sanitizeBooking(booking: any) {
     isPast: policy.isPast,
     canCancel: false,
     canReschedule: canAct,
-    canTransfer: canAct,
     canManage,
     salonReferral: booking.salonReferral || null,
     lastClientManageActionAt: booking.lastClientManageActionAt || null,
@@ -162,7 +121,7 @@ export async function POST(
   const body = await request.json()
   const action: ManageAction = body?.action
 
-  if (action !== 'reschedule' && action !== 'transfer') {
+  if (action !== 'reschedule' && action !== 'change-service') {
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
   }
 
@@ -191,6 +150,7 @@ export async function POST(
     booking.status === 'confirmed' && !policy.isPast && booking.clientManageDisabled !== true && booking.cancelledAt == null
   const canAct = canManage && !policy.within24Hours
 
+  // Check policy for reschedule action
   if (!canAct) {
     return NextResponse.json(
       {
@@ -206,30 +166,111 @@ export async function POST(
   }
 
   const nowISO = new Date().toISOString()
-  const wasTransfer = action === 'transfer'
-  const previousClientName = booking.name
 
-  let newGuestName = ''
-  let newGuestEmail = ''
-  let newGuestPhone = ''
+  // Handle service change action
+  if (action === 'change-service') {
+    const newServiceName = typeof body?.newService === 'string' ? body.newService.trim() : ''
+    if (!newServiceName) {
+      return NextResponse.json({ error: 'New service name is required.' }, { status: 400 })
+    }
 
-  if (wasTransfer) {
-    newGuestName = typeof body?.newName === 'string' ? body.newName.trim() : ''
-    newGuestEmail = typeof body?.newEmail === 'string' ? body.newEmail.trim() : ''
-    newGuestPhone = typeof body?.newPhone === 'string' ? body.newPhone.trim() : ''
+    // Load services to get pricing
+    const servicesData = await readDataFile<any>('services.json', { categories: [] })
+    const { catalog } = await import('@/lib/services-utils').then(m => m.normalizeServiceCatalog(servicesData))
+    
+    // Find current and new service prices
+    let currentServicePrice = booking.originalPrice || booking.finalPrice || 0
+    let newServicePrice = 0
+    
+    // Search for service in catalog
+    for (const category of catalog.categories || []) {
+      for (const service of category.services || []) {
+        if (service.name === newServiceName) {
+          newServicePrice = service.price || 0
+          break
+        }
+      }
+      if (newServicePrice > 0) break
+    }
 
-    if (!newGuestName || newGuestName.length < 2) {
-      return NextResponse.json({ error: 'Please provide the guest’s full name.' }, { status: 400 })
+    if (newServicePrice === 0) {
+      return NextResponse.json({ error: 'Service not found. Please select a valid service.' }, { status: 400 })
     }
-    if (!newGuestEmail || !newGuestEmail.includes('@')) {
-      return NextResponse.json({ error: 'Please provide a valid email for the new guest.' }, { status: 400 })
+
+    // Preserve existing discounts when changing service
+    // Calculate what discount was applied originally
+    const originalFinalPrice = booking.finalPrice || booking.originalPrice || 0
+    const originalOriginalPrice = booking.originalPrice || booking.finalPrice || 0
+    const originalDiscount = originalOriginalPrice - originalFinalPrice
+    
+    // Apply the same discount percentage to the new service price
+    let discountPercent = 0
+    if (originalDiscount > 0 && originalOriginalPrice > 0) {
+      discountPercent = originalDiscount / originalOriginalPrice
     }
-    if (!newGuestPhone || newGuestPhone.length < 7) {
-      return NextResponse.json({ error: 'Please provide a valid phone number for the new guest.' }, { status: 400 })
+    
+    // Calculate new final price with preserved discount (no penalty)
+    const newDiscountAmount = Math.round(newServicePrice * discountPercent)
+    const newFinalPrice = newServicePrice - newDiscountAmount
+    
+    // Update booking with new service
+    const oldService = booking.service
+    booking.service = newServiceName
+    booking.originalPrice = newServicePrice
+    booking.finalPrice = newFinalPrice
+    booking.discount = newDiscountAmount // Preserve discount amount
+    booking.serviceChangedAt = nowISO
+    booking.lastClientManageActionAt = nowISO
+    booking.manageTokenLastUsedAt = nowISO
+
+    // Add to history
+    if (!Array.isArray(booking.serviceChangeHistory)) {
+      booking.serviceChangeHistory = []
     }
+    booking.serviceChangeHistory.push({
+      fromService: oldService,
+      toService: newServiceName,
+      changedAt: nowISO,
+      changedBy: 'client',
+    })
+
+    bookings[bookingIndex] = booking
+    await writeDataFile('bookings.json', { bookings })
+
+    // Send confirmation email
+    try {
+      const { sendEmailNotification } = await import('../../email/utils')
+      await sendEmailNotification({
+        name: booking.name,
+        email: booking.email,
+        phone: booking.phone,
+        service: booking.service || 'Lash Service',
+        date: booking.date,
+        timeSlot: booking.timeSlot,
+        location: booking.location || '',
+        originalPrice: booking.originalPrice,
+        finalPrice: booking.finalPrice,
+        deposit: booking.deposit || 0,
+        bookingId: booking.id,
+        manageToken: booking.manageToken,
+        policyWindowHours: booking.cancellationWindowHours,
+        notes: typeof booking.notes === 'string' ? booking.notes : undefined,
+        desiredLook: booking.desiredLook || 'Not specified',
+        desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
+        isReminder: false,
+      })
+    } catch (emailError) {
+      console.error('Failed to send service change confirmation email:', emailError)
+    }
+
+    return NextResponse.json({
+      booking: sanitizeBooking(booking),
+      status: 'service-changed',
+      newServicePrice,
+    })
   }
 
-  // Reschedule or transfer path
+  // Reschedule path
   const existingDate =
     typeof booking.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(booking.date)
       ? booking.date
@@ -256,7 +297,7 @@ export async function POST(
   const bookingStart = new Date(booking.timeSlot)
   const isSameSlot = newStart.toISOString() === bookingStart.toISOString() && targetDate === existingDate
 
-  if (!wasTransfer && isSameSlot) {
+  if (isSameSlot) {
     return NextResponse.json({ error: 'You are already booked for that slot.' }, { status: 400 })
   }
 
@@ -292,7 +333,7 @@ export async function POST(
     toTimeSlot: newStart.toISOString(),
     rescheduledAt: nowISO,
     rescheduledBy: 'client' as const,
-    notes: wasTransfer ? `Client transferred appointment to ${newGuestName}.` : 'Client rescheduled online.',
+    notes: 'Client rescheduled online.',
   }
 
   const windowHours =
@@ -305,21 +346,6 @@ export async function POST(
     booking.rescheduleHistory = []
   }
   booking.rescheduleHistory.push(historyEntry)
-  if (wasTransfer) {
-    booking.name = newGuestName
-    booking.email = newGuestEmail
-    booking.phone = newGuestPhone
-    if (booking.salonReferralDetails) {
-      booking.salonReferralDetails.clientName = newGuestName
-      booking.salonReferralDetails.clientEmail = newGuestEmail
-      booking.salonReferralDetails.clientPhone = newGuestPhone
-    }
-    if (booking.salonReferral) {
-      booking.salonReferral.clientName = newGuestName
-      booking.salonReferral.clientEmail = newGuestEmail
-      booking.salonReferral.clientPhone = newGuestPhone
-    }
-  }
   booking.date = targetDate
   booking.timeSlot = newStart.toISOString()
   booking.rescheduledAt = nowISO
@@ -344,48 +370,35 @@ export async function POST(
     console.error('Failed to update availability after reschedule:', error)
   }
 
-  const responsePayload: Record<string, unknown> = {
-    booking: sanitizeBooking(booking),
-    status: wasTransfer ? 'transferred' : 'rescheduled',
+  // Send confirmation email after rescheduling
+  try {
+    const { sendEmailNotification } = await import('../../email/utils')
+    await sendEmailNotification({
+      name: booking.name,
+      email: booking.email,
+      phone: booking.phone,
+      service: booking.service || 'Lash Service',
+      date: booking.date,
+      timeSlot: booking.timeSlot,
+      location: booking.location || '',
+      originalPrice: booking.originalPrice,
+      finalPrice: booking.finalPrice,
+      deposit: booking.deposit || 0,
+      bookingId: booking.id,
+      manageToken: booking.manageToken,
+      policyWindowHours: booking.cancellationWindowHours,
+      notes: typeof booking.notes === 'string' ? booking.notes : undefined,
+      desiredLook: booking.desiredLook || 'Not specified',
+      desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
+      isReminder: false,
+    })
+  } catch (emailError) {
+    console.error('Failed to send reschedule confirmation email:', emailError)
   }
 
-  if (wasTransfer) {
-    try {
-      await sendEmailNotification({
-        name: booking.name,
-        email: booking.email,
-        phone: booking.phone,
-        service: booking.service || 'Lash Service',
-        date: booking.date,
-        timeSlot: booking.timeSlot,
-        location: booking.location || '',
-        originalPrice:
-          typeof booking.originalPrice === 'number'
-            ? booking.originalPrice
-            : Number(booking.originalPrice ?? booking.finalPrice ?? 0),
-        finalPrice:
-          typeof booking.finalPrice === 'number'
-            ? booking.finalPrice
-            : Number(booking.finalPrice ?? booking.originalPrice ?? 0) || undefined,
-        deposit: typeof booking.deposit === 'number' ? booking.deposit : Number(booking.deposit ?? 0),
-        bookingId: booking.id,
-        manageToken: booking.manageToken,
-        policyWindowHours: booking.cancellationWindowHours,
-        transferFromName: previousClientName,
-        notes: typeof booking.notes === 'string' ? booking.notes : undefined,
-        eyeShape: getEyeShapeSelection(booking.eyeShape, 'Not specified', `legacy-eye-shape-${booking.id}`),
-        desiredLook: typeof booking.desiredLook === 'string' && booking.desiredLook.trim().length > 0
-          ? booking.desiredLook
-          : 'Not specified',
-        desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
-        desiredLookMatchesRecommendation: booking.desiredLookMatchesRecommendation === true,
-      })
-      responsePayload.emailSent = true
-    } catch (emailError: any) {
-      console.error('Failed to send transfer confirmation email:', emailError)
-      responsePayload.emailSent = false
-      responsePayload.emailError = emailError?.message || 'Unable to send transfer confirmation email.'
-    }
+  const responsePayload: Record<string, unknown> = {
+    booking: sanitizeBooking(booking),
+    status: 'rescheduled',
   }
 
   return NextResponse.json(responsePayload)

@@ -134,7 +134,7 @@ export default function ProductDetail() {
                   <img
                     src={mainImage}
                     alt={product.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover shop-product-image"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-brown-dark/60">
@@ -158,7 +158,7 @@ export default function ProductDetail() {
                       <img
                         src={image}
                         alt={`${product.name} ${index + 1}`}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover shop-product-image"
                       />
                     </button>
                   ))}

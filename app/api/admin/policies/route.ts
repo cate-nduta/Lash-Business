@@ -30,6 +30,7 @@ function sanitizePayload(payload: any, existing: Awaited<ReturnType<typeof loadP
   const merged = {
     version: typeof payload?.version === 'number' ? payload.version : existing.version,
     updatedAt: existing.updatedAt,
+    introText: typeof payload?.introText === 'string' ? payload.introText.trim() : existing.introText || '',
     variables: {
       ...existing.variables,
     },

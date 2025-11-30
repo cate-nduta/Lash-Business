@@ -16,16 +16,24 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   // Load currency from localStorage on mount
   useEffect(() => {
-    const savedCurrency = localStorage.getItem('preferredCurrency') as Currency | null
-    if (savedCurrency && (savedCurrency === 'KES' || savedCurrency === 'USD')) {
-      setCurrencyState(savedCurrency)
+    if (typeof window !== 'undefined') {
+      const savedCurrency = localStorage.getItem('preferredCurrency') as Currency | null
+      if (savedCurrency && (savedCurrency === 'KES' || savedCurrency === 'USD')) {
+        setCurrencyState(savedCurrency)
+      }
     }
   }, [])
 
   // Save currency to localStorage when it changes
   const setCurrency = (newCurrency: Currency) => {
     setCurrencyState(newCurrency)
-    localStorage.setItem('preferredCurrency', newCurrency)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('preferredCurrency', newCurrency)
+      } catch (error) {
+        console.error('Error saving currency to localStorage:', error)
+      }
+    }
   }
 
   const formatCurrency = (amount: number): string => {

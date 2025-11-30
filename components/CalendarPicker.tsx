@@ -33,11 +33,19 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
   const startingDayOfWeek = firstDayOfMonth.getDay()
 
   // Navigate months
-  const goToPreviousMonth = () => {
+  const goToPreviousMonth = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
   }
 
-  const goToNextMonth = () => {
+  const goToNextMonth = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
   }
 
@@ -133,6 +141,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
         {/* Month Navigation */}
       <div className="flex items-center justify-between mb-3 sm:mb-4 md:mb-5">
         <button
+          type="button"
           onClick={goToPreviousMonth}
           className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:-rotate-12"
           aria-label="Previous month"
@@ -145,6 +154,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           {monthNames[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </h3>
         <button
+          type="button"
           onClick={goToNextMonth}
           className="p-2 hover:bg-[color-mix(in srgb,var(--color-primary) 18%, var(--color-surface) 82%)] rounded-lg transition-all transform hover:scale-110 hover:rotate-12"
           aria-label="Next month"
@@ -182,26 +192,23 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
           const isFullyBookedDate = isFullyBooked(date)
           const isToday = date.toDateString() === new Date().toDateString()
           const isAvailable = isDateAvailable(date)
+          // Treat fully booked dates as unavailable - they shouldn't be selectable
           const isActuallyAvailable = !isPast && !isBeforeMinDate && isAvailable && !isFullyBookedDate
 
-          // Determine if this is a non-available date (NOT selected, NOT fully booked)
-          const isNotAvailable = (isPast || isBeforeMinDate || !isAvailable) && !isSelected && !isFullyBookedDate
+          // Determine if this is a non-available date (including fully booked dates - treat them as unavailable)
+          const isNotAvailable = (isPast || isBeforeMinDate || !isAvailable || isFullyBookedDate) && !isSelected
           
           let cellClasses = 'relative aspect-square flex items-center justify-center rounded-lg transition-all cursor-pointer font-semibold overflow-hidden text-xs sm:text-sm md:text-base touch-manipulation '
           let cellStyle: React.CSSProperties = {}
           
           // Priority order for styling:
           // 1. Selected date (highest priority - brown/primary color)
-          // 2. Fully Booked (orange/yellow)
-          // 3. Not Available - dates before Jan 15th or past dates (grey)
-          // 4. Available dates (white)
+          // 2. Not Available - dates before min date, past dates, or fully booked dates (grey)
+          // 3. Available dates (white)
           
           if (isSelected) {
             // Selected - Brown/Primary style (highest priority)
             cellClasses += 'bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-xl transform scale-[1.03] border border-[var(--color-primary-dark)] ring-2 ring-[var(--color-accent)]/40'
-          } else if (isFullyBookedDate) {
-            // Fully Booked - Orange/Yellow style (matches legend)
-            cellClasses += 'cursor-not-allowed bg-yellow-100 text-[#CA8A04] border border-[#FACC15]/70 shadow-inner'
           } else if (isNotAvailable) {
             // Not Available - Grey style (matches legend) - MUST be grey, not brown
             // NO background color class - ONLY use inline style
@@ -230,23 +237,18 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
               data-not-available={isNotAvailable ? 'true' : undefined}
               aria-disabled={isPast || isBeforeMinDate || !isActuallyAvailable || isFullyBookedDate}
               title={
-                isFullyBookedDate
-                  ? 'All time slots booked for this date'
-                  : isBeforeMinDate
+                isBeforeMinDate
                   ? minimumBookingDate 
                     ? `Bookings start from ${new Date(minimumBookingDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
                     : 'This date is not available for booking'
                   : isPast
                   ? 'Past dates are unavailable'
-                  : !isAvailable
+                  : !isAvailable || isFullyBookedDate
                   ? 'No booking slots available for this date'
                   : undefined
               }
             >
               {day}
-              {isFullyBookedDate && (
-                <span className="absolute inset-0 bg-[#FB923C]/70 pointer-events-none rounded-xl"></span>
-              )}
             </button>
           )
         })}
@@ -268,14 +270,6 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
             <div>
               <div className="font-bold text-[var(--color-text)] text-xs sm:text-sm">Available</div>
               <div className="text-xs text-[var(--color-text)]/70">Click to book</div>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2.5 bg-[var(--color-surface)] p-2.5 rounded-lg border border-[var(--color-text)]/20 shadow-soft">
-            <div className="w-6 h-6 bg-yellow-100 rounded-md border border-[#FACC15]"></div>
-            <div>
-              <div className="font-bold text-[#EAB308] text-xs sm:text-sm">Fully Booked</div>
-              <div className="text-xs text-[#CA8A04]">All slots taken</div>
             </div>
           </div>
           

@@ -1,48 +1,140 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
-import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
-import { recordActivity } from '@/lib/activity-log'
+import { requireAdminAuth } from '@/lib/admin-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const settings = await readDataFile('settings.json', {})
-    return NextResponse.json(settings)
+
+    let settings: any = {}
+    try {
+      settings = await readDataFile<any>('settings.json', {})
+    } catch (error) {
+      console.error('Error reading settings file:', error)
+      // Return default settings if file doesn't exist
+      return NextResponse.json({
+        business: {
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          description: '',
+          logoType: 'text',
+          logoUrl: '',
+          logoText: '',
+          logoColor: '#733D26',
+          faviconUrl: '',
+          faviconVersion: Date.now(),
+          taxPercentage: 0,
+        },
+        social: {
+          instagram: '',
+          facebook: '',
+          tiktok: '',
+          twitter: '',
+        },
+        newsletter: {
+          discountPercentage: 10,
+        },
+      })
+    }
+
+    const business = settings?.business ?? {}
+    const social = settings?.social ?? {}
+    const newsletter = settings?.newsletter ?? {}
+
+    return NextResponse.json({
+      business: {
+        name: business.name ?? '',
+        phone: business.phone ?? '',
+        email: business.email ?? '',
+        address: business.address ?? '',
+        description: business.description ?? '',
+        logoType: business.logoType === 'image' ? 'image' : 'text',
+        logoUrl: business.logoUrl ?? '',
+        logoText: business.logoText ?? '',
+        logoColor: business.logoColor ?? '#733D26',
+        faviconUrl: business.faviconUrl ?? '',
+        faviconVersion: typeof business.faviconVersion === 'number' ? business.faviconVersion : Date.now(),
+        taxPercentage: typeof business.taxPercentage === 'number' ? business.taxPercentage : 0,
+      },
+      social,
+      newsletter: newsletter || { discountPercentage: 10 },
+    })
   } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+    if (error.status === 401) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     console.error('Error fetching settings:', error)
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
+    // Return default settings on error
+    return NextResponse.json({
+      business: {
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        description: '',
+        logoType: 'text',
+        logoUrl: '',
+        logoText: '',
+        logoColor: '#733D26',
+        faviconUrl: '',
+        faviconVersion: Date.now(),
+        taxPercentage: 0,
+      },
+      social: {},
+      newsletter: { discountPercentage: 10 },
+    })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const currentUser = await getAdminUser()
-    const performedBy = currentUser?.username || 'owner'
 
-    const settings = await request.json()
+    const body = await request.json()
+    const { business, social, newsletter } = body
+
+    if (!business) {
+      return NextResponse.json(
+        { error: 'Business settings are required' },
+        { status: 400 }
+      )
+    }
+
+    const settings = {
+      business: {
+        name: business.name || '',
+        phone: business.phone || '',
+        email: business.email || '',
+        address: business.address || '',
+        description: business.description || '',
+        logoType: business.logoType === 'image' ? 'image' : 'text',
+        logoUrl: business.logoUrl || '',
+        logoText: business.logoText || '',
+        logoColor: business.logoColor || '#733D26',
+        faviconUrl: business.faviconUrl || '',
+        faviconVersion: typeof business.faviconVersion === 'number' ? business.faviconVersion : Date.now(),
+        taxPercentage: typeof business.taxPercentage === 'number' ? business.taxPercentage : 0,
+      },
+      social: social || {},
+      newsletter: newsletter || { discountPercentage: 10 },
+    }
+
     await writeDataFile('settings.json', settings)
 
-    await recordActivity({
-      module: 'settings',
-      action: 'update',
-      performedBy,
-      summary: 'Updated business settings',
-      targetId: 'business-settings',
-      targetType: 'settings',
-      details: settings?.business || settings,
+    return NextResponse.json({
+      success: true,
+      settings,
     })
-
-    return NextResponse.json({ success: true })
   } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+    if (error.status === 401) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('Error updating settings:', error)
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
+    console.error('Error saving settings:', error)
+    return NextResponse.json(
+      { error: 'Failed to save settings' },
+      { status: 500 }
+    )
   }
 }
-

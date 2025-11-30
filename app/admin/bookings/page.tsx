@@ -54,17 +54,22 @@ interface Booking {
   lastClientManageActionAt?: string | null
   clientManageDisabled?: boolean
   paidInFullAt?: string | null
-  eyeShape?: {
-    id: string
-    label: string
-    imageUrl?: string | null
-    description?: string | null
-    recommendedStyles?: string[]
-  } | null
   desiredLook?: string | null
   desiredLookStatus?: 'recommended' | 'custom' | null
   desiredLookStatusMessage?: string | null
   desiredLookMatchesRecommendation?: boolean | null
+  additionalServices?: Array<{
+    name: string
+    price: number
+    addedAt: string
+  }>
+  fine?: {
+    amount: number
+    reason: string
+    addedAt: string
+  }
+  isWalkIn?: boolean
+  walkInFee?: number
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -85,6 +90,17 @@ export default function AdminBookings() {
     }
     return amount
   }
+
+  // Calculate balance including additional services and fine
+  const calculateBalance = (booking: Booking | null): number => {
+    if (!booking) return 0
+    // For walk-ins, if deposit is 0, balance should be the full finalPrice
+    // For regular bookings, balance is finalPrice - deposit
+    const deposit = booking.deposit || 0
+    const finalPrice = booking.finalPrice || 0
+    return Math.max(finalPrice - deposit, 0)
+  }
+
   const [sendingRequest, setSendingRequest] = useState(false)
   const [sendingPayment, setSendingPayment] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash')
@@ -107,6 +123,70 @@ export default function AdminBookings() {
   const [rescheduleInfo, setRescheduleInfo] = useState<string | null>(null)
   const [availabilityData, setAvailabilityData] = useState<any | null>(null)
   const [loadingAvailability, setLoadingAvailability] = useState(true)
+  const [preAppointmentFineAmount, setPreAppointmentFineAmount] = useState<number>(500)
+  const [addingService, setAddingService] = useState(false)
+  const [newServiceName, setNewServiceName] = useState('')
+  const [newServicePrice, setNewServicePrice] = useState('')
+  const [selectedServiceId, setSelectedServiceId] = useState<string>('')
+  const [availableServices, setAvailableServices] = useState<Array<{ id: string; name: string; price: number; priceUSD?: number }>>([])
+  const [loadingServices, setLoadingServices] = useState(false)
+  const [addingFine, setAddingFine] = useState(false)
+  const [fineReason, setFineReason] = useState('')
+  const [showWalkInModal, setShowWalkInModal] = useState(false)
+  const [walkInFee, setWalkInFee] = useState<number>(1000)
+  const [creatingWalkIn, setCreatingWalkIn] = useState(false)
+  const [walkInForm, setWalkInForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    service: '',
+    date: '',
+    timeSlot: '',
+    notes: '',
+    originalPrice: 0,
+    deposit: 0,
+  })
+  const [availableSlots, setAvailableSlots] = useState<Array<{ value: string; label: string }>>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [availableDateStrings, setAvailableDateStrings] = useState<string[]>([])
+  const [loadingDates, setLoadingDates] = useState(false)
+
+  // Load available dates when walk-in modal opens (same as booking page)
+  useEffect(() => {
+    if (!showWalkInModal) return
+
+    let cancelled = false
+    const loadAvailableDates = async () => {
+      setLoadingDates(true)
+      try {
+        const timestamp = Date.now()
+        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'no-store' })
+        if (!response.ok) {
+          throw new Error(`Failed to load available dates: ${response.status}`)
+        }
+        const data = await response.json()
+        if (cancelled) return
+        const dates: Array<{ value: string; label: string }> = Array.isArray(data?.dates) ? data.dates : []
+        const dateStrings = dates.map((entry) => entry.value)
+        setAvailableDateStrings(dateStrings)
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[Walk-In] Error loading available dates:', error)
+          setAvailableDateStrings([])
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingDates(false)
+        }
+      }
+    }
+
+    loadAvailableDates()
+
+    return () => {
+      cancelled = true
+    }
+  }, [showWalkInModal])
   const [fullyBookedDatesAdmin, setFullyBookedDatesAdmin] = useState<string[]>([])
   const [pendingFullyBookedDates, setPendingFullyBookedDates] = useState<string[]>([])
   const [clearingBookings, setClearingBookings] = useState(false)
@@ -234,6 +314,22 @@ export default function AdminBookings() {
           ? booking.desiredLookStatusMessage.trim()
           : null,
       desiredLookMatchesRecommendation: booking.desiredLookMatchesRecommendation === true,
+      additionalServices: Array.isArray(booking.additionalServices)
+        ? booking.additionalServices.map((s: any) => ({
+            name: typeof s.name === 'string' ? s.name : '',
+            price: typeof s.price === 'number' && !Number.isNaN(s.price) ? s.price : 0,
+            addedAt: typeof s.addedAt === 'string' ? s.addedAt : new Date().toISOString(),
+          }))
+        : [],
+      fine: booking.fine && typeof booking.fine === 'object'
+        ? {
+            amount: typeof booking.fine.amount === 'number' && !Number.isNaN(booking.fine.amount) ? booking.fine.amount : 0,
+            reason: typeof booking.fine.reason === 'string' ? booking.fine.reason : '',
+            addedAt: typeof booking.fine.addedAt === 'string' ? booking.fine.addedAt : new Date().toISOString(),
+          }
+        : undefined,
+      isWalkIn: booking.isWalkIn === true,
+      walkInFee: typeof booking.walkInFee === 'number' && !Number.isNaN(booking.walkInFee) ? booking.walkInFee : undefined,
     }
   }
 
@@ -248,6 +344,27 @@ export default function AdminBookings() {
     }
     setSelectedBooking(found)
   }, [searchParams, bookings])
+
+  // Auto-fill cash amount with final price for walk-in bookings when cash/card payment is selected
+  useEffect(() => {
+    if (selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card') && selectedBooking.finalPrice) {
+      // Convert to current currency if viewing in USD
+      const convertedAmount = currency === 'USD' 
+        ? convertCurrency(selectedBooking.finalPrice, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        : selectedBooking.finalPrice
+      setCashAmount(convertedAmount.toString())
+    } else if (!selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card')) {
+      // For regular bookings, set to balance if available
+      const currentBalance = calculateBalance(selectedBooking)
+      if (currentBalance > 0) {
+        // Convert to current currency if viewing in USD
+        const convertedBalance = currency === 'USD'
+          ? convertCurrency(currentBalance, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+          : currentBalance
+        setCashAmount(convertedBalance.toString())
+      }
+    }
+  }, [selectedBooking?.isWalkIn, selectedBooking?.finalPrice, paymentMethod, selectedBooking, currency])
 
   useEffect(() => {
     let isMounted = true
@@ -277,6 +394,70 @@ export default function AdminBookings() {
       isMounted = false
     }
   }, [router])
+
+  useEffect(() => {
+    const fetchFineAmount = async () => {
+      try {
+        const response = await fetch('/api/pre-appointment-guidelines')
+        if (response.ok) {
+          const data = await response.json()
+          setPreAppointmentFineAmount(data.fineAmount || 500)
+        }
+      } catch (error) {
+        console.error('Error fetching pre-appointment fine amount:', error)
+      }
+    }
+    fetchFineAmount()
+  }, [])
+
+  useEffect(() => {
+    const loadServices = async () => {
+      setLoadingServices(true)
+      try {
+        const response = await fetch('/api/services')
+        if (response.ok) {
+          const data = await response.json()
+          // Flatten all services from all categories into a single array
+          const allServices: Array<{ id: string; name: string; price: number; priceUSD?: number }> = []
+          if (data.categories && Array.isArray(data.categories)) {
+            data.categories.forEach((category: any) => {
+              if (category.services && Array.isArray(category.services)) {
+                category.services.forEach((service: any) => {
+                  allServices.push({
+                    id: service.id,
+                    name: service.name,
+                    price: service.price || 0,
+                    priceUSD: service.priceUSD,
+                  })
+                })
+              }
+            })
+          }
+          setAvailableServices(allServices)
+        }
+      } catch (error) {
+        console.error('Error loading services:', error)
+      } finally {
+        setLoadingServices(false)
+      }
+    }
+    loadServices()
+  }, [])
+
+  useEffect(() => {
+    const fetchWalkInFee = async () => {
+      try {
+        const response = await authorizedFetch('/api/admin/walk-in-settings')
+        if (response.ok) {
+          const data = await response.json()
+          setWalkInFee(data.walkInFee || 1000)
+        }
+      } catch (error) {
+        console.error('Error fetching walk-in fee:', error)
+      }
+    }
+    fetchWalkInFee()
+  }, [])
 
   const loadBookings = async () => {
     try {
@@ -376,6 +557,21 @@ export default function AdminBookings() {
     setManagementMonth(new Date(managementMonth.getFullYear(), managementMonth.getMonth() + 1, 1))
   }
 
+  const getBookingsForCurrentMonth = () => {
+    const monthStart = new Date(managementMonth.getFullYear(), managementMonth.getMonth(), 1)
+    const monthEnd = new Date(managementMonth.getFullYear(), managementMonth.getMonth() + 1, 0)
+    const monthStartStr = monthStart.toISOString().split('T')[0]
+    const monthEndStr = monthEnd.toISOString().split('T')[0]
+
+    return bookings.filter((booking) => {
+      if (booking.status === 'cancelled') return false
+      const bookingDate = booking.date || booking.timeSlot?.split('T')[0]
+      if (!bookingDate) return false
+      return bookingDate >= monthStartStr && bookingDate <= monthEndStr
+    })
+  }
+
+
   const handleToggleFullyBooked = (dateStr: string, nextState: boolean) => {
     setPendingFullyBookedDates((prev) => {
       const currentSet = new Set(prev)
@@ -461,10 +657,10 @@ export default function AdminBookings() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold uppercase tracking-wide text-brown-dark">
-              Fully booked dates
+              Unavailable dates
             </span>
-            {hasFullyBookedChanges && (
-              <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-3 py-1 rounded-full">
+              {hasFullyBookedChanges && (
+              <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
                 Unsaved changes
               </span>
             )}
@@ -535,8 +731,9 @@ export default function AdminBookings() {
             } else if (isPast) {
               cellClasses += 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
             } else if (isFullyBooked) {
+              // Fully booked dates show as grey (unavailable) - same as clients see
               cellClasses +=
-                'bg-orange-400 text-white border-orange-500 shadow-[0_8px_18px_rgba(251,146,60,0.35)] hover:brightness-105'
+                'bg-gray-200 text-gray-600 border-gray-300 cursor-not-allowed shadow-inner'
             } else {
               cellClasses +=
                 'bg-white text-brown-dark border-brown-light hover:bg-brown-light/20 hover:border-brown-dark cursor-pointer'
@@ -601,9 +798,11 @@ export default function AdminBookings() {
           >
             ←
           </button>
-          <h3 className="text-lg font-semibold text-brown-dark">
-            {managementMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold text-brown-dark">
+              {managementMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+            </h3>
+          </div>
           <button
             type="button"
             onClick={goToNextManagementMonth}
@@ -724,7 +923,7 @@ export default function AdminBookings() {
     setMarkingPaid(true)
     setMessage(null)
 
-    const balance = booking.finalPrice - booking.deposit
+    const balance = calculateBalance(booking)
 
     if (amount <= 0) {
       setMessage({ type: 'error', text: 'Please enter a valid amount' })
@@ -732,8 +931,11 @@ export default function AdminBookings() {
       return
     }
 
-    if (amount > balance) {
-      setMessage({ type: 'error', text: `Amount cannot exceed balance due (${formatCurrencyContext(convertBookingPrice(balance))})` })
+    // For walk-ins, validate against finalPrice; for regular bookings, validate against balance
+    const maxAmount = booking.isWalkIn ? booking.finalPrice : balance
+    if (amount > maxAmount) {
+      const errorAmount = booking.isWalkIn ? booking.finalPrice : balance
+      setMessage({ type: 'error', text: `Amount cannot exceed ${booking.isWalkIn ? 'final price' : 'balance due'} (${formatCurrencyContext(convertBookingPrice(errorAmount))})` })
       setMarkingPaid(false)
       return
     }
@@ -753,26 +955,54 @@ export default function AdminBookings() {
 
       if (response.ok && data.success) {
         const methodLabel = method === 'card' ? 'Card' : 'Cash'
-        setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
-        loadBookings()
+        let updatedBooking: Booking | null = null
+        
         if (data.booking) {
-          const updatedBooking = normalizeBooking(data.booking)
+          updatedBooking = normalizeBooking(data.booking)
           setSelectedBooking(updatedBooking)
-          setBookings((prev) => prev.map((bk) => (bk.id === updatedBooking.id ? updatedBooking : bk)))
+          setBookings((prev) => prev.map((bk) => (bk.id === updatedBooking!.id ? updatedBooking! : bk)))
         } else {
           const newDeposit = (booking.deposit || 0) + amount
           const isPaidInFull = newDeposit >= booking.finalPrice
           const paidTimestamp = isPaidInFull ? new Date().toISOString() : booking.paidInFullAt ?? null
           const updatedStatus: Booking['status'] = isPaidInFull ? 'paid' : booking.status
-          const updatedBooking: Booking = {
+          updatedBooking = {
             ...booking,
             deposit: newDeposit,
             status: updatedStatus,
             paidInFullAt: paidTimestamp,
           }
           setSelectedBooking(updatedBooking)
-          setBookings((prev) => prev.map((bk) => (bk.id === booking.id ? updatedBooking : bk)))
+          setBookings((prev) => prev.map((bk) => (bk.id === booking.id ? updatedBooking! : bk)))
         }
+        
+        // Check if booking is now fully paid and send aftercare email
+        const finalBooking = updatedBooking || booking
+        const isPaidInFull = (finalBooking.deposit || 0) >= finalBooking.finalPrice
+        const wasPaidInFull = (booking.deposit || 0) >= booking.finalPrice
+        
+        if (isPaidInFull && !wasPaidInFull && finalBooking.email) {
+          try {
+            const aftercareResponse = await authorizedFetch('/api/booking/aftercare', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bookingId: finalBooking.id }),
+            })
+            const aftercareData = await aftercareResponse.json()
+            if (aftercareResponse.ok && aftercareData.success) {
+              setMessage({ type: 'success', text: `${methodLabel} payment recorded and aftercare email sent to ${finalBooking.email}` })
+            } else {
+              setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
+            }
+          } catch (error) {
+            console.error('Error sending aftercare email:', error)
+            setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
+          }
+        } else {
+          setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
+        }
+        
+        loadBookings()
         setCashAmount('')
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to record payment' })
@@ -794,10 +1024,11 @@ export default function AdminBookings() {
     setSendingPayment(true)
     setMessage(null)
 
-    const balance = booking.finalPrice - booking.deposit
+    // For walk-ins, they pay the full final price after appointment, not just the balance
+    const amountToPay = booking.isWalkIn ? (booking.finalPrice || 0) : calculateBalance(booking)
 
-    if (balance <= 0) {
-      setMessage({ type: 'error', text: 'No balance due for this booking' })
+    if (amountToPay <= 0) {
+      setMessage({ type: 'error', text: 'No amount due for this booking' })
       setSendingPayment(false)
       return
     }
@@ -814,9 +1045,11 @@ export default function AdminBookings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: phone.trim(),
-          amount: balance,
-          accountReference: `Balance-${booking.id}`,
-          transactionDesc: `LashDiary Balance Payment - ${booking.service}`,
+          amount: amountToPay,
+          accountReference: booking.isWalkIn ? `WalkIn-${booking.id}` : `Balance-${booking.id}`,
+          transactionDesc: booking.isWalkIn 
+            ? `LashDiary Walk-In Full Payment - ${booking.service}`
+            : `LashDiary Balance Payment - ${booking.service}`,
         }),
       })
 
@@ -1091,10 +1324,266 @@ export default function AdminBookings() {
   useEffect(() => {
     if (selectedBooking) {
       setMpesaPhone(selectedBooking.phone)
+      const additionalServicesTotal = (selectedBooking.additionalServices || []).reduce((sum, s) => sum + s.price, 0)
+      const fineAmount = selectedBooking.fine?.amount || 0
       const balance = selectedBooking.finalPrice - selectedBooking.deposit
       setCashAmount(balance > 0 ? balance.toString() : '')
     }
   }, [selectedBooking])
+
+  const handleServiceSelect = (serviceId: string) => {
+    setSelectedServiceId(serviceId)
+    const service = availableServices.find((s) => s.id === serviceId)
+    if (service) {
+      setNewServiceName(service.name)
+      // Use price based on selected currency
+      const price = currency === 'USD' && service.priceUSD !== undefined 
+        ? service.priceUSD 
+        : currency === 'USD' && service.price
+        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        : service.price
+      setNewServicePrice(price.toString())
+    }
+  }
+
+  const handleAddService = async () => {
+    if (!selectedBooking || !selectedServiceId || !newServiceName.trim() || !newServicePrice.trim()) {
+      setMessage({ type: 'error', text: 'Please select a service' })
+      return
+    }
+
+    // Check if maximum of 2 additional services has been reached
+    const currentAdditionalServices = selectedBooking.additionalServices || []
+    if (currentAdditionalServices.length >= 2) {
+      setMessage({ type: 'error', text: 'Maximum of 2 additional services allowed per booking' })
+      return
+    }
+
+    const price = parseFloat(newServicePrice)
+    if (isNaN(price) || price <= 0) {
+      setMessage({ type: 'error', text: 'Please enter a valid price' })
+      return
+    }
+
+    setAddingService(true)
+    try {
+      // Convert price back to KES if USD is selected (bookings are stored in KES)
+      const priceInKES = currency === 'USD' 
+        ? convertCurrency(price, 'USD', 'KES', DEFAULT_EXCHANGE_RATE)
+        : price
+
+      const response = await authorizedFetch('/api/admin/bookings/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: selectedBooking.id,
+          action: 'add-service',
+          serviceName: newServiceName.trim(),
+          servicePrice: priceInKES,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setMessage({ type: 'success', text: 'Service added successfully' })
+        setSelectedServiceId('')
+        setNewServiceName('')
+        setNewServicePrice('')
+        setSelectedBooking(normalizeBooking(data.booking))
+        loadBookings()
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to add service' })
+      }
+    } catch (error) {
+      console.error('Error adding service:', error)
+      setMessage({ type: 'error', text: 'An error occurred while adding service' })
+    } finally {
+      setAddingService(false)
+    }
+  }
+
+  const handleAddFine = async () => {
+    if (!selectedBooking) {
+      setMessage({ type: 'error', text: 'No booking selected' })
+      return
+    }
+
+    if (selectedBooking.fine) {
+      setMessage({ type: 'error', text: 'Fine has already been added to this booking' })
+      return
+    }
+
+    setAddingFine(true)
+    try {
+      const response = await authorizedFetch('/api/admin/bookings/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: selectedBooking.id,
+          action: 'add-fine',
+          fineReason: fineReason.trim() || 'Failure to follow pre-appointment guidelines (DO\'s and DON\'ts)',
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setMessage({ type: 'success', text: 'Fine added successfully' })
+        setFineReason('')
+        setSelectedBooking(normalizeBooking(data.booking))
+        loadBookings()
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to add fine' })
+      }
+    } catch (error) {
+      console.error('Error adding fine:', error)
+      setMessage({ type: 'error', text: 'An error occurred while adding fine' })
+    } finally {
+      setAddingFine(false)
+    }
+  }
+
+  const handleWalkInDateChange = async (date: string) => {
+    setWalkInForm({ ...walkInForm, date, timeSlot: '' })
+    if (!date) {
+      setAvailableSlots([])
+      return
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      console.error('[Walk-In] Invalid date format:', date)
+      setAvailableSlots([])
+      return
+    }
+
+    setLoadingSlots(true)
+    try {
+      const timestamp = Date.now()
+      const response = await fetch(`/api/calendar/available-slots?date=${date}&t=${timestamp}`, {
+        cache: 'no-store',
+      })
+      
+      if (!response.ok) {
+        console.error('[Walk-In] Failed to load slots:', response.status, response.statusText)
+        setAvailableSlots([])
+        return
+      }
+
+      const data = await response.json()
+      
+      if (data.error) {
+        console.error('[Walk-In] API error:', data.error)
+        setAvailableSlots([])
+        return
+      }
+
+      // The API already returns slots in the format { value: string, label: string }[]
+      // Just use them directly like the booking page does
+      if (data.slots && Array.isArray(data.slots)) {
+        setAvailableSlots(data.slots)
+        if (data.slots.length === 0) {
+          console.warn(`[Walk-In] No available slots for date: ${date}`)
+        }
+      } else {
+        setAvailableSlots([])
+      }
+    } catch (error) {
+      console.error('[Walk-In] Error loading available slots:', error)
+      setAvailableSlots([])
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
+
+  const handleServiceSelectForWalkIn = (serviceId: string) => {
+    const service = availableServices.find((s) => s.id === serviceId)
+    if (service) {
+      const price = currency === 'USD' && service.priceUSD !== undefined 
+        ? service.priceUSD 
+        : currency === 'USD' && service.price
+        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        : service.price
+      
+      const priceWithFee = price + (currency === 'USD' 
+        ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        : walkInFee)
+      
+      // Walk-ins pay after appointment, no deposit required
+      const depositAmount = 0
+      
+      setWalkInForm({
+        ...walkInForm,
+        service: service.name,
+        originalPrice: price,
+        deposit: depositAmount,
+      })
+    }
+  }
+
+  const handleCreateWalkIn = async () => {
+    if (!walkInForm.name || !walkInForm.email || !walkInForm.phone || !walkInForm.service || !walkInForm.date || !walkInForm.timeSlot) {
+      setMessage({ type: 'error', text: 'Please fill in all required fields' })
+      return
+    }
+
+    setCreatingWalkIn(true)
+    try {
+      // Convert prices to KES for storage
+      const originalPriceKES = currency === 'USD' 
+        ? convertCurrency(walkInForm.originalPrice, 'USD', 'KES', DEFAULT_EXCHANGE_RATE)
+        : walkInForm.originalPrice
+      
+      const finalPriceKES = originalPriceKES + walkInFee
+      // Walk-ins pay after appointment, no deposit required
+      const depositKES = 0
+
+      const response = await authorizedFetch('/api/admin/bookings/walk-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: walkInForm.name,
+          email: walkInForm.email,
+          phone: walkInForm.phone,
+          service: walkInForm.service,
+          date: walkInForm.date,
+          timeSlot: walkInForm.timeSlot,
+          notes: walkInForm.notes,
+          originalPrice: originalPriceKES,
+          walkInFee,
+          finalPrice: finalPriceKES,
+          deposit: depositKES,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setMessage({ type: 'success', text: 'Walk-in booking created successfully. Client will receive an email confirmation.' })
+        setShowWalkInModal(false)
+        setWalkInForm({
+          name: '',
+          email: '',
+          phone: '',
+          service: '',
+          date: '',
+          timeSlot: '',
+          notes: '',
+          originalPrice: 0,
+          deposit: 0,
+        })
+        loadBookings()
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to create walk-in booking' })
+      }
+    } catch (error) {
+      console.error('Error creating walk-in booking:', error)
+      setMessage({ type: 'error', text: 'An error occurred while creating walk-in booking' })
+    } finally {
+      setCreatingWalkIn(false)
+    }
+  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -1186,8 +1675,8 @@ export default function AdminBookings() {
       </div>
     )
   }
-
-  const balance = selectedBooking ? Math.max(selectedBooking.finalPrice - selectedBooking.deposit, 0) : 0
+  
+  const balance = calculateBalance(selectedBooking)
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
@@ -1200,6 +1689,13 @@ export default function AdminBookings() {
             ← Back to Dashboard
           </Link>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowWalkInModal(true)}
+              className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors shadow-md"
+            >
+              + Create Walk-In Booking
+            </button>
             {showClearConfirm && (
               <button
                 type="button"
@@ -1233,9 +1729,9 @@ export default function AdminBookings() {
         <div className="bg-white rounded-lg shadow-lg p-5 mb-8 max-w-3xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <div>
-              <h2 className="text-2xl font-display text-brown-dark">Fully Booked Calendar</h2>
+              <h2 className="text-2xl font-display text-brown-dark">Unavailable Dates Calendar</h2>
               <p className="text-sm text-gray-600 mt-0.5">
-                Toggle a day to block or reopen it. Orange days are hidden from clients instantly.
+                Click a date to mark it as unavailable. Unavailable dates will appear grey to clients and cannot be booked.
               </p>
             </div>
             {updatingFullyBooked && (
@@ -1249,8 +1745,8 @@ export default function AdminBookings() {
               {renderFullyBookedCalendar()}
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm text-gray-600">
                 <div className="flex items-center gap-3">
-                  <span className="inline-block w-4 h-4 rounded bg-orange-400" />
-                  <span>Fully booked (clients see this day disabled in orange)</span>
+                  <span className="inline-block w-4 h-4 rounded bg-gray-200 border border-gray-300" />
+                  <span>Unavailable (clients see this day as grey and cannot book)</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="inline-block w-4 h-4 rounded bg-gray-200" />
@@ -1258,7 +1754,7 @@ export default function AdminBookings() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="inline-block w-4 h-4 rounded border border-brown-light bg-white" />
-                  <span>Available day — click to mark as fully booked</span>
+                  <span>Available day — click to mark as unavailable</span>
                 </div>
               </div>
             </>
@@ -1336,7 +1832,7 @@ export default function AdminBookings() {
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-4">
                 {filteredBookings.map((booking) => {
-                  const balance = booking.finalPrice - booking.deposit
+                  const balance = calculateBalance(booking)
                   return (
                     <div
                       key={booking.id}
@@ -1400,7 +1896,7 @@ export default function AdminBookings() {
                   </thead>
                   <tbody>
                     {filteredBookings.map((booking) => {
-                      const balance = booking.finalPrice - booking.deposit
+                      const balance = calculateBalance(booking)
                       return (
                       <tr 
                         key={booking.id} 
@@ -1512,44 +2008,6 @@ export default function AdminBookings() {
                     <p className="text-brown-dark font-semibold">{selectedBooking.service || 'N/A'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Eye Shape</p>
-                    <div className="space-y-1">
-                      <p className="text-brown-dark font-semibold">
-                        {selectedBooking.eyeShape?.label || 'Not specified'}
-                      </p>
-                      {selectedBooking.eyeShape?.recommendedStyles &&
-                        selectedBooking.eyeShape.recommendedStyles.length > 0 && (
-                          <p className="text-xs text-brown-dark/70">
-                            Recommended styles: {selectedBooking.eyeShape.recommendedStyles.join(', ')}
-                          </p>
-                        )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Desired Look</p>
-                    <div className="space-y-1">
-                      <p className="text-brown-dark font-semibold">
-                        {selectedBooking.desiredLook
-                          ? selectedBooking.desiredLook
-                              .split('-')
-                              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                              .join(' ')
-                          : 'Not specified'}
-                      </p>
-                      {selectedBooking.desiredLookStatusMessage && (
-                        <p
-                          className={`text-xs font-semibold ${
-                            selectedBooking.desiredLookStatus === 'recommended'
-                              ? 'text-emerald-700'
-                              : 'text-orange-700'
-                          }`}
-                        >
-                          {selectedBooking.desiredLookStatusMessage}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div>
                     <p className="text-sm text-gray-600">Status</p>
                     <div className="flex items-center gap-2 flex-wrap">
                       {renderStatusBadge(selectedBooking.status)}
@@ -1573,36 +2031,32 @@ export default function AdminBookings() {
                     <p className="text-brown-dark font-semibold">{formatDateTime(selectedBooking.createdAt)}</p>
                   </div>
                 </div>
-                {selectedBooking.eyeShape?.imageUrl && (
-                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-white/70 border border-brown-light rounded-xl overflow-hidden shadow-sm">
-                      <div className="h-44 w-full bg-brown-light/10">
-                        <img
-                          src={selectedBooking.eyeShape.imageUrl}
-                          alt={`Eye shape reference: ${selectedBooking.eyeShape.label || 'Selection'}`}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      </div>
-                      <div className="px-4 py-3">
-                        <p className="text-sm font-semibold text-brown-dark mb-1">Eye Shape Reference</p>
-                        <p className="text-xs text-brown-dark/70 leading-relaxed">
-                          {selectedBooking.eyeShape.description || 'Provided through the image library.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Pricing Details */}
               <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
                 <h3 className="text-xl font-semibold text-brown-dark mb-4">Pricing Details</h3>
+                {selectedBooking.isWalkIn && (
+                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-xs text-yellow-800 font-semibold">Walk-In Booking</p>
+                    {selectedBooking.walkInFee && (
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Walk-In Fee: {formatCurrencyContext(convertBookingPrice(selectedBooking.walkInFee))}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Original Price:</span>
                     <span className="text-brown-dark font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.originalPrice))}</span>
                   </div>
+                  {selectedBooking.isWalkIn && selectedBooking.walkInFee && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Walk-In Fee:</span>
+                      <span className="text-red-600 font-semibold">+{formatCurrencyContext(convertBookingPrice(selectedBooking.walkInFee))}</span>
+                    </div>
+                  )}
                   {selectedBooking.discount > 0 && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">
@@ -1615,22 +2069,162 @@ export default function AdminBookings() {
                       <span className="text-green-600 font-semibold">-{formatCurrencyContext(convertBookingPrice(selectedBooking.discount))}</span>
                     </div>
                   )}
+                  
+                  {/* Additional Services */}
+                  {selectedBooking.additionalServices && selectedBooking.additionalServices.length > 0 && (
+                    <div className="pt-2 border-t border-brown-light/30">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Additional Services:</p>
+                      {selectedBooking.additionalServices.map((service, index) => (
+                        <div key={index} className="flex justify-between items-center mb-1">
+                          <span className="text-gray-600 text-sm">{service.name}:</span>
+                          <span className="text-brown-dark font-semibold">{formatCurrencyContext(convertBookingPrice(service.price))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Fine */}
+                  {selectedBooking.fine && (
+                    <div className="pt-2 border-t border-brown-light/30">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-gray-600">Fine (Pre-Appointment Violation):</span>
+                          <p className="text-xs text-gray-500 mt-0.5">{selectedBooking.fine.reason}</p>
+                        </div>
+                        <span className="text-red-600 font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.fine.amount))}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center pt-2 border-t border-brown-light/30">
                     <span className="text-gray-600 font-semibold">Final Price:</span>
                     <span className="text-brown-dark font-bold text-lg">{formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Deposit Paid:</span>
-                    <span className="text-green-600 font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.deposit))}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t-2 border-brown-light">
-                    <span className="text-gray-600 font-bold">Balance Due:</span>
-                    <span className={`font-bold text-xl ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatCurrencyContext(convertBookingPrice(balance))}
-                    </span>
-                  </div>
+                  {!selectedBooking.isWalkIn && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Deposit Paid:</span>
+                      <span className="text-green-600 font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.deposit))}</span>
+                    </div>
+                  )}
+                  {!selectedBooking.isWalkIn && (
+                    <div className="flex justify-between items-center pt-2 border-t-2 border-brown-light">
+                      <span className="text-gray-600 font-bold">
+                        Balance Due:
+                      </span>
+                      <span className={`font-bold text-xl ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrencyContext(convertBookingPrice(balance))}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Add Service Section */}
+              {(!selectedBooking.additionalServices || selectedBooking.additionalServices.length < 2) ? (
+                <div className="bg-blue-50 rounded-lg p-6 border-2 border-blue-200">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-semibold text-brown-dark">Add Service</h3>
+                    <span className="text-sm text-gray-600">
+                      {selectedBooking.additionalServices?.length || 0} / 2 services added
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-2">
+                        Select Service
+                      </label>
+                      {loadingServices ? (
+                        <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark text-center">
+                          Loading services...
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedServiceId}
+                          onChange={(e) => handleServiceSelect(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                        >
+                          <option value="">-- Select a service --</option>
+                          {availableServices.map((service) => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    {selectedServiceId && (
+                      <div>
+                        <label className="block text-sm font-semibold text-brown-dark mb-2">
+                          Price ({currency})
+                        </label>
+                        <input
+                          type="number"
+                          value={newServicePrice}
+                          onChange={(e) => setNewServicePrice(e.target.value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Price is auto-filled but can be adjusted if needed
+                        </p>
+                      </div>
+                    )}
+                    <button
+                      onClick={handleAddService}
+                      disabled={addingService || !selectedServiceId || !newServicePrice.trim()}
+                      className="w-full px-6 py-3 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {addingService ? 'Adding...' : 'Add Service'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-6 border-2 border-gray-300">
+                  <h3 className="text-xl font-semibold text-brown-dark mb-2">Add Service</h3>
+                  <p className="text-gray-600">
+                    Maximum of 2 additional services has been reached for this booking.
+                  </p>
+                </div>
+              )}
+
+              {/* Add Fine Section */}
+              {!selectedBooking.fine && (
+                <div className="bg-red-50 rounded-lg p-6 border-2 border-red-200">
+                  <h3 className="text-xl font-semibold text-brown-dark mb-4">Add Fine</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-2">
+                        Fine Amount ({currency})
+                      </label>
+                      <div className="px-4 py-3 border-2 border-brown-light rounded-lg bg-gray-100 text-brown-dark font-semibold">
+                        {formatCurrencyContext(convertBookingPrice(preAppointmentFineAmount))}
+                        <span className="text-xs text-gray-500 ml-2">(from pre-appointment guidelines)</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-2">
+                        Reason (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={fineReason}
+                        onChange={(e) => setFineReason(e.target.value)}
+                        placeholder="Failure to follow pre-appointment guidelines (DO's and DON'Ts)"
+                        className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                      />
+                    </div>
+                    <button
+                      onClick={handleAddFine}
+                      disabled={addingFine}
+                      className="w-full px-6 py-3 rounded-lg font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {addingFine ? 'Adding...' : 'Add Fine'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
             {selectedBooking.status === 'cancelled' && (
               <div className="bg-red-50 rounded-lg p-6 border-2 border-red-200">
@@ -1712,10 +2306,22 @@ export default function AdminBookings() {
                 </div>
               )}
 
-              {/* Payment Section */}
-              {balance > 0 && selectedBooking.status === 'confirmed' && (
+              {/* Walk-In Payment Notice */}
+              {selectedBooking.isWalkIn && selectedBooking.status === 'confirmed' && (
+                <div className="bg-yellow-50 rounded-lg p-4 border-2 border-yellow-200 mb-4">
+                  <p className="text-sm text-yellow-900 font-semibold mb-1">⚠️ Walk-In Booking</p>
+                  <p className="text-xs text-yellow-800">
+                    This is a walk-in booking. Payment is due after the appointment. Please record payment below once the client has paid.
+                  </p>
+                </div>
+              )}
+
+              {/* Payment Section - Show for walk-ins even if balance is 0 (to allow payment recording) */}
+              {selectedBooking.status === 'confirmed' && (balance > 0 || selectedBooking.isWalkIn) && (
                 <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
-                  <h3 className="text-xl font-semibold text-brown-dark mb-4">Record Payment</h3>
+                  <h3 className="text-xl font-semibold text-brown-dark mb-4">
+                    {selectedBooking.isWalkIn ? 'Record Payment (Post-Appointment)' : 'Record Payment'}
+                  </h3>
                   
                   {/* Payment Method Selection */}
                   <div className="mb-4">
@@ -1770,13 +2376,17 @@ export default function AdminBookings() {
                           type="number"
                           value={cashAmount}
                           onChange={(e) => setCashAmount(e.target.value)}
-                          placeholder={`Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
+                          placeholder={selectedBooking.isWalkIn 
+                            ? `Full Price: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}`
+                            : `Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
                           min="0"
-                          max={balance}
+                          max={selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance}
                           className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Balance due: {formatCurrencyContext(convertBookingPrice(balance))}
+                          {selectedBooking.isWalkIn 
+                            ? `Full price due: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))} (walk-in booking)`
+                            : `Balance due: ${formatCurrencyContext(convertBookingPrice(balance))}`}
                         </p>
                       </div>
                       <button
@@ -1809,10 +2419,12 @@ export default function AdminBookings() {
                       </div>
                       <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800">
-                          <strong>Amount:</strong> {formatCurrencyContext(convertBookingPrice(balance))}
+                          <strong>Amount:</strong> {formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))}
                         </p>
                         <p className="text-xs text-blue-700 mt-1">
-                          An M-Pesa STK push will be sent to the phone number above
+                          {selectedBooking.isWalkIn 
+                            ? 'An M-Pesa STK push will be sent for the full payment amount (walk-in booking)'
+                            : 'An M-Pesa STK push will be sent to the phone number above'}
                         </p>
                       </div>
                       <button
@@ -1820,7 +2432,7 @@ export default function AdminBookings() {
                         disabled={sendingPayment || !mpesaPhone.trim()}
                         className="w-full px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {sendingPayment ? 'Sending M-Pesa Prompt...' : `Send M-Pesa Prompt (${formatCurrencyContext(convertBookingPrice(balance))})`}
+                        {sendingPayment ? 'Sending M-Pesa Prompt...' : `Send M-Pesa Prompt (${formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))})`}
                       </button>
                     </div>
                   )}
@@ -1836,13 +2448,17 @@ export default function AdminBookings() {
                           type="number"
                           value={cashAmount}
                           onChange={(e) => setCashAmount(e.target.value)}
-                          placeholder={`Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
+                          placeholder={selectedBooking.isWalkIn 
+                            ? `Full Price: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}`
+                            : `Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
                           min="0"
-                          max={balance}
+                          max={selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance}
                           className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Balance due: {formatCurrencyContext(convertBookingPrice(balance))}
+                          {selectedBooking.isWalkIn 
+                            ? `Full price due: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))} (walk-in booking)`
+                            : `Balance due: ${formatCurrencyContext(convertBookingPrice(balance))}`}
                         </p>
                       </div>
                       <button
@@ -1955,8 +2571,7 @@ export default function AdminBookings() {
               <div className="bg-white border-2 border-brown-light/60 rounded-lg p-4 space-y-3">
                 <h4 className="text-lg font-semibold text-brown-dark">Deposits & Next Steps</h4>
                 <p className="text-sm text-gray-600">
-                  Deposits are non-refundable once a booking is confirmed. Offer to reschedule the appointment
-                  or invite the client to transfer their slot to another guest.
+                  Deposits are strictly for securing the booking and cannot be refunded under any circumstance. Offer to reschedule the appointment if needed.
                 </p>
                 {selectedBooking.deposit > 0 && (
                   <p className="text-sm text-gray-600">
@@ -1987,6 +2602,7 @@ export default function AdminBookings() {
           </div>
         </div>
       )}
+
 
       {showRescheduleModal && selectedBooking && (
         <div
@@ -2126,6 +2742,214 @@ export default function AdminBookings() {
                 className="w-full sm:w-1/2 px-6 py-3 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingReschedule ? 'Rescheduling...' : 'Confirm New Slot'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Walk-In Booking Modal */}
+      {showWalkInModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-8 border-2 border-brown-light/60 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-2xl font-display text-brown-dark">Create Walk-In Booking</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Create a booking for a walk-in client. They will receive an email confirmation.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowWalkInModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+                aria-label="Close walk-in modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 text-sm text-yellow-900">
+                <p className="font-semibold mb-1">Walk-In Fee</p>
+                <p>Walk-in clients are charged an additional {formatCurrencyContext(convertBookingPrice(walkInFee))} on top of the service price.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Client Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={walkInForm.name}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, name: e.target.value })}
+                    placeholder="Full name"
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={walkInForm.email}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, email: e.target.value })}
+                    placeholder="client@example.com"
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    value={walkInForm.phone}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, phone: e.target.value })}
+                    placeholder="2547XXXXXXXX"
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Service *
+                  </label>
+                  {loadingServices ? (
+                    <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
+                      Loading services...
+                    </div>
+                  ) : (
+                    <select
+                      value={availableServices.find(s => s.name === walkInForm.service)?.id || ''}
+                      onChange={(e) => handleServiceSelectForWalkIn(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                    >
+                      <option value="">-- Select a service --</option>
+                      {availableServices.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Date *
+                  </label>
+                  {loadingDates ? (
+                    <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
+                      Loading available dates...
+                    </div>
+                  ) : (
+                    <input
+                      type="date"
+                      value={walkInForm.date}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => handleWalkInDateChange(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                    />
+                  )}
+                  {availableDateStrings.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {availableDateStrings.length} available date{availableDateStrings.length !== 1 ? 's' : ''} in booking window
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Time Slot *
+                  </label>
+                  {loadingSlots ? (
+                    <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
+                      Loading available times...
+                    </div>
+                  ) : availableSlots.length > 0 ? (
+                    <select
+                      value={walkInForm.timeSlot}
+                      onChange={(e) => setWalkInForm({ ...walkInForm, timeSlot: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                    >
+                      <option value="">-- Select a time --</option>
+                      {availableSlots.map((slot) => (
+                        <option key={slot.value} value={slot.value}>
+                          {slot.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : walkInForm.date ? (
+                    <div className="w-full px-4 py-3 border-2 border-red-200 rounded-lg bg-red-50 text-red-700 text-sm">
+                      No available time slots for this date
+                    </div>
+                  ) : (
+                    <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-gray-100 text-gray-500">
+                      Select a date first
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={walkInForm.notes}
+                  onChange={(e) => setWalkInForm({ ...walkInForm, notes: e.target.value })}
+                  placeholder="Any special notes or instructions..."
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              {walkInForm.service && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                  <h4 className="text-lg font-semibold text-brown-dark mb-3">Pricing Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Service Price:</span>
+                      <span className="font-semibold">{formatCurrencyContext(convertBookingPrice(walkInForm.originalPrice))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Walk-In Fee:</span>
+                      <span className="font-semibold text-red-600">+{formatCurrencyContext(convertBookingPrice(walkInFee))}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-blue-300">
+                      <span className="font-semibold text-brown-dark">Final Price:</span>
+                      <span className="font-bold text-lg text-brown-dark">
+                        {formatCurrencyContext(convertBookingPrice(walkInForm.originalPrice + (currency === 'USD' ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATE) : walkInFee)))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Deposit:</span>
+                      <span className="font-semibold text-gray-500">
+                        {formatCurrencyContext(0)} (Pay after appointment)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                onClick={() => setShowWalkInModal(false)}
+                className="w-full sm:w-1/2 px-6 py-3 rounded-lg font-semibold border-2 border-brown-light text-brown-dark hover:bg-brown-light/30 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateWalkIn}
+                disabled={creatingWalkIn || !walkInForm.name || !walkInForm.email || !walkInForm.phone || !walkInForm.service || !walkInForm.date || !walkInForm.timeSlot}
+                className="w-full sm:w-1/2 px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingWalkIn ? 'Creating...' : 'Create Walk-In Booking'}
               </button>
             </div>
           </div>

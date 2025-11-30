@@ -26,18 +26,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large. Maximum size is 1MB' }, { status: 400 })
     }
 
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'favicon')
-    await mkdir(uploadsDir, { recursive: true })
-
-    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png'
-    const filename = `favicon-${Date.now()}.${ext}`
-    const filepath = path.join(uploadsDir, filename)
-
-    const buffer = Buffer.from(await file.arrayBuffer())
-    await writeFile(filepath, buffer)
-
-    const faviconUrl = `/uploads/favicon/${filename}`
+    // Check if we're in a serverless environment (Netlify, Vercel, etc.)
+    const isServerless = process.env.NETLIFY === 'true' || process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME
+    
+    let faviconUrl: string
     const faviconVersion = Date.now()
+    
+    if (isServerless) {
+      // In serverless environments, we can't write to filesystem
+      // Convert image to base64 data URL as a workaround
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+      const base64 = buffer.toString('base64')
+      faviconUrl = `data:${file.type};base64,${base64}`
+    } else {
+      // For non-serverless environments, save to filesystem
+      try {
+        const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'favicon')
+        try {
+          await mkdir(uploadsDir, { recursive: true })
+        } catch (err: any) {
+          if (err.code !== 'EEXIST') {
+            console.error('Error creating uploads directory:', err)
+            throw err
+          }
+        }
+
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png'
+        const filename = `favicon-${Date.now()}.${ext}`
+        const filepath = path.join(uploadsDir, filename)
+
+        const buffer = Buffer.from(await file.arrayBuffer())
+        await writeFile(filepath, buffer)
+
+        faviconUrl = `/uploads/favicon/${filename}`
+      } catch (fsError: any) {
+        console.error('File system error:', fsError)
+        // Fallback to base64 if filesystem write fails
+        const bytes = await file.arrayBuffer()
+        const buffer = Buffer.from(bytes)
+        const base64 = buffer.toString('base64')
+        faviconUrl = `data:${file.type};base64,${base64}`
+      }
+    }
 
     try {
       const settings = await readDataFile<any>('settings.json', {})

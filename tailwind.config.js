@@ -31,6 +31,8 @@ module.exports = {
       fontFamily: {
         'display': ['Playfair Display', 'serif'],
         'body': ['Inter', 'sans-serif'],
+        'handwriting': ['var(--font-monsieur)', 'cursive'],
+        'ballet': ['var(--font-ballet)', 'cursive'],
       },
       boxShadow: {
         'soft': '0 4px 20px rgba(0, 0, 0, 0.08)',

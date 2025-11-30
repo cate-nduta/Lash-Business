@@ -108,25 +108,15 @@ export default function Cart() {
         return
       }
 
-      if (paymentMethod === 'mpesa') {
-        setSuccessMessage(
-          'M-Pesa payment prompt sent! Please complete payment on your phone. Once payment is confirmed, we\'ll send you an email with pickup details.'
-        )
-        setOrderDetails({
-          items: items.map((item) => item.name),
-          email: email || undefined,
-        })
-      } else {
-        setSuccessMessage(
-          'Payment processed successfully! We\'ve sent you an email with all the pickup information.'
-        )
-        setOrderDetails({
-          items: items.map((item) => item.name),
-          orderId: data.orderId,
-          email: email || undefined,
-        })
-      }
-
+      setSuccessMessage(
+        data.message ||
+          'Order received! We will reach out shortly with payment instructions and pickup details.'
+      )
+      setOrderDetails({
+        items: items.map((item) => item.name),
+        orderId: data.orderId,
+        email: email || undefined,
+      })
       setShowSuccessModal(true)
       clearCart()
       setPaymentMethod(null)

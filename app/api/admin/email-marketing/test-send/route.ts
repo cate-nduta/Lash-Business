@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
 import { personalizeSubject, applyPersonalizationTokens, getBusinessSettings } from '@/lib/email-campaign-utils'
+import { formatEmailSubject } from '@/lib/email-subject-utils'
 import type { SubscriberRecord } from '@/lib/email-campaign-utils'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
@@ -227,7 +228,7 @@ export async function POST(request: NextRequest) {
         from: `${business.name || 'LashDiary'} <${FROM_EMAIL}>`,
         to: targetEmail,
         replyTo: replyToEmail,
-        subject: personalizedSubject,
+        subject: formatEmailSubject(personalizedSubject),
         html: emailHtml,
         attachments: attachmentPayload,
       })

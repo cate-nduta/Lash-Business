@@ -20,6 +20,9 @@ interface DiscountsData {
   }
   depositPercentage: number
   fridayNightDepositPercentage: number
+  fridayNightEnabled: boolean
+  depositNotice: string
+  paymentRequirement: 'deposit' | 'full'
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -31,12 +34,18 @@ export default function AdminDiscounts() {
     returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
     depositPercentage: 30,
     fridayNightDepositPercentage: 50,
+    fridayNightEnabled: true,
+    depositNotice: '',
+    paymentRequirement: 'deposit',
   })
   const [originalDiscounts, setOriginalDiscounts] = useState<DiscountsData>({
     firstTimeClientDiscount: { enabled: true, percentage: 10, bannerEnabled: 'auto', bannerMessage: '' },
     returningClientDiscount: { enabled: true, tier30Percentage: 12, tier45Percentage: 6 },
     depositPercentage: 30,
     fridayNightDepositPercentage: 50,
+    fridayNightEnabled: true,
+    depositNotice: '',
+    paymentRequirement: 'deposit',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -112,6 +121,12 @@ export default function AdminDiscounts() {
           },
           depositPercentage: Number(data?.depositPercentage ?? 30),
           fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
+          fridayNightEnabled: data?.fridayNightEnabled !== false,
+          depositNotice:
+            typeof data?.depositNotice === 'string'
+              ? data.depositNotice
+              : '',
+          paymentRequirement: (data?.paymentRequirement === 'full' ? 'full' : 'deposit') as 'deposit' | 'full',
         }
         setDiscounts(normalized)
         setOriginalDiscounts(normalized)
@@ -195,6 +210,9 @@ export default function AdminDiscounts() {
         },
         depositPercentage: Number(discounts.depositPercentage ?? 30),
         fridayNightDepositPercentage: Number(discounts.fridayNightDepositPercentage ?? 50),
+        fridayNightEnabled: Boolean(discounts.fridayNightEnabled),
+        depositNotice: discounts.depositNotice ?? '',
+        paymentRequirement: discounts.paymentRequirement ?? 'deposit',
       }
 
       const response = await authorizedFetch('/api/admin/discounts', {
@@ -454,9 +472,23 @@ export default function AdminDiscounts() {
                     Percentage of the final price (after discounts) required as deposit to secure a regular booking
                   </p>
                 </div>
-                <div>
+                <div className="space-y-3">
                   <label className="block text-sm font-medium text-brown-dark mb-2">
                     Friday Night Deposit Percentage (%)
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-brown-dark mb-1">
+                    <input
+                      type="checkbox"
+                      checked={discounts.fridayNightEnabled}
+                      onChange={(e) =>
+                        setDiscounts((prev) => ({
+                          ...prev,
+                          fridayNightEnabled: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-brown-dark"
+                    />
+                    <span>Enable special deposit for Friday night slots</span>
                   </label>
                   <input
                     type="number"
@@ -470,9 +502,93 @@ export default function AdminDiscounts() {
                     min="0"
                     max="100"
                     className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    disabled={!discounts.fridayNightEnabled}
                   />
                   <p className="text-sm text-brown mt-2">
-                    Percentage of the final price required as deposit for Friday evening time slot bookings. This applies automatically when clients select Friday evening slots.
+                    Percentage of the final price required as deposit for Friday evening time slot bookings. This applies
+                    automatically when clients select Friday evening slots, but only when the toggle above is enabled.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Booking Page Deposit Notice
+                  </label>
+                  <textarea
+                    value={discounts.depositNotice}
+                    onChange={(e) =>
+                      setDiscounts((prev) => ({
+                        ...prev,
+                        depositNotice: e.target.value,
+                      }))
+                    }
+                    rows={3}
+                    placeholder='e.g. "A {deposit}% deposit is required to secure your booking. Deposits are strictly for securing your booking and cannot be refunded under any circumstance.{fridayDeposit}"'
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <p className="text-xs text-brown mt-2">
+                    You can use <code>{'{deposit}'}</code> for the standard deposit percentage and{' '}
+                    <code>{'{fridayDeposit}'}</code> for the Friday night percentage. Leave blank to use the default
+                    wording.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-pink-light rounded-lg p-6">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Payment Requirement</h2>
+              <div className="space-y-4">
+                <p className="text-sm text-brown-dark/80 mb-4">
+                  Choose whether clients must pay a deposit or full payment to secure their appointment. This setting applies to all bookings.
+                </p>
+                <div className="space-y-3">
+                  <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-white/50"
+                    style={{ borderColor: discounts.paymentRequirement === 'deposit' ? '#7C4B31' : '#E5D5C8' }}>
+                    <input
+                      type="radio"
+                      name="paymentRequirement"
+                      value="deposit"
+                      checked={discounts.paymentRequirement === 'deposit'}
+                      onChange={(e) =>
+                        setDiscounts((prev) => ({
+                          ...prev,
+                          paymentRequirement: 'deposit',
+                        }))
+                      }
+                      className="h-5 w-5 accent-brown-dark mt-1 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-brown-dark">Deposit Only</div>
+                      <div className="text-sm text-brown-dark/70 mt-1">
+                        Clients pay a {discounts.depositPercentage}% deposit (or {discounts.fridayNightDepositPercentage}% for Friday nights) to secure their appointment. Remaining balance is paid on appointment day.
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-white/50"
+                    style={{ borderColor: discounts.paymentRequirement === 'full' ? '#7C4B31' : '#E5D5C8' }}>
+                    <input
+                      type="radio"
+                      name="paymentRequirement"
+                      value="full"
+                      checked={discounts.paymentRequirement === 'full'}
+                      onChange={(e) =>
+                        setDiscounts((prev) => ({
+                          ...prev,
+                          paymentRequirement: 'full',
+                        }))
+                      }
+                      className="h-5 w-5 accent-brown-dark mt-1 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-brown-dark">Full Payment Required</div>
+                      <div className="text-sm text-brown-dark/70 mt-1">
+                        Clients must pay the full amount upfront to book their appointment. No deposit option available.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded">
+                  <p className="text-sm text-blue-900">
+                    <strong>Note:</strong> When "Full Payment Required" is selected, clients can only complete bookings by paying via M-Pesa. The "Pay Later" option will not be available.
                   </p>
                 </div>
               </div>

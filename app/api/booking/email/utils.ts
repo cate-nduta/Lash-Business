@@ -100,14 +100,6 @@ const serviceDurations: { [key: string]: number } = {
   'Lash Lift': 60,
 }
 
-type EyeShapeSelection = {
-  id: string
-  label: string
-  imageUrl: string
-  description?: string | null
-  recommendedStyles?: string[]
-}
-
 type SendEmailPayload = {
   name: string
   email: string
@@ -124,12 +116,13 @@ type SendEmailPayload = {
   bookingId?: string
   manageToken?: string
   policyWindowHours?: number
-  transferFromName?: string
   notes?: string
-  eyeShape: EyeShapeSelection
   desiredLook: string
   desiredLookStatus: 'recommended' | 'custom'
-  desiredLookMatchesRecommendation: boolean
+  isReminder?: boolean
+  isWalkIn?: boolean
+  walkInFee?: number
+  isGiftCardBooking?: boolean
 }
 
 // Calculate deposit amount (35% of service price)
@@ -191,12 +184,10 @@ function createCustomerEmailTemplate(bookingData: {
   manageLink?: string
   addToCalendarLink?: string
   policyWindowHours?: number
-  transferNote?: string
-  transferFinancialNote?: string
-  eyeShapeLabel: string
-  eyeShapeRecommendations?: string[]
   desiredLookLabel: string
   lashMapStatusMessage: string
+  walkInFee?: string
+  isGiftCardBooking?: boolean
 }) {
   const {
     name,
@@ -211,10 +202,201 @@ function createCustomerEmailTemplate(bookingData: {
     manageLink,
     addToCalendarLink,
     policyWindowHours,
-    transferNote = '',
-    transferFinancialNote = '',
-    eyeShapeLabel,
-    eyeShapeRecommendations = [],
+    desiredLookLabel,
+    lashMapStatusMessage,
+    walkInFee,
+    isGiftCardBooking,
+  } = bookingData
+  const appointmentLocation = location || DEFAULT_LOCATION
+  const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
+  const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
+  const manageButtonHref = manageLink || `${BASE_URL}/booking`
+  const manageButtonLabel = manageLink ? 'Manage appointment' : 'View booking details'
+  const showAddToCalendar = Boolean(addToCalendarLink)
+
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your LashDiary appointment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
+          <tr>
+            <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">🥰 Appointment confirmed</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}! 💋</h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:8px 32px 24px 32px;">
+              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
+                🥰 We've reserved your spot and will have everything ready for you. Here's a quick summary you can keep handy. 🌈
+              </p>
+
+              <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Appointment details</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">Date</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime} – ${formattedEndTime}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Service Fee</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
+                  </tr>
+                  ${walkInFee && walkInFee.trim().length > 0 ? `
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Walk-In Fee</td>
+                    <td style="padding:6px 0; color:${textPrimary};">+${walkInFee}</td>
+                  </tr>
+                  ` : ''}
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Deposit</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">
+                      ${walkInFee && walkInFee.trim().length > 0 ? 'KSH 0 (Pay full amount after appointment)' : deposit}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Studio</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
+                  </tr>
+                </table>
+              </div>
+
+              ${isGiftCardBooking ? `
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:2px solid ${brand}; margin-bottom:24px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">🎁 Gift Card Booking</h2>
+                <p style="margin:0; color:${textPrimary}; font-size:14px; line-height:1.7;">
+                  As this is a gift card booking, your service type and desired lash look will be discussed during your appointment. We'll work together to create the perfect look for you! 🥰
+                </p>
+              </div>
+              ` : ''}
+
+              ${walkInFee && walkInFee.trim().length > 0 ? `
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:2px solid #FCD34D; margin-bottom:24px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">⚠️ Walk-In Booking Payment</h2>
+                <p style="margin:0 0 12px 0; color:${textPrimary}; font-size:14px; line-height:1.7; font-weight:600;">
+                  As a walk-in booking, you will pay the full amount of <strong>${servicePrice}${walkInFee ? ' + ' + walkInFee : ''}</strong> after your appointment is completed.
+                </p>
+                <p style="margin:0; color:${textSecondary}; font-size:13px; line-height:1.6;">
+                  Payment can be made via cash, M-Pesa, or card at the studio after your service.
+                </p>
+              </div>
+              ` : ''}
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Before you arrive</h2>
+                <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.7;">
+                  <li>Please arrive on time — late arrivals may shorten your session.</li>
+                  <li>Your deposit is strictly for securing your appointment and cannot be refunded under any circumstance.</li>
+                  <li>Come with clean lashes/brows and no makeup, oils, or mascara.</li>
+                  <li>Avoid tweezing, waxing, or applying serums/retinol near the area for at least 48 hours before your appointment.</li>
+                  <li>If you have eye infections, cold sores, or skin irritation, please reschedule your visit.</li>
+                  ${walkInFee && walkInFee.trim().length > 0 ? '' : '<li>Your deposit secures your slot and goes toward your total balance.</li>'}
+                </ul>
+              </div>
+
+              <p style="margin:0 0 18px 0; font-size:14px; color:${textSecondary};">
+                Need to update anything? Reply to this email or email us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
+              </p>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:28px 0 0 0;">
+                <tr>
+                  <td align="center" style="padding:0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                      <tr>
+                        <td align="center" style="padding:0 0 20px 0;">
+                          <a href="${manageButtonHref}" style="display:inline-block; padding:12px 28px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;">${manageButtonLabel}</a>
+                        </td>
+                      </tr>
+                      ${
+                        showAddToCalendar && addToCalendarLink
+                          ? `<tr>
+                              <td align="center" style="padding:0;">
+                                <a href="${addToCalendarLink}" style="display:inline-block; padding:12px 28px; border:2px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
+                              </td>
+                            </tr>`
+                          : ''
+                      }
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              ${
+                showAddToCalendar && addToCalendarLink
+                  ? `<p style="margin:18px 0 0 0; font-size:13px; color:${textSecondary}; text-align:center;">Need a device reminder? Use the Google Calendar button to add the appointment with a 24-hour alert.</p>`
+                  : ''
+              }
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 32px; background:${background}; text-align:center;">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We're so excited to see you soon! 💋</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+// Create HTML email template for appointment reminder
+function createReminderEmailTemplate(bookingData: {
+  name: string
+  service: string
+  formattedDate: string
+  formattedTime: string
+  formattedEndTime: string
+  location: string
+  deposit: string
+  servicePrice: string
+  manageLink?: string
+  addToCalendarLink?: string
+  policyWindowHours?: number
+  desiredLookLabel: string
+  lashMapStatusMessage: string
+}) {
+  const {
+    name,
+    service,
+    formattedDate,
+    formattedTime,
+    formattedEndTime,
+    location,
+    deposit,
+    servicePrice,
+    manageLink,
+    addToCalendarLink,
+    policyWindowHours,
     desiredLookLabel,
     lashMapStatusMessage,
   } = bookingData
@@ -233,77 +415,48 @@ function createCustomerEmailTemplate(bookingData: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your LashDiary appointment</title>
+  <title>Reminder: Your LashDiary appointment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
 </head>
-<body style="margin:0; padding:0; background:${background}; font-family: 'Helvetica Neue', Arial, sans-serif; color:${textPrimary};">
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
     <tr>
       <td align="center">
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment confirmed</p>
-              <h1 style="margin:12px 0 0 0; font-size:28px; color:${brand};">Thank you, ${friendlyName}!</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">🧐 Appointment reminder</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}! 🥰</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:8px 32px 24px 32px;">
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                We’ve reserved your spot and will have everything ready for you. Here’s a quick summary you can keep handy.
+                🥰 This is a friendly reminder about your upcoming appointment with us. We're looking forward to seeing you! 💋
               </p>
-              ${
-                transferNote
-                  ? `<div style="margin:0 0 18px 0; border-left:4px solid ${brand}; padding:12px 16px; background:${background}; font-size:14px; line-height:1.6; color:${textPrimary};">
-                      ${transferNote}
-                      ${
-                        transferFinancialNote
-                          ? `<p style="margin:12px 0 0 0; font-weight:600;">${transferFinancialNote}</p>`
-                          : ''
-                      }
-                    </div>`
-                  : transferFinancialNote
-                  ? `<div style="margin:0 0 18px 0; border-left:4px solid ${brand}; padding:12px 16px; background:${background}; font-size:14px; line-height:1.6; color:${textPrimary}; font-weight:600;">
-                      ${transferFinancialNote}
-                    </div>`
-                  : ''
-              }
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
-                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Appointment details</h2>
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Your appointment details</h2>
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary}; width:120px;">Date</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedDate}</td>
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Time</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime} – ${formattedEndTime}</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedTime} – ${formattedEndTime}</td>
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Eye shape</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${eyeShapeLabel}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Desired lash look</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${desiredLookLabel}</td>
-                  </tr>
-                  <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
                     <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
                   </tr>
-                  ${
-                    eyeShapeRecommendations.length > 0
-                      ? `<tr>
-                          <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Recommended styles</td>
-                          <td style="padding:6px 0; color:${textPrimary};">${eyeShapeRecommendations.join(', ')}</td>
-                        </tr>`
-                      : ''
-                  }
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
@@ -321,41 +474,52 @@ function createCustomerEmailTemplate(bookingData: {
 
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
                 <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Before you arrive</h2>
-                <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.7;">
-                  <li>Please arrive on time — late arrivals may shorten your session.</li>
-                  <li>Cancellations made within 72 hours of your appointment are non-refundable.</li>
-                  <li>Come with clean lashes/brows and no makeup, oils, or mascara.</li>
-                  <li>Avoid tweezing, waxing, or applying serums/retinol near the area for at least 48 hours before your appointment.</li>
-                  <li>If you have eye infections, cold sores, or skin irritation, please reschedule your visit.</li>
-                  <li>Your deposit secures your slot and goes toward your total balance.</li>
+                <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.8;">
+                  <li style="margin-bottom:8px;">Arrive with clean, makeup-free lashes</li>
+                  <li style="margin-bottom:8px;">Avoid caffeine 2 hours before your appointment</li>
+                  <li style="margin-bottom:8px;">Bring a photo of your desired look if you have one</li>
+                  <li style="margin-bottom:8px;">Plan for ${service.includes('Volume') || service.includes('Hybrid') ? '2–3' : '1.5–2'} hours</li>
                 </ul>
               </div>
 
-              <p style="margin:0 0 18px 0; font-size:14px; color:${textSecondary};">
-                Need to update anything? Reply to this email or email us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
-              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:28px 0 0 0;">
+                <tr>
+                  <td align="center" style="padding:0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                      ${manageLink ? `
+                      <tr>
+                        <td align="center" style="padding:0 0 20px 0;">
+                          <a href="${manageButtonHref}" style="display:inline-block; padding:14px 32px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px; letter-spacing:0.04em; text-transform:uppercase;">${manageButtonLabel}</a>
+                        </td>
+                      </tr>
+                      ` : ''}
+                      ${showAddToCalendar && addToCalendarLink ? `
+                      <tr>
+                        <td align="center" style="padding:0;">
+                          <a href="${addToCalendarLink}" style="display:inline-block; padding:12px 28px; background:${card}; color:${brand}; border:2px solid ${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:14px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
+                        </td>
+                      </tr>
+                      ` : ''}
+                    </table>
+                  </td>
+                </tr>
+              </table>
 
-              <div style="margin:28px 0 0 0; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px;">
-                <a href="${manageButtonHref}" style="display:inline-block; padding:12px 28px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;">${manageButtonLabel}</a>
-                ${
-                  showAddToCalendar && addToCalendarLink
-                    ? `<a href="${addToCalendarLink}" style="display:inline-block; padding:12px 28px; border:2px solid ${brand}; color:${brand}; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`
-                    : ''
-                }
+              <div style="border-top:1px solid ${accent}; padding-top:20px; margin-top:24px; text-align:center;">
+                <p style="margin:0 0 8px 0; font-size:13px; color:${textSecondary};">
+                  Need to reschedule or cancel? You can manage your appointment up to ${windowHours} hours before your scheduled time.
+                </p>
+                <p style="margin:0; font-size:14px; color:${textPrimary};">
+                  Questions? Reply to this email or call us anytime.
+                </p>
               </div>
-
-              ${
-                showAddToCalendar && addToCalendarLink
-                  ? `<p style="margin:18px 0 0 0; font-size:13px; color:${textSecondary}; text-align:center;">Need a device reminder? Use the Google Calendar button to add the appointment with a 24-hour alert.</p>`
-                  : ''
-              }
             </td>
           </tr>
 
           <tr>
-            <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">We’re so excited to see you soon.</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">The LashDiary Team</p>
+            <td style="padding:24px 32px; background:${background}; text-align:center; border-top:1px solid ${accent};">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We can't wait to see you! 💋</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
             </td>
           </tr>
         </table>
@@ -386,11 +550,11 @@ function createOwnerEmailTemplate(bookingData: {
   policyWindowHours?: number
   notes?: string
   addToCalendarLink?: string
-  eyeShapeLabel: string
-  recommendedStyles: string[]
   desiredLookLabel: string
   lashMapStatusMessage: string
   adminBookingLink?: string
+  isWalkIn?: boolean
+  walkInFee?: string
 }, customerEmailError?: string | null, customerEmail?: string) {
   const {
     name,
@@ -410,11 +574,11 @@ function createOwnerEmailTemplate(bookingData: {
     policyWindowHours,
     notes,
     addToCalendarLink,
-    eyeShapeLabel,
-    recommendedStyles,
     desiredLookLabel,
     lashMapStatusMessage,
     adminBookingLink,
+    isWalkIn,
+    walkInFee,
   } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
@@ -456,17 +620,20 @@ The LashDiary Team
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New booking received</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
 </head>
-<body style="margin:0; padding:0; background:${background}; font-family: 'Helvetica Neue', Arial, sans-serif; color:${textPrimary};">
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
     <tr>
       <td align="center">
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 16px 32px; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">New booking</p>
-              <h1 style="margin:12px 0 0 0; font-size:26px; color:${brand};">${name} just booked an appointment</h1>
-              ${isFirstTimeClient ? `<p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary}; background:${background}; padding:10px 14px; border-radius:10px; display:inline-block;">First-time client</p>` : ''}
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">😎 New booking</p>
+              <h1 style="margin:12px 0 0 0; font-size:32px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">${name} just booked an appointment 🥰</h1>
+              ${isFirstTimeClient ? `<p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary}; background:${background}; padding:10px 14px; border-radius:10px; display:inline-block;">💋 First-time client</p>` : ''}
             </td>
           </tr>
 
@@ -498,25 +665,9 @@ The LashDiary Team
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Not specified'}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Eye shape</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${eyeShapeLabel}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Desired lash look</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${desiredLookLabel}</td>
-                  </tr>
-                  <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
                     <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
                   </tr>
-                  ${
-                    recommendedStyles.length > 0
-                      ? `<tr>
-                          <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Recommended styles</td>
-                          <td style="padding:6px 0; color:${textPrimary};">${recommendedStyles.join(', ')}</td>
-                        </tr>`
-                      : ''
-                  }
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Date</td>
                     <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
@@ -540,16 +691,25 @@ The LashDiary Team
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:18px 22px; background:${background}; margin-bottom:10px;">
                 <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Payment summary</h2>
+                ${isWalkIn ? `
+                <div style="margin-bottom:12px; padding:12px 14px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px;">
+                  <p style="margin:0; font-size:13px; color:#92400E; font-weight:600;">⚠️ Walk-In Booking</p>
+                  <p style="margin:4px 0 0 0; font-size:12px; color:#78350F; line-height:1.5;">
+                    This is a walk-in booking. The client will pay the full amount of <strong>${servicePrice}</strong> after the appointment is completed. No deposit required.
+                  </p>
+                </div>
+                ` : ''}
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px; line-height:1.6;">
                   ${originalPrice ? `<tr><td style="padding:4px 0; color:${textSecondary}; width:140px;">Original price</td><td style="padding:4px 0; color:${textPrimary};">${originalPrice}</td></tr>` : ''}
                   ${discount ? `<tr><td style="padding:4px 0; color:${textSecondary};">Discount</td><td style="padding:4px 0; color:${textPrimary};">${discount}</td></tr>` : ''}
+                  ${isWalkIn && walkInFee ? `<tr><td style="padding:4px 0; color:${textSecondary};">Walk-In Fee</td><td style="padding:4px 0; color:${textPrimary};">+${walkInFee}</td></tr>` : ''}
                   <tr>
                     <td style="padding:4px 0; color:${textSecondary};">Final price</td>
                     <td style="padding:4px 0; color:${textPrimary}; font-weight:600;">${servicePrice}</td>
                   </tr>
                   <tr>
                     <td style="padding:4px 0; color:${textSecondary};">Deposit due</td>
-                    <td style="padding:4px 0; color:${brand}; font-weight:600;">${deposit}</td>
+                    <td style="padding:4px 0; color:${brand}; font-weight:600;">${isWalkIn ? 'KSH 0 (Pay full amount after appointment)' : deposit}</td>
                   </tr>
                 </table>
               </div>
@@ -587,8 +747,8 @@ The LashDiary Team
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">LashDiary booking assistant</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">You’ve got this ✨</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">😎 LashDiary booking assistant</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 You've got this 🥰</p>
             </td>
           </tr>
         </table>
@@ -598,6 +758,198 @@ The LashDiary Team
 </body>
 </html>
   `.trim()
+}
+
+// Create HTML email template for aftercare instructions
+function createAftercareEmailTemplate(bookingData: {
+  name: string
+  email?: string
+  service: string
+  formattedDate: string
+  formattedTime: string
+  location: string
+}) {
+  const {
+    name,
+    service,
+    formattedDate,
+    formattedTime,
+    location,
+  } = bookingData
+  const appointmentLocation = location || DEFAULT_LOCATION
+  const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
+
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lash Aftercare Instructions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
+          <tr>
+            <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">💋 Your lash care journey</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Keep Your Lashes Beautiful, ${friendlyName}! 🌈</h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:8px 32px 24px 32px;">
+              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
+                🥰 We hope you love your new lashes! To keep them looking beautiful and maintain their longevity, please follow these essential aftercare tips. 💋
+              </p>
+
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Your Appointment Details</h2>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">Service</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Date</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Location</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="border-radius:14px; padding:20px 24px; background:${background}; border:2px solid ${brand}; margin-bottom:24px;">
+                <h2 style="margin:0 0 16px 0; font-size:20px; color:${brand}; font-weight:600;">10 Essential Aftercare Tips</h2>
+                <ol style="margin:0; padding-left:20px; color:${textPrimary}; font-size:14px; line-height:1.8;">
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Avoid water for 24-48 hours:</strong> Keep your lashes completely dry for the first 24-48 hours after application. This allows the adhesive to fully cure. Avoid saunas, steam rooms, and hot steamy showers during this time.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Do not rub or pull:</strong> Never rub your eyes or pull on your extensions. This can damage both your extensions and your natural lashes, leading to poor retention.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Avoid direct heat:</strong> Stay away from direct heat sources like hot ovens, open flames, or lighters. The PBT fibre in eyelash extensions is extremely sensitive to heat.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">No oil-based products:</strong> Avoid any oil-based products near your eyes, including mascara, face moisturisers, cleansers, and makeup. Oil breaks down the adhesive bond. Use only water-based products.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">No mascara:</strong> Avoid mascara completely, even water-based ones. Mascara can affect the shape of your extensions, add excess weight, and potentially damage both your extensions and natural lashes.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Brush daily:</strong> Gently brush your lashes daily with a clean spoolie brush to keep them neat, separated, and looking natural. This prevents clumping and maintains their beautiful appearance.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Sleep on your back:</strong> Try to sleep on your back to preserve the curl and position of your lashes. Sleeping on your side is okay, but avoid sleeping face down.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Clean regularly:</strong> Clean your lashes at least twice daily—once in the morning and once before bed. Use a gentle, oil-free cleanser to maintain hygiene and prevent infections or lash mites.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">No eyelash curlers:</strong> Never use an eyelash curler on your extensions. They're already beautifully curled, and curling can damage or lift the extensions.
+                  </li>
+                  <li style="margin-bottom:12px;">
+                    <strong style="color:${brand};">Schedule regular infills:</strong> Book your infill appointments every 2-3 weeks to maintain fullness and keep your lashes looking gorgeous. Waiting longer may require a full set instead.
+                  </li>
+                </ol>
+              </div>
+
+              <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Remember</h2>
+                <p style="margin:0; color:${textPrimary}; font-size:14px; line-height:1.7;">
+                  Following these aftercare tips will help your lash extensions last longer and keep your natural lashes healthy. With proper care, your extensions should last 2-4 weeks before needing a fill.
+                </p>
+              </div>
+
+              <p style="margin:0 0 18px 0; font-size:14px; color:${textSecondary};">
+                Have questions about your aftercare? Reply to this email or contact us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>. We're here to help!
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 32px; background:${background}; text-align:center;">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We can't wait to see you again for your next appointment! 💋</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+// Send aftercare email to client
+export async function sendAftercareEmail(bookingData: {
+  name: string
+  email: string
+  service: string
+  date: string
+  timeSlot: string
+  location?: string
+}) {
+  if (!zohoTransporter) {
+    console.warn('Email transporter not configured. Skipping aftercare email.')
+    return { success: false, error: 'Email not configured' }
+  }
+
+  try {
+    const { name, email, service, date, timeSlot, location } = bookingData
+    
+    // Format date and time
+    const dateObj = new Date(timeSlot || date)
+    const formattedDate = dateObj.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    const formattedTime = dateObj.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+
+    const htmlContent = createAftercareEmailTemplate({
+      name,
+      email,
+      service,
+      formattedDate,
+      formattedTime,
+      location: location || DEFAULT_LOCATION,
+    })
+
+    const mailOptions = {
+      from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: 'Your Lash Aftercare Guide 🤎',
+      html: htmlContent,
+    }
+
+    const info = await zohoTransporter.sendMail(mailOptions)
+    console.log('Aftercare email sent successfully:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error: any) {
+    console.error('Error sending aftercare email:', error)
+    return { success: false, error: error.message || 'Failed to send email' }
+  }
 }
 
 // Send email notification using Zoho SMTP
@@ -619,10 +971,11 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     manageToken,
     policyWindowHours,
     notes,
-    eyeShape,
     desiredLook,
     desiredLookStatus,
-    desiredLookMatchesRecommendation,
+    isWalkIn,
+    walkInFee,
+    isGiftCardBooking,
   } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
@@ -663,7 +1016,10 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     finalServicePrice = servicePrice
   }
 
-  if (depositAmount <= 0) {
+  // Walk-ins pay after appointment, no deposit required
+  if (isWalkIn) {
+    depositAmount = 0
+  } else if (depositAmount <= 0) {
     depositAmount =
       finalServicePrice > 0
         ? Math.round(finalServicePrice * 0.35)
@@ -673,6 +1029,10 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
   const remainingAmount = Math.max(finalServicePrice - depositAmount, 0)
   const remainingFormatted =
     remainingAmount > 0 ? `KSH ${remainingAmount.toLocaleString()}` : 'KSH 0'
+  
+  // Handle walk-in fee
+  const walkInFeeAmount = (isWalkIn && typeof walkInFee === 'number' && walkInFee > 0) ? walkInFee : 0
+  const walkInFeeFormatted = walkInFeeAmount > 0 ? `KSH ${walkInFeeAmount.toLocaleString()}` : ''
   
   // Format the date and time
   const appointmentDate = new Date(date)
@@ -713,29 +1073,18 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     ? `KSH ${depositAmount.toLocaleString()}`
     : 'N/A'
 
-  const transferNote =
-    typeof bookingData.transferFromName === 'string' && bookingData.transferFromName.trim().length > 0
-      ? `${bookingData.transferFromName.trim()} has transferred this LashDiary appointment to you. Please review the details below and feel free to reschedule if needed.`
-      : ''
-  const transferFinancialNote =
-    transferNote && depositAmount > 0
-      ? `A deposit of ${depositFormatted} is already on file for this service. The remaining balance of ${remainingFormatted} will be collected after your appointment.`
-      : transferNote
-      ? 'The remaining balance will be collected after your appointment.'
-      : ''
 
   const eventSummary = `LashDiary Appointment – ${service || 'Lash Service'}`
-  const desiredLookLabel = desiredLook
+  const desiredLookLabel = typeof desiredLook === 'string' && desiredLook.trim().length > 0
+    ? desiredLook
     .split('-')
     .join(' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
+    : 'Custom'
   const lashMapStatusMessage =
     desiredLookStatus === 'recommended'
       ? 'Lash map ready, can plan before arrival.'
-      : 'Picked outside recommended, map will be decided at appointment.'
-  const eyeShapeRecommendations = Array.isArray(eyeShape.recommendedStyles)
-    ? eyeShape.recommendedStyles
-    : []
+      : 'Map will be decided at appointment.'
   
   const appointmentStart = new Date(appointmentTime)
   const appointmentEnd = new Date(endTime)
@@ -767,11 +1116,11 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     policyWindowHours: windowHours,
     notes: ownerNotes,
     addToCalendarLink,
-    eyeShapeLabel: eyeShape.label,
-    recommendedStyles: eyeShapeRecommendations,
     desiredLookLabel,
     lashMapStatusMessage,
     adminBookingLink,
+    isWalkIn: isWalkIn === true,
+    walkInFee: walkInFeeFormatted,
   }
 
   const baseOwnerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData)
@@ -802,33 +1151,80 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
       const zohoFromEmail = ZOHO_FROM_EMAIL || ZOHO_SMTP_USER || FROM_EMAIL
       const fromAddress = `${EMAIL_FROM_NAME} <${zohoFromEmail}>`
 
-      if (email) {
+      // Validate email address
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        console.error('❌ Invalid email address provided:', email)
+        customerEmailStatus = 'error'
+        customerEmailError = 'Invalid email address'
+      } else if (email) {
         try {
+          console.log(`📧 Preparing to send customer email to: ${email}`)
+          // Format time for reminder subject
+          const appointmentTimeForSubject = bookingData.isReminder
+            ? new Date(bookingData.timeSlot).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              })
+            : ''
+          
+          const emailSubject = bookingData.isReminder
+            ? `Reminder: Your appointment is at ${appointmentTimeForSubject} 🤎`
+            : 'Your Appointment is Confirmed 🤎'
+          
+          console.log(`📧 Email subject: ${emailSubject}`)
+          
+          const emailHtml = bookingData.isReminder
+            ? createReminderEmailTemplate({
+                name,
+                service: service || 'Lash Service',
+                formattedDate,
+                formattedTime,
+                formattedEndTime,
+                location: appointmentLocation,
+                deposit: depositFormatted,
+                servicePrice: finalPriceFormatted,
+                manageLink,
+                addToCalendarLink,
+                policyWindowHours: windowHours,
+                desiredLookLabel,
+                lashMapStatusMessage,
+              })
+            : createCustomerEmailTemplate({
+                name,
+                email,
+                service: service || 'Lash Service',
+                formattedDate,
+                formattedTime,
+                formattedEndTime,
+                location: appointmentLocation,
+                deposit: depositFormatted,
+                servicePrice: finalPriceFormatted,
+                manageLink,
+                addToCalendarLink,
+                policyWindowHours: windowHours,
+                desiredLookLabel,
+                lashMapStatusMessage,
+                walkInFee: walkInFeeFormatted,
+                isGiftCardBooking: isGiftCardBooking === true,
+              })
+
+          console.log(`📧 Sending email via Zoho SMTP to: ${email}`)
+          console.log(`📧 From address: ${fromAddress}`)
+          
           const customerResult = await transporter.sendMail({
             from: fromAddress,
             to: email,
             replyTo: OWNER_EMAIL,
-            subject: 'Appointment Confirmation - LashDiary',
-            html: createCustomerEmailTemplate({
-              name,
-              email,
-              service: service || 'Lash Service',
-              formattedDate,
-              formattedTime,
-              formattedEndTime,
-              location: appointmentLocation,
-              deposit: depositFormatted,
-              servicePrice: finalPriceFormatted,
-              manageLink,
-              addToCalendarLink,
-              policyWindowHours: windowHours,
-              transferNote,
-              transferFinancialNote,
-              eyeShapeLabel: eyeShape.label,
-              eyeShapeRecommendations,
-              desiredLookLabel,
-              lashMapStatusMessage,
-            }),
+            subject: emailSubject,
+            html: emailHtml,
+          })
+
+          console.log(`📧 Zoho SMTP response:`, {
+            messageId: customerResult.messageId,
+            accepted: customerResult.accepted,
+            rejected: customerResult.rejected,
+            response: customerResult.response,
           })
 
           customerEmailId = customerResult.messageId || null
@@ -841,10 +1237,12 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
           } else if (customerEmailId || (Array.isArray(customerResult.accepted) && customerResult.accepted.length > 0)) {
             customerEmailStatus = 'sent'
             console.log('✅ Customer email sent via Zoho SMTP! ID:', customerEmailId)
+            console.log('✅ Accepted recipients:', customerResult.accepted)
           } else {
             customerEmailStatus = 'pending'
             customerEmailError = 'Zoho SMTP accepted the message but did not return a delivery ID.'
             console.warn('⚠️ Customer email status pending via Zoho SMTP.')
+            console.warn('⚠️ Full response:', JSON.stringify(customerResult, null, 2))
           }
         } catch (customerError: any) {
           customerEmailError = customerError.message || 'Unknown Zoho SMTP error'
@@ -858,7 +1256,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
         from: fromAddress,
         to: OWNER_EMAIL,
         replyTo: email || OWNER_EMAIL,
-        subject: `New Booking Request - ${name}`,
+        subject: `New Booking Request 🤎`,
         html: ownerEmailHtml,
       })
 

@@ -25,6 +25,8 @@ const blankService = (): Service => ({
   price: 0,
   priceUSD: undefined,
   duration: 60,
+  description: undefined,
+  imageUrl: undefined,
 })
 
 const blankCategory = (): ServiceCategory => ({
@@ -45,6 +47,7 @@ export default function AdminServices() {
   const [showDialog, setShowDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+  const [notifySubscribers, setNotifySubscribers] = useState(false)
   const router = useRouter()
 
   const hasUnsavedChanges = useMemo(
@@ -149,15 +152,35 @@ const setCatalogWithUpdate = (updater: (previous: ServiceCatalog) => ServiceCata
       const response = await authorizedFetch('/api/admin/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(catalog),
+        body: JSON.stringify({
+          ...catalog,
+          notifySubscribers,
+        }),
       })
 
       if (!response.ok) {
         throw new Error('Failed to save services')
       }
 
+      const result = await response.json()
       setOriginalCatalog(catalog)
-      setMessage({ type: 'success', text: 'Services updated successfully!' })
+      
+      let successMessage = 'Services updated successfully!'
+      if (result.newServicesCount > 0 && notifySubscribers) {
+        if (result.emailSent) {
+          successMessage = `Services updated! ${result.newServicesCount} new service(s) added. Email notifications sent to ${result.emailSent.sent} subscriber(s).`
+          if (result.emailSent.failed > 0) {
+            successMessage += ` (${result.emailSent.failed} failed)`
+          }
+        } else {
+          successMessage = `Services updated! ${result.newServicesCount} new service(s) added.`
+        }
+      } else if (result.newServicesCount > 0) {
+        successMessage = `Services updated! ${result.newServicesCount} new service(s) added.`
+      }
+      
+      setMessage({ type: 'success', text: successMessage })
+      setNotifySubscribers(false) // Reset checkbox after save
       setShowDialog(false)
     } catch (error) {
       console.error('Error saving services:', error)
@@ -313,13 +336,24 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
           >
             ← Back to Dashboard
           </Link>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-brown-dark text-white px-6 py-2 rounded-lg hover:bg-brown transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifySubscribers}
+                onChange={(e) => setNotifySubscribers(e.target.checked)}
+                className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+              />
+              <span>Notify subscribers about new services</span>
+            </label>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-brown-dark text-white px-6 py-2 rounded-lg hover:bg-brown transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
 
         {message && (
@@ -618,6 +652,108 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
                           >
                             Remove
                           </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-brown-light/40 pt-4 mt-2">
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-2">
+                            Service Description
+                          </label>
+                          <textarea
+                            value={service.description || ''}
+                            onChange={(event) =>
+                              updateService(
+                                activeCategory.id,
+                                service.id,
+                                'description',
+                                event.target.value || undefined,
+                              )
+                            }
+                            placeholder="Write a description about this service..."
+                            rows={4}
+                            className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
+                          />
+                          <p className="text-xs text-brown-dark/60 mt-1">
+                            This description will be displayed on the services page to help clients understand what this service includes.
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-brown-dark mb-2">
+                            Service Image
+                          </label>
+                          {service.imageUrl ? (
+                            <div className="space-y-2">
+                              <img
+                                src={service.imageUrl}
+                                alt={service.name || 'Service'}
+                                className="w-full h-48 object-cover rounded-lg border-2 border-brown-light"
+                              />
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={service.imageUrl}
+                                  onChange={(event) =>
+                                    updateService(
+                                      activeCategory.id,
+                                      service.id,
+                                      'imageUrl',
+                                      event.target.value || undefined,
+                                    )
+                                  }
+                                  placeholder="Image URL"
+                                  className="flex-1 px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateService(activeCategory.id, service.id, 'imageUrl', undefined)
+                                  }
+                                  className="px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-100 transition text-sm"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (event) => {
+                                  const file = event.target.files?.[0]
+                                  if (!file) return
+
+                                  try {
+                                    const formData = new FormData()
+                                    formData.append('file', file)
+
+                                    const response = await authorizedFetch('/api/admin/gallery/upload', {
+                                      method: 'POST',
+                                      body: formData,
+                                    })
+
+                                    const data = await response.json()
+                                    if (!response.ok || !data.success) {
+                                      throw new Error(data.error || 'Failed to upload image')
+                                    }
+
+                                    updateService(activeCategory.id, service.id, 'imageUrl', data.url)
+                                    setMessage({ type: 'success', text: 'Image uploaded successfully!' })
+                                  } catch (error) {
+                                    console.error('Error uploading image:', error)
+                                    setMessage({
+                                      type: 'error',
+                                      text: error instanceof Error ? error.message : 'Failed to upload image',
+                                    })
+                                  }
+                                }}
+                                className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
+                              />
+                              <p className="text-xs text-brown-dark/60">
+                                Upload an image to show how this service looks. Max size: 5MB. Supported formats: JPEG, PNG, WebP, GIF.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

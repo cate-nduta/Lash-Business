@@ -18,12 +18,22 @@ interface ProductsPayload {
   orders?: any[]
   pendingPurchases?: any[]
   transportationFee?: number
+  shopNotice?: string
   pickupLocation?: string
   pickupDays?: string[]
   updatedAt?: string | null
 }
 
-const DEFAULT_PRODUCTS: ProductsPayload = { products: [], transportationFee: 150, updatedAt: null }
+const DEFAULT_PRODUCTS: ProductsPayload = {
+  products: [],
+  orders: [],
+  pendingPurchases: [],
+  transportationFee: 150,
+  shopNotice: '',
+  pickupLocation: 'Pick up Mtaani',
+  pickupDays: ['Monday', 'Wednesday', 'Friday'],
+  updatedAt: null,
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +66,12 @@ export async function POST(request: NextRequest) {
     const transportationFee = typeof data.transportationFee === 'number' && data.transportationFee >= 0 
       ? data.transportationFee 
       : 150
+    const pickupLocation = typeof data.pickupLocation === 'string' && data.pickupLocation.trim().length > 0
+      ? data.pickupLocation.trim()
+      : 'Pick up Mtaani'
+    const pickupDays = Array.isArray(data.pickupDays) && data.pickupDays.length > 0
+      ? data.pickupDays
+      : ['Monday', 'Wednesday', 'Friday']
 
     let checkoutItems: Array<{ product: Product; quantity: number }> = []
     let subtotal = 0
@@ -97,215 +113,98 @@ export async function POST(request: NextRequest) {
     const transportCost = deliveryOption === 'lash_suite' ? 0 : deliveryOption === 'pickup' ? transportationFee : 0
     const total = subtotal + transportCost
 
-    // For M-Pesa payments, initiate STK push
-    // COMMENTED OUT: M-Pesa payment will be fixed later
-    if (paymentMethod === 'mpesa') {
+    // Validate contact info for manual order processing
+    if (!email && !phoneNumber) {
       return NextResponse.json(
-        { 
-          error: 'M-Pesa payment is currently unavailable',
-          message: 'M-Pesa payment integration is being updated. Please check back later or use card payment.',
-        },
-        { status: 503 }
+        { error: 'Email or phone number is required so we can confirm your order.' },
+        { status: 400 },
       )
-      
-      /* COMMENTED OUT - TO BE FIXED LATER
-      if (!phoneNumber) {
-        return NextResponse.json({ error: 'Phone number is required for M-Pesa payment' }, { status: 400 })
-      }
-
-      // Initiate M-Pesa STK push
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.headers.get('origin') || 'http://localhost:3000'
-      const productNames = checkoutItems.map(item => item.product.name).join(', ')
-      const accountRef = isCartCheckout 
-        ? `Cart-${Date.now().toString().slice(-8)}`
-        : `Shop-${checkoutItems[0].product.id.slice(0, 8)}`
-      const deliveryText = deliveryOption === 'lash_suite' 
-        ? ' (At Lash Suite)' 
-        : deliveryOption === 'pickup' 
-        ? ' (Pickup)' 
-        : ' (Home Delivery)'
-      
-      const mpesaResponse = await fetch(`${baseUrl}/api/mpesa/stk-push`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: phoneNumber,
-          amount: total,
-          accountReference: accountRef,
-          transactionDesc: `Purchase: ${productNames}${deliveryText}`,
-        }),
-      })
-
-      const mpesaData = await mpesaResponse.json()
-
-      if (!mpesaResponse.ok || !mpesaData.success) {
-        return NextResponse.json(
-          { 
-            error: mpesaData.error || 'Failed to initiate M-Pesa payment',
-            details: mpesaData.details 
-          },
-          { status: mpesaResponse.status || 500 }
-        )
-      }
-
-      // Store pending purchase to track it in callback
-      try {
-        const shopData = await readDataFile<{ products: any[]; pendingPurchases?: any[] }>('shop-products.json', {
-          products: [],
-          pendingPurchases: [],
-        })
-
-        const pendingPurchases = shopData.pendingPurchases || []
-        pendingPurchases.push({
-          items: checkoutItems.map(item => ({
-            productId: item.product.id,
-            quantity: item.quantity,
-          })),
-          checkoutRequestID: mpesaData.checkoutRequestID,
-          phoneNumber: phoneNumber || undefined,
-          email: email || undefined,
-          amount: total,
-          subtotal,
-          deliveryOption,
-          deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
-          transportationFee: transportCost,
-          createdAt: new Date().toISOString(),
-        })
-
-        await writeDataFile('shop-products.json', {
-          ...shopData,
-          pendingPurchases,
-        })
-      } catch (error) {
-        console.error('Error storing pending purchase:', error)
-        // Continue anyway - the callback can still work without this
-      }
-
-      return NextResponse.json({
-        success: true,
-        paymentMethod: 'mpesa',
-        checkoutRequestID: mpesaData.checkoutRequestID,
-        message: mpesaData.message || 'M-Pesa payment prompt sent. Please complete payment on your phone.',
-        items: checkoutItems.map(item => ({ name: item.product.name, quantity: item.quantity })),
-        subtotal,
-        transportationFee: transportCost,
-        total,
-      })
-      */
     }
 
-    // For card payments, you would integrate with a payment gateway here
-    // COMMENTED OUT: Card payment will be fixed later
-    if (paymentMethod === 'card') {
-      return NextResponse.json(
-        { 
-          error: 'Card payment is currently unavailable',
-          message: 'Card payment integration is being updated. Please check back later.',
-        },
-        { status: 503 }
-      )
-      
-      /* COMMENTED OUT - TO BE FIXED LATER
-      if (!email && !phoneNumber) {
-        return NextResponse.json(
-          { error: 'Email or phone number is required so we can notify you when your order is ready' },
-          { status: 400 }
-        )
-      }
-        // TODO: Integrate with actual payment gateway (e.g., Stripe, PayPal)
-        // For now, we'll update quantity immediately
-        // In production, you should only update after payment confirmation
+    // Create order
+    const orderItems = checkoutItems.map((item) => ({
+      productId: item.product.id,
+      productName: item.product.name,
+      quantity: item.quantity,
+      price: item.product.price,
+    }))
 
-        // Store order information
-        const orders = data.orders || []
-        const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-        
-        // Update product quantities
-        for (const item of checkoutItems) {
-          const productIndex = products.findIndex((p) => p.id === item.product.id)
-          if (productIndex !== -1) {
-            products[productIndex] = {
-              ...products[productIndex],
-              quantity: products[productIndex].quantity - item.quantity,
-              updatedAt: new Date().toISOString(),
-            }
-          }
-        }
-
-        // Create order with all items
-        const orderItems = checkoutItems.map(item => ({
-          productId: item.product.id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-        }))
-
-        orders.push({
-          id: orderId,
-          items: orderItems,
-          phoneNumber: phoneNumber || undefined,
-          email: email || undefined,
-          amount: total,
-          subtotal,
-          transportationFee: transportCost,
-          deliveryOption,
-          deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
-          status: 'pending', // pending, ready, picked_up/delivered
-          createdAt: new Date().toISOString(),
-          readyForPickupAt: null,
-          pickedUpAt: null,
-        })
-
-        const updatedData = {
-          ...data,
-          products,
-          orders,
+    // Deduct inventory
+    const updatedProducts = products.map((product) => ({ ...product }))
+    for (const item of checkoutItems) {
+      const productIndex = updatedProducts.findIndex((p) => p.id === item.product.id)
+      if (productIndex !== -1) {
+        updatedProducts[productIndex] = {
+          ...updatedProducts[productIndex],
+          quantity: Math.max(updatedProducts[productIndex].quantity - item.quantity, 0),
           updatedAt: new Date().toISOString(),
         }
-
-        await writeDataFile('shop-products.json', updatedData)
-
-        // Send confirmation email immediately with pickup information
-        if (email || phoneNumber) {
-          try {
-            const productNames = checkoutItems.map(item => item.product.name).join(', ')
-            await sendShopOrderConfirmationEmail({
-              email: email || undefined,
-              phoneNumber: phoneNumber || undefined,
-              orderId,
-              productName: productNames,
-              amount: total,
-              subtotal,
-              transportationFee: transportCost,
-              deliveryOption,
-              deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
-              pickupLocation: data.pickupLocation || 'Pick up Mtaani',
-              pickupDays: data.pickupDays || ['Monday', 'Wednesday', 'Friday'],
-            })
-          } catch (emailError) {
-            console.error('Error sending order confirmation email:', emailError)
-            // Don't fail the request if email fails
-          }
-        }
-
-        return NextResponse.json({
-          success: true,
-          paymentMethod: 'card',
-          orderId,
-          message: 'Payment processed successfully (simulated). You will receive an email with pickup information.',
-          items: checkoutItems.map(item => ({
-            name: item.product.name,
-            quantity: item.quantity,
-          })),
-          subtotal,
-          transportationFee: transportCost,
-          total,
-        })
       }
-      */
     }
 
-    return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 })
+    const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    const now = new Date().toISOString()
+    const orders = Array.isArray(data.orders) ? data.orders : []
+    const order = {
+      id: orderId,
+      items: orderItems,
+      paymentMethod,
+      paymentStatus: 'pending',
+      phoneNumber: phoneNumber || undefined,
+      email: email || undefined,
+      amount: total,
+      subtotal,
+      transportationFee: transportCost,
+      deliveryOption,
+      deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
+      status: 'pending_payment',
+      createdAt: now,
+      readyForPickupAt: null,
+      pickedUpAt: null,
+    }
+
+    orders.unshift(order)
+
+    await writeDataFile('shop-products.json', {
+      ...data,
+      products: updatedProducts,
+      orders,
+      updatedAt: now,
+    })
+
+    // Send confirmation email if possible
+    const normalizedDeliveryOption = deliveryOption === 'delivery' ? 'delivery' : 'pickup'
+    try {
+      await sendShopOrderConfirmationEmail({
+        email: email || undefined,
+        phoneNumber: phoneNumber || undefined,
+        productName: orderItems.map((item) => item.productName).join(', '),
+        orderId,
+        amount: total,
+        subtotal,
+        transportationFee: transportCost,
+        deliveryOption: normalizedDeliveryOption,
+        deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
+        pickupLocation,
+        pickupDays,
+      })
+    } catch (emailError) {
+      console.error('Error sending shop order confirmation email:', emailError)
+    }
+
+    return NextResponse.json({
+      success: true,
+      orderId,
+      paymentMethod,
+      message:
+        paymentMethod === 'mpesa'
+          ? 'Order received! Our team will send an M-Pesa prompt or follow-up instructions shortly.'
+          : 'Order received! We will contact you with payment instructions.',
+      items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
+      subtotal,
+      transportationFee: transportCost,
+      total,
+    })
   } catch (error: any) {
     console.error('Error processing checkout:', error)
     return NextResponse.json(

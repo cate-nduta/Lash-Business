@@ -50,7 +50,13 @@ export function ServiceCartProvider({ children }: { children: ReactNode }) {
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
     localStorage.setItem('serviceCart', JSON.stringify(items))
+      } catch (error) {
+        console.error('Error saving service cart to localStorage:', error)
+      }
+    }
   }, [items])
 
   const addService = (service: ServiceCartItem) => {

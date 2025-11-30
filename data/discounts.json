@@ -10,5 +10,6 @@
     "tier30Percentage": 12,
     "tier45Percentage": 6
   },
-  "depositPercentage": 35
+  "depositPercentage": 35,
+  "paymentRequirement": "deposit"
 }

@@ -33,8 +33,11 @@ export async function GET() {
   try {
     const data = await readDataFile<ProductsPayload>('shop-products.json', DEFAULT_PRODUCTS)
     
-    // Only return products that are active (quantity > 0)
-    const availableProducts = data.products || []
+    // Return all products (including out of stock ones, they'll be marked as out of stock on frontend)
+    const availableProducts = (data.products || []).filter((product: Product) => {
+      // Only filter out products that are completely invalid
+      return product && product.name && product.name.trim().length > 0
+    })
     const transportationFee = typeof data.transportationFee === 'number' && data.transportationFee >= 0 
       ? data.transportationFee 
       : 150

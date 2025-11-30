@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
           const bookings = data.bookings || []
           
           // Find booking by checkoutRequestID (could be in initial deposit or balance payment)
-          // Check both mpesaCheckoutRequestID and payments array
+          // Check mpesaCheckoutRequestID and payments array
           const bookingIndex = bookings.findIndex(b => {
             if (b.mpesaCheckoutRequestID === checkoutRequestID) return true
             if (b.payments && Array.isArray(b.payments)) {
@@ -223,6 +223,7 @@ export async function POST(request: NextRequest) {
           if (bookingIndex !== -1) {
             const booking = bookings[bookingIndex]
             
+            // Handle regular deposit payment
             // Initialize payments array if it doesn't exist
             if (!booking.payments) {
               booking.payments = []
@@ -247,7 +248,17 @@ export async function POST(request: NextRequest) {
               // Update deposit (add the payment amount)
               booking.deposit = (booking.deposit || 0) + amountInKSH
 
-              if ((booking.deposit || 0) >= booking.finalPrice) {
+              // Check if fully paid
+              if ((booking.deposit || 0) >= (booking.finalPrice || booking.originalPrice || 0)) {
+                if (!booking.paidInFullAt) {
+                  booking.paidInFullAt = new Date().toISOString()
+                }
+                booking.paidInFull = true
+              }
+              
+              // If payment type was 'full', mark as fully paid
+              if (booking.paymentType === 'full') {
+                booking.paidInFull = true
                 if (!booking.paidInFullAt) {
                   booking.paidInFullAt = new Date().toISOString()
                 }

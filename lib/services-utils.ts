@@ -4,6 +4,8 @@ export type Service = {
   price: number // KES price (for backward compatibility)
   priceUSD?: number // USD price (optional)
   duration: number
+  description?: string // Custom description for the service
+  imageUrl?: string // URL to service image
 }
 
 export type ServiceCategory = {
@@ -91,6 +93,8 @@ export const normalizeServiceCatalog = (
           price: coerceNumber(service?.price, 0),
           priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
           duration: coerceNumber(service?.duration, 60),
+          description: typeof service?.description === 'string' ? service.description : undefined,
+          imageUrl: typeof service?.imageUrl === 'string' ? service.imageUrl : undefined,
         }
       })
 
@@ -149,6 +153,8 @@ export const normalizeServiceCatalog = (
               price: coerceNumber(service?.price, 0),
               priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
               duration: coerceNumber(service?.duration, 60),
+              description: typeof service?.description === 'string' ? service.description : undefined,
+              imageUrl: typeof service?.imageUrl === 'string' ? service.imageUrl : undefined,
             }
           })
         : []

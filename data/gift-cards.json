@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updatedAt": null,
+  "cards": [],
+  "settings": {
+    "enabled": true,
+    "minAmount": 1000,
+    "maxAmount": 50000,
+    "defaultAmounts": [2000, 5000, 10000, 20000],
+    "expirationDays": 365,
+    "allowCustomAmount": true
+  }
+}
+

@@ -13,6 +13,7 @@ type Message = { type: 'success' | 'error'; text: string } | null
 const emptyPolicies: PolicyData = {
   version: 1,
   updatedAt: '',
+  introText: '',
   variables: {
     cancellationWindowHours: 72,
     depositPercentage: 35,
@@ -91,6 +92,7 @@ export default function AdminPoliciesPage() {
         throw new Error('Failed to load policies')
       }
       const data = (await response.json()) as PolicyData
+      data.introText = data.introText || ''
       data.sections = data.sections.map((section) => ({
         ...section,
         description: section.description ?? '',
@@ -216,6 +218,7 @@ export default function AdminPoliciesPage() {
 
       const payload: Partial<PolicyData> = {
         version: policies.version,
+        introText: policies.introText?.trim() || '',
         variables: policies.variables,
         sections: policies.sections.map((section) => ({
           ...section,
@@ -238,6 +241,7 @@ export default function AdminPoliciesPage() {
       }
 
       const savedPolicies = (data?.policies || payload) as PolicyData
+      savedPolicies.introText = savedPolicies.introText || ''
       savedPolicies.sections = savedPolicies.sections.map((section) => ({
         ...section,
         description: section.description ?? '',
@@ -350,7 +354,7 @@ export default function AdminPoliciesPage() {
           <div>
             <h1 className="text-4xl font-display text-brown-dark mb-2">Policies & Guidelines</h1>
             <p className="text-brown">
-              Update the policies that appear on the public “Policies” page. Use the merge tags (for
+              Update the policies that appear on the public "Policies" page. Use the merge tags (for
               example{' '}
               <code className="bg-baby-pink/70 px-1 rounded">
                 {'{{cancellationWindowHours}}'}
@@ -363,6 +367,28 @@ export default function AdminPoliciesPage() {
               </p>
             )}
           </div>
+
+          <section className="border border-brown-light/60 rounded-xl p-6 space-y-4 bg-baby-pink/30">
+            <h2 className="text-2xl font-display text-brown-dark">Introduction Text</h2>
+            <p className="text-sm text-brown/80">
+              This text appears below the "Our Policies" heading on the public policies page.
+            </p>
+            <div>
+              <label className="block text-sm font-semibold text-brown-dark mb-2">
+                Introduction Text
+              </label>
+              <textarea
+                rows={3}
+                value={policies.introText || ''}
+                onChange={(event) => {
+                  setPolicies((prev) => ({ ...prev, introText: event.target.value }))
+                  markDirty()
+                }}
+                placeholder="These guidelines keep appointments running smoothly..."
+                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition"
+              />
+            </div>
+          </section>
 
           <section className="border border-brown-light/60 rounded-xl p-6 space-y-4 bg-baby-pink/30">
             <h2 className="text-2xl font-display text-brown-dark">Policy Variables</h2>

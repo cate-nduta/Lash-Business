@@ -19,12 +19,16 @@ interface Settings {
     logoColor: string
     faviconUrl: string
     faviconVersion: number
+    taxPercentage?: number
   }
   social: {
     instagram: string
     facebook: string
     tiktok: string
     twitter: string
+  }
+  newsletter?: {
+    discountPercentage?: number
   }
 }
 
@@ -42,12 +46,16 @@ export default function AdminSettings() {
       logoColor: '#733D26',
       faviconUrl: '',
       faviconVersion: 0,
+      taxPercentage: 0,
     },
     social: {
       instagram: '',
       facebook: '',
       tiktok: '',
       twitter: '',
+    },
+    newsletter: {
+      discountPercentage: 10,
     },
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -120,6 +128,16 @@ export default function AdminSettings() {
         if (!loaded.business.faviconVersion) {
           loaded.business.faviconVersion = Date.now()
         }
+        // Ensure tax percentage exists
+        if (typeof loaded.business.taxPercentage !== 'number') {
+          loaded.business.taxPercentage = 0
+        }
+        // Ensure newsletter settings exist
+        if (!loaded.newsletter) {
+          loaded.newsletter = { discountPercentage: 10 }
+        } else if (typeof loaded.newsletter.discountPercentage !== 'number') {
+          loaded.newsletter.discountPercentage = 10
+        }
         setSettings(loaded)
       }
     } catch (error) {
@@ -130,7 +148,7 @@ export default function AdminSettings() {
     }
   }
 
-  const handleInputChange = (section: 'business' | 'social', field: string, value: string) => {
+  const handleInputChange = (section: 'business' | 'social' | 'newsletter', field: string, value: string | number) => {
     setSettings(prev => ({
       ...prev,
       [section]: {
@@ -139,6 +157,40 @@ export default function AdminSettings() {
       },
     }))
     setHasUnsavedChanges(true)
+  }
+
+  const refreshFavicon = () => {
+    // Force browser to reload favicon by updating link element
+    if (typeof window !== 'undefined' && settings.business.faviconUrl) {
+      const baseUrl = window.location.origin
+      const faviconUrl = settings.business.faviconUrl.startsWith('http')
+        ? settings.business.faviconUrl
+        : `${baseUrl}${settings.business.faviconUrl}`
+      const version = settings.business.faviconVersion || Date.now()
+      const url = `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${version}&t=${Date.now()}`
+
+      // Remove existing favicon links
+      const existingLinks = document.querySelectorAll('link[rel*="icon"]')
+      existingLinks.forEach(link => link.remove())
+
+      // Add new favicon links
+      const link = document.createElement('link')
+      link.rel = 'icon'
+      link.type = 'image/svg+xml'
+      link.href = url
+      document.head.appendChild(link)
+
+      // Also add apple-touch-icon
+      const appleLink = document.createElement('link')
+      appleLink.rel = 'apple-touch-icon'
+      appleLink.href = url
+      document.head.appendChild(appleLink)
+
+      // Force page reload if favicon was updated
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    }
   }
 
   const handleSave = async () => {
@@ -163,8 +215,15 @@ export default function AdminSettings() {
       const data = await response.json()
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Settings saved successfully!' })
+        setMessage({ type: 'success', text: 'Settings saved successfully! Refreshing favicon...' })
         setHasUnsavedChanges(false)
+        
+        // Refresh favicon if it exists
+        if (settings.business.faviconUrl) {
+          setTimeout(() => {
+            refreshFavicon()
+          }, 1000)
+        }
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to save settings' })
       }
@@ -247,7 +306,7 @@ export default function AdminSettings() {
         }))
       }
       setHasUnsavedChanges(true)
-      setMessage({ type: 'success', text: 'Favicon uploaded! Remember to save changes.' })
+      setMessage({ type: 'success', text: 'Favicon uploaded! Save changes to apply it (page will refresh automatically).' })
     } catch (error: any) {
       console.error('Error uploading favicon:', error)
       setMessage({ type: 'error', text: error.message || 'Failed to upload favicon' })
@@ -379,6 +438,25 @@ export default function AdminSettings() {
                   className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                   placeholder="Luxury Lash Extensions & Beauty Services"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Tax Percentage (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={settings.business.taxPercentage || 0}
+                  onChange={(e) => handleInputChange('business', 'taxPercentage', parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the tax percentage (e.g., 16 for 16% VAT). Used in analytics to calculate taxes on revenue.
+                </p>
               </div>
             </div>
           </div>
@@ -666,6 +744,52 @@ export default function AdminSettings() {
                   placeholder="https://twitter.com/lashdiary"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Newsletter Settings */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Newsletter Settings</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  Welcome Discount Percentage
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={settings.newsletter?.discountPercentage ?? 10}
+                    onChange={(e) => {
+                      const value = Math.max(0, Math.min(100, Number(e.target.value)))
+                      setSettings(prev => ({
+                        ...prev,
+                        newsletter: {
+                          ...prev.newsletter,
+                          discountPercentage: value,
+                        }
+                      }))
+                      setHasUnsavedChanges(true)
+                    }}
+                    className="w-24 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                  <span className="text-brown-dark font-semibold">%</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  The discount percentage shown in the newsletter popup that appears on your homepage when clients first visit. 
+                  New subscribers receive this discount code via email, which applies to their first lash appointment only. 
+                  (Current: {settings.newsletter?.discountPercentage ?? 10}%)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Blog Settings */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Blog Settings</h2>
+            <div className="space-y-4">
             </div>
           </div>
 

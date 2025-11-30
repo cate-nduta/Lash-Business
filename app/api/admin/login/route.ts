@@ -25,45 +25,47 @@ export async function POST(request: NextRequest) {
       maxAge: Math.floor(ADMIN_SESSION_MAX_IDLE_MS / 1000),
     }
 
-    // Try multi-admin login first
-    try {
-      const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
-      const admins = data.admins || []
-      
-      // Check if any admin credentials match
-      const admin = admins.find(admin => 
-        admin && (admin.username === username || admin.email === username)
-      )
+    // Try multi-admin login first (only if username is provided)
+    if (username && username.trim()) {
+      try {
+        const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
+        const admins = data.admins || []
+        
+        // Check if any admin credentials match
+        const admin = admins.find(admin => 
+          admin && (admin.username === username.trim() || admin.email === username.trim())
+        )
 
-      if (admin) {
-        let isValid = false
+        if (admin) {
+          let isValid = false
 
-        if (admin.passwordHash) {
-          isValid = verifyPassword(password, admin.passwordHash)
-        } else if (admin.password) {
-          isValid = admin.password === password
+          if (admin.passwordHash) {
+            isValid = verifyPassword(password, admin.passwordHash)
+          } else if (admin.password) {
+            isValid = admin.password === password
+          }
+
+          if (!isValid) {
+            return NextResponse.json(
+              { success: false, error: 'Invalid credentials' },
+              { status: 401 }
+            )
+          }
+
+          const response = NextResponse.json({
+            success: true,
+            username: admin.username,
+            role: admin.role,
+          })
+          response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
+          response.cookies.set(ADMIN_USER_COOKIE, admin.username, cookieOptions)
+          response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
+          return response
         }
-
-        if (!isValid) {
-          return NextResponse.json(
-            { success: false, error: 'Invalid credentials' },
-            { status: 401 }
-          )
-        }
-
-        const response = NextResponse.json({
-          success: true,
-          username: admin.username,
-          role: admin.role,
-        })
-        response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
-        response.cookies.set(ADMIN_USER_COOKIE, admin.username, cookieOptions)
-        response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
-        return response
+      } catch (error) {
+        // If admins.json doesn't exist or has issues, fall back to env password
+        console.log('Multi-admin not available, using env password')
       }
-    } catch (error) {
-      // If admins.json doesn't exist or has issues, fall back to env password
-      console.log('Multi-admin not available, using env password')
     }
 
     // Fallback to original single password method (for backward compatibility)

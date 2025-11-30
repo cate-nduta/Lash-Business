@@ -6,6 +6,75 @@ import {
   ADMIN_USER_COOKIE,
 } from '@/lib/admin-auth'
 
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-DNS-Prefetch-Control': 'off',
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy':
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=()',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://via.placeholder.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "connect-src 'self' https://www.google-analytics.com https://maps.googleapis.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+  ].join('; '),
+}
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX_REQUESTS = 60
+
+type RateLimitEntry = { count: number; expires: number }
+
+const rateLimitStore =
+  (globalThis as typeof globalThis & { __ADMIN_RATE_LIMIT__?: Map<string, RateLimitEntry> })
+    .__ADMIN_RATE_LIMIT__ ?? new Map<string, RateLimitEntry>()
+
+;(globalThis as typeof globalThis & { __ADMIN_RATE_LIMIT__?: Map<string, RateLimitEntry> })
+  .__ADMIN_RATE_LIMIT__ = rateLimitStore
+
+const applySecurityHeaders = (response: NextResponse) => {
+  Object.entries(SECURITY_HEADERS).forEach(([key, value]) => {
+    response.headers.set(key, value)
+  })
+
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
+  }
+  return response
+}
+
+const getClientIdentifier = (request: NextRequest) =>
+  request.ip ||
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+  request.headers.get('cf-connecting-ip') ||
+  'unknown'
+
+const applyRateLimit = (identifier: string) => {
+  const now = Date.now()
+  const entry = rateLimitStore.get(identifier)
+
+  if (!entry || entry.expires <= now) {
+    rateLimitStore.set(identifier, { count: 1, expires: now + RATE_LIMIT_WINDOW_MS })
+    return { limited: false as const }
+  }
+
+  entry.count += 1
+
+  if (entry.count > RATE_LIMIT_MAX_REQUESTS) {
+    return {
+      limited: true as const,
+      retryAfter: Math.max(1, Math.ceil((entry.expires - now) / 1000)),
+    }
+  }
+
+  return { limited: false as const }
+}
+
 const PUBLIC_ADMIN_PATHS = ['/admin/login', '/admin/invite']
 const PUBLIC_ADMIN_API_PATHS = ['/api/admin/login']
 
@@ -20,8 +89,23 @@ export function middleware(request: NextRequest) {
   const isAdminPage = pathname.startsWith('/admin')
   const isAdminApi = pathname.startsWith('/api/admin')
 
+  if (isAdminApi) {
+    const identifier = `${getClientIdentifier(request)}:${pathname}`
+    const rateLimitResult = applyRateLimit(identifier)
+
+    if (rateLimitResult.limited) {
+      const retryAfter = rateLimitResult.retryAfter?.toString() ?? '60'
+      const limitedResponse = NextResponse.json(
+        { error: 'Too many requests. Please slow down.' },
+        { status: 429 }
+      )
+      limitedResponse.headers.set('Retry-After', retryAfter)
+      return applySecurityHeaders(limitedResponse)
+    }
+  }
+
   if (!isAdminPage && !isAdminApi) {
-    return NextResponse.next()
+    return applySecurityHeaders(NextResponse.next())
   }
 
   const authCookie = request.cookies.get(ADMIN_AUTH_COOKIE)?.value
@@ -57,7 +141,7 @@ export function middleware(request: NextRequest) {
           response.cookies.delete(ADMIN_USER_COOKIE)
           response.cookies.delete(ADMIN_LAST_ACTIVE_COOKIE)
         }
-        return response
+        return applySecurityHeaders(response)
       }
       const loginUrl = new URL('/admin/login', request.url)
       if (isAdminPage) {
@@ -69,7 +153,7 @@ export function middleware(request: NextRequest) {
         response.cookies.delete(ADMIN_USER_COOKIE)
         response.cookies.delete(ADMIN_LAST_ACTIVE_COOKIE)
       }
-      return response
+      return applySecurityHeaders(response)
     }
 
     if (hasAuthCookies) {
@@ -77,10 +161,10 @@ export function middleware(request: NextRequest) {
       response.cookies.delete(ADMIN_AUTH_COOKIE)
       response.cookies.delete(ADMIN_USER_COOKIE)
       response.cookies.delete(ADMIN_LAST_ACTIVE_COOKIE)
-      return response
+      return applySecurityHeaders(response)
     }
 
-    return NextResponse.next()
+    return applySecurityHeaders(NextResponse.next())
   }
 
   if (isAdminPage && pathname === '/admin/login') {
@@ -88,14 +172,14 @@ export function middleware(request: NextRequest) {
     response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
     response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
     response.cookies.set(ADMIN_USER_COOKIE, userCookie, cookieOptions)
-    return response
+    return applySecurityHeaders(response)
   }
 
   const response = NextResponse.next()
   response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
   response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
   response.cookies.set(ADMIN_USER_COOKIE, userCookie, cookieOptions)
-  return response
+  return applySecurityHeaders(response)
 }
 
 export const config = {

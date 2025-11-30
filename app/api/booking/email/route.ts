@@ -1,43 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmailNotification } from './utils'
+import { readDataFile } from '@/lib/data-utils'
+import {
+  sanitizeEmail,
+  sanitizeOptionalText,
+  sanitizePhone,
+  sanitizeText,
+  ValidationError,
+} from '@/lib/input-validation'
 
-type EyeShapeSelection = {
-  id: string
-  label: string
-  imageUrl: string
-  description: string | null
-  recommendedStyles: string[]
-}
-
-const normalizeEyeShape = (selection: any): EyeShapeSelection | null => {
-  if (!selection || typeof selection !== 'object') return null
-  const id = typeof selection.id === 'string' ? selection.id.trim() : ''
-  const label = typeof selection.label === 'string' ? selection.label.trim() : ''
-  const imageUrl = typeof selection.imageUrl === 'string' ? selection.imageUrl.trim() : ''
-  if (!id || !label || !imageUrl) return null
-  const description =
-    typeof selection.description === 'string' && selection.description.trim().length > 0
-      ? selection.description.trim()
-      : null
-  const recommendedStyles = Array.isArray(selection.recommendedStyles)
-    ? selection.recommendedStyles
-        .map((entry: any) => (typeof entry === 'string' ? entry.trim() : ''))
-        .filter((entry: string) => entry.length > 0)
-    : []
-  return { id, label, imageUrl, description, recommendedStyles }
-}
+const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      name,
-      email,
-      phone,
-      service,
-      date,
-      timeSlot,
-      location,
+      name: rawName,
+      email: rawEmail,
+      phone: rawPhone,
+      service: rawService,
+      date: rawDate,
+      timeSlot: rawTimeSlot,
+      location: rawLocation,
       originalPrice,
       discount,
       finalPrice,
@@ -45,39 +29,56 @@ export async function POST(request: NextRequest) {
       manageToken,
       bookingId,
       policyWindowHours,
-      eyeShape,
-      desiredLook,
+      desiredLook: rawDesiredLook,
     } = body
 
     // Validate required fields
-    if (!name || !email || !phone || !timeSlot || !location) {
+    if (!rawName || !rawEmail || !rawPhone || !rawTimeSlot) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    if (typeof desiredLook !== 'string' || desiredLook.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Desired look is required.' },
-        { status: 400 },
-      )
+    // Fetch location from contact settings if not provided
+    let locationInput = rawLocation
+    if (!locationInput) {
+      try {
+        const contact = await readDataFile<{ location?: string | null }>('contact.json', {})
+        locationInput = contact?.location || STUDIO_LOCATION
+      } catch (error) {
+        console.error('Error loading location from contact settings:', error)
+        locationInput = STUDIO_LOCATION
+      }
     }
 
-    const normalizedEyeShape = normalizeEyeShape(eyeShape)
-    if (!normalizedEyeShape) {
-      return NextResponse.json(
-        { error: 'Eye shape selection is required.' },
-        { status: 400 },
-      )
+    let name: string
+    let email: string
+    let phone: string
+    let timeSlot: string
+    let location: string
+    let service: string
+    let date: string
+    let desiredLook: string
+
+    try {
+      name = sanitizeText(rawName, { fieldName: 'Name', maxLength: 80 })
+      email = sanitizeEmail(rawEmail)
+      phone = sanitizePhone(rawPhone)
+      timeSlot = sanitizeText(rawTimeSlot, { fieldName: 'Time slot', maxLength: 80 })
+      location = sanitizeText(locationInput, { fieldName: 'Location', maxLength: 160 })
+      service = sanitizeOptionalText(rawService, { fieldName: 'Service', maxLength: 120, optional: true })
+      date = sanitizeOptionalText(rawDate, { fieldName: 'Date', maxLength: 32, optional: true })
+      desiredLook = sanitizeOptionalText(rawDesiredLook, { fieldName: 'Desired look', maxLength: 160, optional: true })
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      throw error
     }
 
-    const desiredLookNormalized = desiredLook.trim()
-    const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-    const desiredLookMatchesRecommendation = normalizedEyeShape.recommendedStyles.some(
-      (style) => normalizeStyleName(style) === normalizeStyleName(desiredLookNormalized),
-    )
-    const desiredLookStatus: 'recommended' | 'custom' = desiredLookMatchesRecommendation ? 'recommended' : 'custom'
+    const desiredLookNormalized = desiredLook || 'Custom'
+    const desiredLookStatus: 'recommended' | 'custom' = 'custom'
 
     // Send email notifications
     const result = await sendEmailNotification({
@@ -96,10 +97,8 @@ export async function POST(request: NextRequest) {
       bookingId,
       policyWindowHours,
       notes: typeof body.notes === 'string' ? body.notes : undefined,
-      eyeShape: normalizedEyeShape,
       desiredLook: desiredLookNormalized,
       desiredLookStatus,
-      desiredLookMatchesRecommendation,
     })
 
     if (!result) {

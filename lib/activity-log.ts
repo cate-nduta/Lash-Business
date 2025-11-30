@@ -46,7 +46,7 @@ interface ActivityLogFile {
 }
 
 const MAX_ENTRIES = 500
-const RETENTION_DAYS = 21
+const RETENTION_DAYS = 35
 
 export async function recordActivity(entry: Omit<ActivityLogEntry, 'id' | 'performedAt'> & { performedAt?: string }) {
   try {
@@ -98,6 +98,21 @@ export async function clearActivityLog() {
     return true
   } catch (error) {
     console.error('Failed to clear activity log:', error)
+    return false
+  }
+}
+
+export async function deleteActivityEntry(entryId: string) {
+  try {
+    const data = await readDataFile<ActivityLogFile>('activity-log.json', { entries: [] })
+    const existingEntries = data?.entries || []
+    
+    const updatedEntries = existingEntries.filter(entry => entry.id !== entryId)
+    await writeDataFile<ActivityLogFile>('activity-log.json', { entries: updatedEntries })
+    
+    return true
+  } catch (error) {
+    console.error('Failed to delete activity log entry:', error)
     return false
   }
 }

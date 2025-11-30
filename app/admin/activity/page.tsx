@@ -61,6 +61,7 @@ export default function ActivityHistoryPage() {
   const [entries, setEntries] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -127,6 +128,38 @@ export default function ActivityHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
+  const handleDelete = async (entryId: string) => {
+    if (!confirm('Are you sure you want to delete this activity entry? This action cannot be undone.')) {
+      return
+    }
+
+    setDeletingId(entryId)
+    try {
+      const response = await fetch('/api/admin/activity', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ entryId }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // Remove the entry from the list
+        setEntries(entries.filter(entry => entry.id !== entryId))
+      } else {
+        setError(data.error || 'Failed to delete activity entry')
+      }
+    } catch (err: any) {
+      console.error('Error deleting activity entry:', err)
+      setError('Failed to delete activity entry. Please try again.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (authenticated === null) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
@@ -180,13 +213,40 @@ export default function ActivityHistoryPage() {
               {entries.map((entry) => (
                 <li key={entry.id} className="border border-pink-light rounded-xl p-4 bg-pink-light/40">
                   <div className="flex flex-wrap justify-between items-start gap-3">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-base font-semibold text-brown-dark">{entry.summary}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {ACTION_LABELS[entry.action] || entry.action} · {MODULE_LABELS[entry.module] || entry.module}
                       </p>
                     </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">{formatDateTime(entry.performedAt)}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{formatDateTime(entry.performedAt)}</span>
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        disabled={deletingId === entry.id}
+                        className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        title="Delete this entry"
+                      >
+                        {deletingId === entry.id ? (
+                          <span className="text-xs">Deleting...</span>
+                        ) : (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
                     By <span className="font-semibold text-brown-dark">{entry.performedBy}</span>

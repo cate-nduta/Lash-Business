@@ -734,16 +734,16 @@ export default function AdminEmailMarketing() {
           >
             ← Back to Dashboard
           </Link>
-          <div className="flex gap-3">
+          <div className="flex gap-4">
             <button
               onClick={loadAllData}
-              className="px-3 py-2 text-sm bg-pink-light text-brown-dark rounded-lg hover:bg-pink-light/70"
+              className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
             >
               Refresh Data
             </button>
             <button
               onClick={() => setActiveTab('templates')}
-              className={`px-3 py-2 text-sm rounded-lg ${activeTab === 'templates' ? 'bg-brown-dark text-white' : 'bg-white text-brown-dark border border-brown-light hover:bg-pink-light/60'}`}
+              className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
             >
               View Templates
             </button>
@@ -761,7 +761,7 @@ export default function AdminEmailMarketing() {
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
           <h1 className="text-4xl font-display text-brown-dark mb-6">Email Marketing</h1>
 
-          <div className="flex flex-wrap gap-3 border-b-2 border-brown-light pb-4 mb-6">
+          <div className="flex flex-wrap gap-4 border-b-2 border-brown-light pb-4 mb-6">
             {(
               [
                 { key: 'compose', label: 'Compose Email' },
@@ -777,10 +777,10 @@ export default function AdminEmailMarketing() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
+                className={`px-0 py-2 text-sm font-semibold transition-colors ${
                   activeTab === tab.key
-                    ? 'bg-brown-dark text-white shadow-md'
-                    : 'text-brown hover:text-brown-dark bg-pink-light/50'
+                    ? 'text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 {tab.label}
@@ -802,7 +802,7 @@ export default function AdminEmailMarketing() {
                   <option value="returning">Returning Clients ({customers.filter((c) => c.totalBookings > 1).length})</option>
                   <option value="custom">Custom List</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">Will be sent to {getRecipientCount()} recipients</p>
+                <p className="text-xs text-brown mt-1">Will be sent to {getRecipientCount()} recipients</p>
               </div>
 
               {compose.recipientType === 'custom' && (
@@ -818,7 +818,7 @@ export default function AdminEmailMarketing() {
                     className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                     placeholder="email@example.com | Name"
                   />
-                  <p className="text-xs text-gray-500 mt-1">One entry per line or comma-separated. Optional name after a pipe (|).</p>
+                  <p className="text-xs text-brown mt-1">One entry per line or comma-separated. Optional name after a pipe (|).</p>
                 </div>
               )}
 
@@ -834,7 +834,7 @@ export default function AdminEmailMarketing() {
                   />
                   <button
                     onClick={() => handleComposeChange('subject', compose.subject.trim())}
-                    className="px-4 py-3 bg-white border-2 border-brown-light rounded-lg text-sm text-brown-dark hover:bg-pink-light/50"
+                    className="px-4 py-3 border-2 border-brown-light rounded-lg text-sm text-brown-dark font-semibold hover:text-brown hover:border-brown transition-colors"
                   >
                     Trim
                   </button>
@@ -844,7 +844,7 @@ export default function AdminEmailMarketing() {
                     <button
                       key={item.token}
                       onClick={() => handleInsertToken(item.token)}
-                      className="px-3 py-1 text-xs bg-pink-light text-brown-dark rounded-full hover:bg-pink-light/70"
+                      className="px-3 py-1 text-xs text-brown-dark border border-brown-light rounded-full hover:text-brown hover:border-brown hover:underline transition-colors"
                     >
                       {item.label}
                     </button>
@@ -872,28 +872,28 @@ export default function AdminEmailMarketing() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800 font-semibold mb-2">Email Summary</p>
-                  <p className="text-xs text-blue-700">• Subject: {compose.subject || '(No subject)'}</p>
-                  <p className="text-xs text-blue-700">• Recipients: {getRecipientCount()} customers</p>
-                  <p className="text-xs text-blue-700">• Attachments: {compose.attachments.length}</p>
-                  <p className="text-xs text-blue-700">
+                <div className="border-2 border-brown-light rounded-lg p-4 bg-white">
+                  <p className="text-sm text-brown-dark font-semibold mb-2">Email Summary</p>
+                  <p className="text-xs text-brown">• Subject: {compose.subject || '(No subject)'}</p>
+                  <p className="text-xs text-brown">• Recipients: {getRecipientCount()} customers</p>
+                  <p className="text-xs text-brown">• Attachments: {compose.attachments.length}</p>
+                  <p className="text-xs text-brown">
                     • Delivery: {compose.schedule.enabled ? `Scheduled for ${new Date(compose.schedule.sendAt).toLocaleString()}` : 'Send immediately'}
                   </p>
                   {compose.abTest.enabled && (
-                    <p className="text-xs text-purple-700 font-semibold mt-2">A/B Testing enabled ({compose.abTest.samplePercentage}% sample)</p>
+                    <p className="text-xs text-brown-dark font-semibold mt-2">A/B Testing enabled ({compose.abTest.samplePercentage}% sample)</p>
                   )}
                 </div>
 
-                <div className="bg-pink-light/30 border-2 border-pink-light rounded-lg p-4">
+                <div className="border-2 border-brown-light rounded-lg p-4 bg-white">
                   <p className="text-sm text-brown-dark font-semibold mb-3">Attachments</p>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {compose.attachments.map((attachment) => (
-                      <div key={attachment.url} className="flex items-center gap-2 bg-white border border-brown-light px-3 py-2 rounded-full text-xs text-brown-dark">
+                      <div key={attachment.url} className="flex items-center gap-2 border border-brown-light px-3 py-2 rounded-full text-xs text-brown-dark bg-white">
                         <span>{attachment.name}</span>
                         <button
                           onClick={() => handleRemoveAttachment(attachment)}
-                          className="text-red-500 hover:text-red-600"
+                          className="text-red-600 hover:text-red-700 font-bold"
                         >
                           ✕
                         </button>
@@ -901,13 +901,13 @@ export default function AdminEmailMarketing() {
                     ))}
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-2 text-xs bg-white border border-brown-light rounded-full text-brown-dark hover:bg-pink-light/60"
+                      className="px-3 py-2 text-xs border border-brown-light rounded-full text-brown-dark font-semibold hover:text-brown hover:border-brown hover:underline transition-colors"
                     >
                       + Add Attachment
                     </button>
                     <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadAttachment} />
                   </div>
-                  <p className="text-xs text-gray-500">Supported: PDF, JPG, PNG, WebP (max 5MB each).</p>
+                  <p className="text-xs text-brown">Supported: PDF, JPG, PNG, WebP (max 5MB each).</p>
                 </div>
               </div>
 
@@ -916,7 +916,7 @@ export default function AdminEmailMarketing() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="text-sm font-semibold text-brown-dark">Schedule Send</p>
-                      <p className="text-xs text-gray-500">Choose when this email should be delivered.</p>
+                      <p className="text-xs text-brown">Choose when this email should be delivered.</p>
                     </div>
                     <label className="flex items-center gap-2 text-sm text-brown-dark">
                       <input
@@ -938,18 +938,18 @@ export default function AdminEmailMarketing() {
                   )}
                 </div>
 
-                <div className="bg-white border-2 border-purple-200 rounded-lg p-4">
+                <div className="border-2 border-brown-light rounded-lg p-4 bg-white">
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="text-sm font-semibold text-brown-dark">A/B Testing</p>
-                      <p className="text-xs text-gray-500">Test two subject/content variations before full send.</p>
+                      <p className="text-xs text-brown">Test two subject/content variations before full send.</p>
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-brown-dark">
+                    <label className="flex items-center gap-2 text-sm text-brown-dark font-semibold">
                       <input
                         type="checkbox"
                         checked={compose.abTest.enabled}
                         onChange={(e) => handleComposeChange('abTest', { ...compose.abTest, enabled: e.target.checked })}
-                        className="w-5 h-5 text-purple-600 border-2 border-purple-300 rounded"
+                        className="w-5 h-5 text-brown-dark border-2 border-brown-light rounded"
                       />
                       Enable
                     </label>
@@ -965,7 +965,7 @@ export default function AdminEmailMarketing() {
                             max={50}
                             value={compose.abTest.samplePercentage}
                             onChange={(e) => handleComposeChange('abTest', { ...compose.abTest, samplePercentage: Number(e.target.value) })}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           />
                         </label>
                         <label className="flex-1">
@@ -973,7 +973,7 @@ export default function AdminEmailMarketing() {
                           <select
                             value={compose.abTest.metric}
                             onChange={(e) => handleComposeChange('abTest', { ...compose.abTest, metric: e.target.value as Metric })}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           >
                             <option value="open">Open Rate</option>
                             <option value="click">Click Rate</option>
@@ -990,7 +990,7 @@ export default function AdminEmailMarketing() {
                               ...compose.abTest,
                               variantA: { ...compose.abTest.variantA, subject: e.target.value },
                             })}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           />
                         </label>
                         <label>
@@ -1002,7 +1002,7 @@ export default function AdminEmailMarketing() {
                               ...compose.abTest,
                               variantB: { ...compose.abTest.variantB, subject: e.target.value },
                             })}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           />
                         </label>
                       </div>
@@ -1016,7 +1016,7 @@ export default function AdminEmailMarketing() {
                               variantA: { ...compose.abTest.variantA, content: e.target.value },
                             })}
                             rows={3}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           />
                         </label>
                         <label>
@@ -1028,7 +1028,7 @@ export default function AdminEmailMarketing() {
                               variantB: { ...compose.abTest.variantB, content: e.target.value },
                             })}
                             rows={3}
-                            className="w-full mt-1 px-3 py-2 border-2 border-purple-200 rounded-lg"
+                            className="w-full mt-1 px-3 py-2 border-2 border-brown-light rounded-lg text-brown-dark bg-white"
                           />
                         </label>
                       </div>
@@ -1041,14 +1041,14 @@ export default function AdminEmailMarketing() {
                 <button
                   onClick={handleSendEmail}
                   disabled={sending || !compose.subject || !compose.content}
-                  className="flex-1 px-6 py-3 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                  className="flex-1 px-6 py-3 border-2 border-brown-dark text-brown-dark rounded-lg hover:text-brown hover:border-brown hover:underline transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline font-semibold disabled:border-brown-light"
                 >
                   {sending ? 'Sending...' : compose.schedule.enabled ? 'Schedule Email' : `Send to ${getRecipientCount()} Recipients`}
                 </button>
                 <button
                   onClick={handleSendTestEmail}
                   disabled={sending}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-6 py-3 border-2 border-brown-dark text-brown-dark rounded-lg hover:text-brown hover:border-brown hover:underline transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline font-semibold disabled:border-brown-light"
                 >
                   Send Test Email
                 </button>
@@ -1058,7 +1058,7 @@ export default function AdminEmailMarketing() {
                     setCustomRecipientsInput('')
                     setHasUnsavedChanges(false)
                   }}
-                  className="px-6 py-3 bg-white border-2 border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/70"
+                  className="px-6 py-3 border-2 border-brown-light text-brown-dark rounded-lg hover:text-brown hover:border-brown hover:underline transition-colors font-semibold"
                 >
                   Reset
                 </button>
@@ -1071,30 +1071,30 @@ export default function AdminEmailMarketing() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-display text-brown-dark">Email Templates</h2>
-                  <p className="text-sm text-gray-600">Choose a template to instantly fill subject and content.</p>
+                  <p className="text-sm text-brown">Choose a template to instantly fill subject and content.</p>
                 </div>
                 <button
                   onClick={() => setActiveTab('compose')}
-                  className="px-4 py-2 text-sm bg-brown-dark text-white rounded-lg hover:bg-brown"
+                  className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
                 >
                   Back to Compose
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {templates.map((template) => (
-                  <div key={template.id} className="border-2 border-brown-light rounded-xl p-5 bg-pink-light/30">
+                  <div key={template.id} className="border-2 border-brown-light rounded-xl p-5 bg-white">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-semibold text-brown-dark">{template.name}</h3>
                       <span className="text-xs px-2 py-1 bg-white border border-brown-light rounded-full text-brown-dark">
                         {template.category}
                       </span>
                     </div>
-                    <p className="text-sm text-brown mb-3"><strong>Subject:</strong> {template.subject}</p>
+                    <p className="text-sm text-brown-dark mb-3 font-semibold">Subject: <span className="font-normal text-brown">{template.subject}</span></p>
                     <div className="bg-white border border-brown-light rounded-lg p-3 text-xs text-brown h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: template.content }} />
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={() => handleApplyTemplate(template)}
-                        className="flex-1 px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown"
+                        className="flex-1 px-4 py-2 border-2 border-brown-dark text-brown-dark rounded-lg hover:text-brown hover:border-brown hover:underline transition-colors font-semibold"
                       >
                         Use Template
                       </button>
@@ -1108,7 +1108,7 @@ export default function AdminEmailMarketing() {
                           })
                           setActiveTab('preview')
                         }}
-                        className="px-4 py-2 bg-white border border-brown-light rounded-lg text-brown-dark hover:bg-pink-light/70"
+                        className="px-4 py-2 border-2 border-brown-light rounded-lg text-brown-dark hover:text-brown hover:border-brown hover:underline transition-colors font-semibold"
                       >
                         Preview
                       </button>
@@ -1121,23 +1121,23 @@ export default function AdminEmailMarketing() {
 
           {activeTab === 'preview' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="border-2 border-brown-light rounded-xl overflow-hidden">
-                <div className="bg-brown-dark text-white px-4 py-2 text-sm">Desktop Preview</div>
+              <div className="border-2 border-brown-light rounded-xl overflow-hidden bg-white">
+                <div className="border-b-2 border-brown-light px-4 py-2 text-sm text-brown-dark font-semibold">Desktop Preview</div>
                 <div className="p-6 bg-white text-brown">
-                  <p className="text-sm text-gray-500 mb-2">Subject: {replaceTokensForPreview(compose.subject) || '(No subject)'}</p>
+                  <p className="text-sm text-brown mb-2 font-semibold">Subject: {replaceTokensForPreview(compose.subject) || '(No subject)'}</p>
                   <div dangerouslySetInnerHTML={{ __html: previewHtml || '<p>(No content)</p>' }} />
                 </div>
               </div>
-              <div className="border-2 border-brown-light rounded-xl overflow-hidden max-w-sm mx-auto">
-                <div className="bg-brown-dark text-white px-4 py-2 text-sm">Mobile Preview</div>
+              <div className="border-2 border-brown-light rounded-xl overflow-hidden max-w-sm mx-auto bg-white">
+                <div className="border-b-2 border-brown-light px-4 py-2 text-sm text-brown-dark font-semibold">Mobile Preview</div>
                 <div className="p-4 bg-white text-brown text-sm" dangerouslySetInnerHTML={{ __html: previewHtml || '<p>(No content)</p>' }} />
               </div>
-              <div className="lg:col-span-2 bg-pink-light/30 border border-brown-light rounded-lg p-4 text-sm">
+              <div className="lg:col-span-2 border-2 border-brown-light rounded-lg p-4 text-sm bg-white">
                 <p className="font-semibold text-brown-dark">Preview Data</p>
-                <p className="text-gray-600">Name: {previewSubscriber.name}</p>
-                <p className="text-gray-600">Email: {previewSubscriber.email}</p>
-                <p className="text-gray-600">Last Visit: {previewSubscriber.lastBookingDate ? new Date(previewSubscriber.lastBookingDate).toLocaleDateString() : 'Not yet'}</p>
-                <p className="text-gray-600">Next Appointment: {previewSubscriber.nextBookingDate ? new Date(previewSubscriber.nextBookingDate).toLocaleString() : 'Not scheduled'}</p>
+                <p className="text-brown">Name: {previewSubscriber.name}</p>
+                <p className="text-brown">Email: {previewSubscriber.email}</p>
+                <p className="text-brown">Last Visit: {previewSubscriber.lastBookingDate ? new Date(previewSubscriber.lastBookingDate).toLocaleDateString() : 'Not yet'}</p>
+                <p className="text-brown">Next Appointment: {previewSubscriber.nextBookingDate ? new Date(previewSubscriber.nextBookingDate).toLocaleString() : 'Not scheduled'}</p>
               </div>
             </div>
           )}
@@ -1145,25 +1145,25 @@ export default function AdminEmailMarketing() {
           {activeTab === 'analytics' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white border-2 border-brown-light rounded-lg p-5">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Total Emails Sent</p>
+                <div className="border-2 border-brown-light rounded-lg p-5 bg-white">
+                  <p className="text-xs text-brown uppercase tracking-wide font-semibold">Total Emails Sent</p>
                   <p className="text-2xl font-bold text-brown-dark mt-2">{analytics.totalSent}</p>
                 </div>
-                <div className="bg-white border-2 border-brown-light rounded-lg p-5">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Average Open Rate</p>
+                <div className="border-2 border-brown-light rounded-lg p-5 bg-white">
+                  <p className="text-xs text-brown uppercase tracking-wide font-semibold">Average Open Rate</p>
                   <p className="text-2xl font-bold text-brown-dark mt-2">{analytics.averageOpenRate.toFixed(1)}%</p>
                 </div>
-                <div className="bg-white border-2 border-brown-light rounded-lg p-5">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Average Click Rate</p>
+                <div className="border-2 border-brown-light rounded-lg p-5 bg-white">
+                  <p className="text-xs text-brown uppercase tracking-wide font-semibold">Average Click Rate</p>
                   <p className="text-2xl font-bold text-brown-dark mt-2">{analytics.averageClickRate.toFixed(1)}%</p>
                 </div>
               </div>
 
               {analytics.bestCampaign && (
-                <div className="bg-white border-2 border-green-200 rounded-lg p-5">
-                  <p className="text-sm text-green-800 font-semibold">Best Performing Campaign</p>
+                <div className="border-2 border-brown-light rounded-lg p-5 bg-white">
+                  <p className="text-sm text-brown-dark font-semibold">Best Performing Campaign</p>
                   <p className="text-lg text-brown-dark font-semibold mt-2">{analytics.bestCampaign.subject}</p>
-                  <p className="text-xs text-gray-500">Open Rate: {((analytics.bestCampaign.opened / analytics.bestCampaign.totalRecipients) * 100).toFixed(1)}% | Click Rate: {((analytics.bestCampaign.clicked / analytics.bestCampaign.totalRecipients) * 100).toFixed(1)}%</p>
+                  <p className="text-xs text-brown">Open Rate: {((analytics.bestCampaign.opened / analytics.bestCampaign.totalRecipients) * 100).toFixed(1)}% | Click Rate: {((analytics.bestCampaign.clicked / analytics.bestCampaign.totalRecipients) * 100).toFixed(1)}%</p>
                 </div>
               )}
 
@@ -1171,22 +1171,22 @@ export default function AdminEmailMarketing() {
                 <h3 className="text-lg font-semibold text-brown-dark mb-3">Recent Campaigns</h3>
                 <div className="space-y-3">
                   {analytics.recentCampaigns.map((campaign) => (
-                    <div key={campaign.id} className="bg-white border-2 border-brown-light rounded-lg p-4">
+                    <div key={campaign.id} className="border-2 border-brown-light rounded-lg p-4 bg-white">
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-brown-dark font-semibold">{campaign.subject}</p>
-                        <span className="text-xs text-gray-500">{new Date(campaign.sentAt || campaign.createdAt).toLocaleString()}</span>
+                        <span className="text-xs text-brown">{new Date(campaign.sentAt || campaign.createdAt).toLocaleString()}</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-3 text-xs text-gray-600 mt-3">
+                      <div className="grid grid-cols-3 gap-3 text-xs text-brown mt-3">
                         <div>
                           <p className="text-brown-dark font-semibold">Sent</p>
                           <p>{campaign.totalRecipients}</p>
                         </div>
                         <div>
-                          <p className="text-green-600 font-semibold">Opened</p>
+                          <p className="text-brown-dark font-semibold">Opened</p>
                           <p>{campaign.opened} ({((campaign.opened / campaign.totalRecipients) * 100 || 0).toFixed(1)}%)</p>
                         </div>
                         <div>
-                          <p className="text-blue-600 font-semibold">Clicked</p>
+                          <p className="text-brown-dark font-semibold">Clicked</p>
                           <p>{campaign.clicked} ({((campaign.clicked / campaign.totalRecipients) * 100 || 0).toFixed(1)}%)</p>
                         </div>
                       </div>
@@ -1204,13 +1204,13 @@ export default function AdminEmailMarketing() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleProcessScheduled}
-                    className="px-4 py-2 text-sm bg-brown-dark text-white rounded-lg hover:bg-brown"
+                    className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
                   >
                     Process Scheduled Now
                   </button>
                   <button
                     onClick={() => loadAllData()}
-                    className="px-4 py-2 text-sm bg-white border border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/70"
+                    className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
                   >
                     Refresh
                   </button>
@@ -1218,25 +1218,25 @@ export default function AdminEmailMarketing() {
               </div>
 
               {scheduledEmails.length > 0 && (
-                <div className="bg-white border-2 border-yellow-200 rounded-lg p-4">
+                <div className="border-2 border-brown-light rounded-lg p-4 bg-white">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm font-semibold text-brown-dark">Scheduled Emails ({scheduledEmails.length})</p>
                     <button
                       onClick={handleProcessScheduled}
-                      className="px-3 py-2 text-xs bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"
+                      className="px-3 py-2 text-xs border-2 border-brown-dark text-brown-dark rounded-lg hover:text-brown hover:border-brown hover:underline transition-colors font-semibold"
                     >
                       Send Due Now
                     </button>
                   </div>
                   <div className="space-y-3">
                     {scheduledEmails.map((entry) => (
-                      <div key={entry.id} className="bg-pink-light/30 border border-brown-light rounded-lg p-3 text-xs text-brown">
+                      <div key={entry.id} className="border border-brown-light rounded-lg p-3 text-xs text-brown bg-white">
                         <div className="flex items-center justify-between">
-                          <p className="font-semibold">{entry.subject}</p>
-                          <p>{new Date(entry.schedule.sendAt).toLocaleString()}</p>
+                          <p className="font-semibold text-brown-dark">{entry.subject}</p>
+                          <p className="text-brown">{new Date(entry.schedule.sendAt).toLocaleString()}</p>
                         </div>
-                        <p>Recipients: {entry.recipients.length}</p>
-                        {entry.abTest?.enabled && <p>A/B Test Enabled ({entry.abTest.samplePercentage}% sample)</p>}
+                        <p className="text-brown">Recipients: {entry.recipients.length}</p>
+                        {entry.abTest?.enabled && <p className="text-brown">A/B Test Enabled ({entry.abTest.samplePercentage}% sample)</p>}
                       </div>
                     ))}
                   </div>
@@ -1250,19 +1250,19 @@ export default function AdminEmailMarketing() {
                   {campaigns
                     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                     .map((campaign) => (
-                      <div key={campaign.id} className="bg-white border-2 border-brown-light rounded-lg p-6">
+                      <div key={campaign.id} className="border-2 border-brown-light rounded-lg p-6 bg-white">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-lg text-brown-dark font-semibold">{campaign.subject}</p>
-                            <p className="text-xs text-gray-500">{campaign.sentAt ? `Sent: ${new Date(campaign.sentAt).toLocaleString()}` : 'Scheduled'}</p>
+                            <p className="text-xs text-brown">{campaign.sentAt ? `Sent: ${new Date(campaign.sentAt).toLocaleString()}` : 'Scheduled'}</p>
                           </div>
                           <div className="text-right text-xs text-brown">
-                            <p><span className="font-semibold">Sent:</span> {campaign.totalRecipients}</p>
-                            <p><span className="font-semibold">Opens:</span> {campaign.opened}</p>
-                            <p><span className="font-semibold">Clicks:</span> {campaign.clicked}</p>
+                            <p><span className="font-semibold text-brown-dark">Sent:</span> {campaign.totalRecipients}</p>
+                            <p><span className="font-semibold text-brown-dark">Opens:</span> {campaign.opened}</p>
+                            <p><span className="font-semibold text-brown-dark">Clicks:</span> {campaign.clicked}</p>
                           </div>
                         </div>
-                        <div className="mt-4 bg-pink-light/20 border border-brown-light rounded-lg p-4 text-xs text-gray-700 whitespace-pre-wrap">
+                        <div className="mt-4 border border-brown-light rounded-lg p-4 text-xs text-brown whitespace-pre-wrap bg-white">
                           {campaign.content.substring(0, 200)}{campaign.content.length > 200 ? '...' : ''}
                         </div>
                       </div>
@@ -1277,19 +1277,19 @@ export default function AdminEmailMarketing() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-display text-brown-dark">Subscribers</h2>
-                  <p className="text-sm text-gray-600">Manage your email audience.</p>
+                  <p className="text-sm text-brown">Manage your email audience.</p>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleExportCustomers}
-                    className="px-4 py-2 text-sm bg-brown-dark text-white rounded-lg hover:bg-brown"
-                  >
-                    Export CSV
-                  </button>
-                  <label className="px-4 py-2 text-sm bg-white border border-brown-light rounded-lg text-brown-dark hover:bg-pink-light/70 cursor-pointer">
-                    Import CSV
-                    <input type="file" accept=".csv" onChange={handleImportCustomers} className="hidden" />
-                  </label>
+                    <button
+                      onClick={handleExportCustomers}
+                      className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors"
+                    >
+                      Export CSV
+                    </button>
+                    <label className="px-0 py-2 text-sm border-2 border-brown-light rounded-lg text-brown-dark hover:text-brown hover:border-brown hover:underline transition-colors cursor-pointer font-semibold inline-block">
+                      Import CSV
+                      <input type="file" accept=".csv" onChange={handleImportCustomers} className="hidden" />
+                    </label>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -1305,24 +1305,24 @@ export default function AdminEmailMarketing() {
                   </thead>
                   <tbody>
                     {customers.map((customer) => (
-                      <tr key={customer.email} className="border-b border-brown-light/30 hover:bg-pink-light/20">
-                        <td className="py-3 px-4 text-brown font-medium">{customer.email}</td>
-                        <td className="py-3 px-4 text-brown">{customer.name}</td>
-                        <td className="py-3 px-4 text-brown font-semibold">{customer.totalBookings}</td>
-                        <td className="py-3 px-4 text-brown">{customer.lastBookingDate ? new Date(customer.lastBookingDate).toLocaleDateString() : '—'}</td>
+                      <tr key={customer.email} className="border-b border-brown-light/30 hover:bg-white">
+                        <td className="py-3 px-4 text-brown-dark font-medium">{customer.email}</td>
+                        <td className="py-3 px-4 text-brown-dark">{customer.name}</td>
+                        <td className="py-3 px-4 text-brown-dark font-semibold">{customer.totalBookings}</td>
+                        <td className="py-3 px-4 text-brown-dark">{customer.lastBookingDate ? new Date(customer.lastBookingDate).toLocaleDateString() : '—'}</td>
                         <td className="py-3 px-4">
                           {customer.unsubscribed ? (
                             <span className="inline-flex items-center gap-2">
-                              <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs">Unsubscribed</span>
+                              <span className="px-2 py-1 border border-red-600 text-red-700 rounded-full text-xs font-semibold bg-white">Unsubscribed</span>
                               <button
                                 onClick={() => handleResubscribe(customer.email)}
-                                className="text-xs text-brown-dark underline"
+                                className="text-xs text-brown-dark underline hover:text-brown font-semibold"
                               >
                                 Resubscribe
                               </button>
                             </span>
                           ) : (
-                            <span className="px-2 py-1 bg-green-100 text-green-600 rounded-full text-xs">Active</span>
+                            <span className="px-2 py-1 border border-green-600 text-green-700 rounded-full text-xs font-semibold bg-white">Active</span>
                           )}
                         </td>
                       </tr>
@@ -1353,14 +1353,14 @@ export default function AdminEmailMarketing() {
                       {unsubscribes
                         .filter((record) => record.unsubscribedAt)
                         .map((record) => (
-                          <tr key={record.token} className="border-b border-brown-light/30 hover:bg-pink-light/20">
-                            <td className="py-3 px-4 text-brown font-medium">{record.email}</td>
-                            <td className="py-3 px-4 text-brown">{record.name || '—'}</td>
-                            <td className="py-3 px-4 text-brown">{new Date(record.unsubscribedAt).toLocaleString()}</td>
-                            <td className="py-3 px-4 text-brown">
+                          <tr key={record.token} className="border-b border-brown-light/30 hover:bg-white">
+                            <td className="py-3 px-4 text-brown-dark font-medium">{record.email}</td>
+                            <td className="py-3 px-4 text-brown-dark">{record.name || '—'}</td>
+                            <td className="py-3 px-4 text-brown-dark">{new Date(record.unsubscribedAt).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-brown-dark">
                               <button
                                 onClick={() => handleResubscribe(record.email)}
-                                className="text-xs text-brown-dark underline"
+                                className="text-xs text-brown-dark underline hover:text-brown font-semibold"
                               >
                                 Resubscribe
                               </button>
@@ -1371,7 +1371,7 @@ export default function AdminEmailMarketing() {
                   </table>
                 </div>
               )}
-              <p className="text-xs text-gray-500">Every email automatically includes a personalized unsubscribe link to respect client preferences.</p>
+              <p className="text-xs text-brown">Every email automatically includes a personalized unsubscribe link to respect client preferences.</p>
             </div>
           )}
 
@@ -1380,12 +1380,12 @@ export default function AdminEmailMarketing() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-display text-brown-dark">Automated Drip Campaigns</h2>
-                  <p className="text-sm text-gray-600">Send timely sequences automatically based on client behavior.</p>
+                  <p className="text-sm text-brown">Send timely sequences automatically based on client behavior.</p>
                 </div>
                 <button
                   onClick={handleSaveDrips}
                   disabled={savingDrips}
-                  className="px-4 py-2 text-sm bg-brown-dark text-white rounded-lg hover:bg-brown disabled:opacity-50"
+                  className="px-0 py-2 text-sm text-gray-600 font-semibold hover:text-gray-900 hover:underline transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
                 >
                   {savingDrips ? 'Saving...' : 'Save Automations'}
                 </button>
@@ -1393,13 +1393,13 @@ export default function AdminEmailMarketing() {
 
               <div className="space-y-4">
                 {dripCampaigns.map((campaign, index) => (
-                  <div key={campaign.id} className="bg-white border-2 border-brown-light rounded-lg p-5">
+                  <div key={campaign.id} className="border-2 border-brown-light rounded-lg p-5 bg-white">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-lg font-semibold text-brown-dark">{campaign.name}</p>
-                        <p className="text-xs text-gray-500">Trigger: {campaign.trigger}</p>
+                        <p className="text-xs text-brown">Trigger: {campaign.trigger}</p>
                       </div>
-                      <label className="flex items-center gap-2 text-sm text-brown-dark">
+                      <label className="flex items-center gap-2 text-sm text-brown-dark font-semibold">
                         <input
                           type="checkbox"
                           checked={campaign.enabled}
@@ -1413,14 +1413,14 @@ export default function AdminEmailMarketing() {
                         Enabled
                       </label>
                     </div>
-                    <div className="mt-4 space-y-3 text-xs text-gray-700">
+                    <div className="mt-4 space-y-3 text-xs text-brown">
                       {campaign.emails
                         .slice()
                         .sort((a, b) => a.dayOffset - b.dayOffset)
                         .map((step, stepIndex) => (
-                          <div key={`${campaign.id}-step-${stepIndex}`} className="bg-pink-light/30 border border-brown-light rounded-lg p-3">
+                          <div key={`${campaign.id}-step-${stepIndex}`} className="border border-brown-light rounded-lg p-3 bg-white">
                             <p className="text-brown-dark font-semibold">Day {step.dayOffset}: {step.subject}</p>
-                            <div className="mt-2 bg-white border border-pink-light rounded-lg p-2 whitespace-pre-wrap">
+                            <div className="mt-2 border border-brown-light rounded-lg p-2 whitespace-pre-wrap bg-white">
                               {step.content}
                             </div>
                           </div>
@@ -1441,6 +1441,70 @@ export default function AdminEmailMarketing() {
         onCancel={handleCancelUnsaved}
         saving={sending}
       />
+
+      <style jsx global>{`
+        .email-editor .ql-toolbar {
+          background: white !important;
+          border-color: var(--color-primary-light);
+        }
+        .email-editor .ql-container {
+          background: white !important;
+          border-color: var(--color-primary-light);
+        }
+        .email-editor .ql-toolbar button {
+          background: white !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        .email-editor .ql-toolbar button:hover,
+        .email-editor .ql-toolbar button:focus,
+        .email-editor .ql-toolbar button.ql-active {
+          background: white !important;
+          border: none !important;
+          box-shadow: none !important;
+          color: #333 !important;
+        }
+        .email-editor .ql-toolbar .ql-stroke {
+          stroke: #333 !important;
+        }
+        .email-editor .ql-toolbar .ql-fill {
+          fill: #333 !important;
+        }
+        .email-editor .ql-toolbar button:hover .ql-stroke,
+        .email-editor .ql-toolbar button.ql-active .ql-stroke {
+          stroke: #000 !important;
+        }
+        .email-editor .ql-toolbar button:hover .ql-fill,
+        .email-editor .ql-toolbar button.ql-active .ql-fill {
+          fill: #000 !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-label {
+          background: white !important;
+          border: none !important;
+          color: #333 !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-label:hover {
+          background: white !important;
+          color: #000 !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-options {
+          background: white !important;
+          border: 1px solid #ddd !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-item {
+          background: white !important;
+          color: #333 !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-item:hover {
+          background: #f5f5f5 !important;
+          color: #000 !important;
+        }
+        .email-editor .ql-toolbar .ql-picker-item.ql-selected {
+          background: #f0f0f0 !important;
+          color: #000 !important;
+        }
+      `}</style>
     </div>
   )
 }

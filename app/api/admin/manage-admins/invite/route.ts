@@ -4,6 +4,7 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { generateInviteToken, hashInviteToken } from '@/lib/password-utils'
 import { requireOwnerAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
+import { formatEmailSubject } from '@/lib/email-subject-utils'
 
 interface Admin {
   id: string
@@ -87,7 +88,7 @@ async function sendInviteEmail(invite: AdminInvite, token: string, request: Next
     return { sent: false, error: 'Email service not configured' }
   }
 
-  const subject = `You have been invited to manage Lash Diary`
+  const subject = formatEmailSubject(`You have been invited to manage Lash Diary`)
   const emailHtml = `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #fdf8f9; padding: 32px 0;">
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation">

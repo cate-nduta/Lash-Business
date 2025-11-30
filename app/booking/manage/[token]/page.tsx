@@ -26,7 +26,6 @@ type ManageBookingResponse = {
     canCancel: boolean
     canReschedule: boolean
     canManage: boolean
-    canTransfer?: boolean
     lastClientManageActionAt?: string | null
   }
 }
@@ -52,14 +51,10 @@ export default function ManageBookingPage() {
   const [rescheduleSlots, setRescheduleSlots] = useState<AvailableSlot[]>([])
   const [rescheduleSlot, setRescheduleSlot] = useState<string>('')
   const [rescheduleLoadingSlots, setRescheduleLoadingSlots] = useState(false)
-  const [transferMode, setTransferMode] = useState(false)
-  const [transferName, setTransferName] = useState('')
-  const [transferEmail, setTransferEmail] = useState('')
-  const [transferPhone, setTransferPhone] = useState('')
-  const [transferDate, setTransferDate] = useState<string>('')
-  const [transferSlots, setTransferSlots] = useState<AvailableSlot[]>([])
-  const [transferSlot, setTransferSlot] = useState<string>('')
-  const [transferLoadingSlots, setTransferLoadingSlots] = useState(false)
+  const [serviceChangeMode, setServiceChangeMode] = useState(false)
+  const [availableServices, setAvailableServices] = useState<Array<{ name: string; price: number }>>([])
+  const [selectedNewService, setSelectedNewService] = useState<string>('')
+  const [loadingServices, setLoadingServices] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -84,13 +79,8 @@ export default function ManageBookingPage() {
           setRescheduleSlots([])
           setRescheduleSlot('')
           setRescheduleMode(false)
-          setTransferMode(false)
-          setTransferName('')
-          setTransferEmail('')
-          setTransferPhone('')
-          setTransferDate('')
-          setTransferSlots([])
-          setTransferSlot('')
+          setServiceChangeMode(false)
+          setSelectedNewService('')
         }
       } catch (err: any) {
         if (!isMounted) return
@@ -159,6 +149,42 @@ export default function ManageBookingPage() {
     }
   }
 
+  const loadAvailableServices = async () => {
+    setLoadingServices(true)
+    try {
+      const response = await fetch('/api/services', { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error('Could not load services.')
+      }
+      const data = await response.json()
+      const services: Array<{ name: string; price: number }> = []
+      
+      if (Array.isArray(data.categories)) {
+        data.categories.forEach((category: any) => {
+          if (Array.isArray(category.services)) {
+            category.services.forEach((service: any) => {
+              if (service.name && service.name !== booking?.service) {
+                services.push({
+                  name: service.name,
+                  price: service.price || 0,
+                })
+              }
+            })
+          }
+        })
+      }
+      
+      setAvailableServices(services)
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Unable to load available services.',
+      })
+    } finally {
+      setLoadingServices(false)
+    }
+  }
+
   const handleReschedule = async () => {
     if (!booking || !token) return
     if (!rescheduleDate) {
@@ -191,7 +217,7 @@ export default function ManageBookingPage() {
       setRescheduleDate('')
       setRescheduleSlots([])
       setRescheduleSlot('')
-      setFeedback({ type: 'success', message: 'Your appointment has been rescheduled successfully.' })
+      setFeedback({ type: 'success', message: 'Your appointment has been rescheduled successfully. A confirmation email has been sent.' })
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -202,73 +228,45 @@ export default function ManageBookingPage() {
     }
   }
 
-  const handleTransfer = async () => {
+  const handleServiceChange = async () => {
     if (!booking || !token) return
-    if (!transferName.trim()) {
-      setFeedback({ type: 'error', message: 'Add the guest’s full name.' })
-      return
-    }
-    if (!transferEmail.trim() || !transferEmail.includes('@')) {
-      setFeedback({ type: 'error', message: 'Add a valid email for the new guest.' })
-      return
-    }
-    if (!transferPhone.trim() || transferPhone.trim().length < 7) {
-      setFeedback({ type: 'error', message: 'Add a contact phone number for the new guest.' })
+    if (!selectedNewService) {
+      setFeedback({ type: 'error', message: 'Please select a new service.' })
       return
     }
 
     setSaving(true)
     setFeedback(null)
     try {
-      const payload: Record<string, string> = {
-        action: 'transfer',
-        newName: transferName.trim(),
-        newEmail: transferEmail.trim(),
-        newPhone: transferPhone.trim(),
-      }
-      if (transferDate) {
-        payload.newDate = transferDate
-      }
-      if (transferSlot) {
-        payload.newTimeSlot = transferSlot
-      }
-
       const response = await fetch(`/api/booking/manage/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          action: 'change-service',
+          newService: selectedNewService,
+        }),
       })
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'We could not transfer this appointment.')
+        throw new Error(data.error || 'We could not change your service.')
       }
-      const guestName = transferName.trim() || 'The new guest'
       setBooking(data.booking)
-      setTransferMode(false)
-      setTransferName('')
-      setTransferEmail('')
-      setTransferPhone('')
-      setTransferDate('')
-      setTransferSlots([])
-      setTransferSlot('')
-      const emailSent = data?.emailSent === true
-      setFeedback({
-        type: emailSent ? 'success' : 'error',
-        message: emailSent
-          ? `${guestName} now has the confirmation email with all the appointment details.`
-          : `The booking was transferred, but the confirmation email did not send. Please forward the details manually.${
-              data?.emailError ? ` (${data.emailError})` : ''
-            }`,
+      setServiceChangeMode(false)
+      setSelectedNewService('')
+      setFeedback({ 
+        type: 'success', 
+        message: 'Your service has been changed successfully. A confirmation email has been sent.' 
       })
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err.message || 'We could not transfer this appointment. Please contact the studio.',
+        message: err.message || 'We could not change your service. Please contact the studio.',
       })
     } finally {
       setSaving(false)
     }
   }
+
 
   if (loading) {
     return (
@@ -319,8 +317,7 @@ export default function ManageBookingPage() {
           </div>
 
           <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs sm:text-sm text-orange-900">
-            Deposits are non-refundable. Reschedule or transfer your appointment up to 24 hours before your start time,
-            or invite a friend to enjoy the slot for you.
+            Deposits are strictly for securing your booking and cannot be refunded under any circumstance. Reschedule your appointment up to 24 hours before your start time.
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -335,7 +332,7 @@ export default function ManageBookingPage() {
                 {booking.deposit ? `KSH ${booking.deposit.toLocaleString()}` : 'No deposit on file'}
               </p>
               <p className="text-xs text-brown mt-1">
-                Deposits secure your spot and stay on file even if you cancel—reschedule or transfer your booking instead.
+                Deposits secure your spot and stay on file even if you cancel—reschedule your booking instead.
               </p>
             </div>
           </div>
@@ -352,13 +349,13 @@ export default function ManageBookingPage() {
 
           {isWithin24Hours ? (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-900">
-              You’re inside the 24-hour window. Online transfers or reschedules are paused so we can keep the studio
-              running smoothly. Please call or text LashDiary and we’ll help you personally.
+              You're inside the 24-hour window. Online reschedules are paused so we can keep the studio
+              running smoothly. Please call or text LashDiary and we'll help you personally.
             </div>
           ) : isWithinWindow ? (
             <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
-              You’re inside the {booking.cancellationPolicyHours}-hour policy window. Deposits stay on file, and you can
-              reschedule or transfer this appointment up until 24 hours before your start time.
+              You're inside the {booking.cancellationPolicyHours}-hour policy window. Deposits stay on file, and you can
+              reschedule this appointment up until 24 hours before your start time.
             </div>
           ) : null}
 
@@ -373,7 +370,7 @@ export default function ManageBookingPage() {
               disabled={!booking.canReschedule || saving}
               onClick={() => {
                 setRescheduleMode((prev) => !prev)
-                setTransferMode(false)
+                setServiceChangeMode(false)
               }}
               className={`inline-flex justify-center items-center px-5 py-3 rounded-full text-sm font-semibold border transition-colors ${
                 booking.canReschedule
@@ -384,18 +381,23 @@ export default function ManageBookingPage() {
               {rescheduleMode ? 'Close reschedule options' : 'Reschedule appointment'}
             </button>
             <button
-              disabled={!(booking.canTransfer ?? booking.canReschedule) || saving}
+              disabled={!booking.canReschedule || saving}
               onClick={() => {
-                setTransferMode((prev) => !prev)
+                setServiceChangeMode((prev) => {
+                  if (!prev) {
+                    loadAvailableServices()
+                  }
+                  return !prev
+                })
                 setRescheduleMode(false)
               }}
               className={`inline-flex justify-center items-center px-5 py-3 rounded-full text-sm font-semibold border transition-colors ${
-                booking.canTransfer ?? booking.canReschedule
+                booking.canReschedule
                   ? 'border-brown-dark text-brown-dark hover:bg-brown-dark hover:text-white'
                   : 'border-gray-300 text-gray-400 cursor-not-allowed'
               }`}
             >
-              {transferMode ? 'Close transfer form' : 'Transfer to a friend'}
+              {serviceChangeMode ? 'Close service change' : 'Change service'}
             </button>
           </div>
 
@@ -459,107 +461,72 @@ export default function ManageBookingPage() {
             </div>
           )}
 
-          {transferMode && (booking.canTransfer ?? booking.canReschedule) && (
+          {serviceChangeMode && booking.canReschedule && (
             <div className="rounded-3xl border border-brown-light/40 bg-white/80 px-5 py-6 space-y-4 shadow-inner">
-              <h2 className="text-xl font-display text-brown-dark">Transfer to another guest</h2>
+              <h2 className="text-xl font-display text-brown-dark">Change your service</h2>
               <p className="text-sm text-brown">
-                We’ll update the booking, send the new guest their confirmation, and keep your deposit on file under
-                their name.
+                You can change your service type (e.g., from Hybrid to Classic) up to 24 hours before your appointment.
               </p>
-              <p className="text-xs text-brown-dark/70">
-                Keeping the same slot? Leave the date and time empty and we’ll keep your current appointment on{' '}
-                <span className="font-semibold text-brown-dark">{formattedDate || 'the scheduled date'}</span>.
+              <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                ⚠️ Service changes are only available more than 24 hours before your appointment time.
               </p>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="flex flex-col gap-2 sm:col-span-1">
-                  <span className="text-sm font-medium text-brown-dark">Guest name</span>
+              <div className="space-y-3">
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-brown-dark">Current service</span>
                   <input
                     type="text"
-                    value={transferName}
-                    onChange={(event) => setTransferName(event.target.value)}
-                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
-                    placeholder="Full name"
-                    disabled={saving}
+                    value={booking.service || 'Not specified'}
+                    disabled
+                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark bg-gray-50"
                   />
                 </label>
-                <label className="flex flex-col gap-2 sm:col-span-1">
-                  <span className="text-sm font-medium text-brown-dark">Guest email</span>
-                  <input
-                    type="email"
-                    value={transferEmail}
-                    onChange={(event) => setTransferEmail(event.target.value)}
-                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
-                    placeholder="guest@email.com"
-                    disabled={saving}
-                  />
-                </label>
-                <label className="flex flex-col gap-2 sm:col-span-1">
-                  <span className="text-sm font-medium text-brown-dark">Guest phone</span>
-                  <input
-                    type="tel"
-                    value={transferPhone}
-                    onChange={(event) => setTransferPhone(event.target.value)}
-                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
-                    placeholder="e.g. +254..."
-                    disabled={saving}
-                  />
-                </label>
-              </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-brown-dark">New date</span>
-                  <input
-                    type="date"
-                    value={transferDate}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      setTransferDate(value)
-                      if (value) {
-                        loadSlotsFor(value, setTransferSlots, setTransferSlot, setTransferLoadingSlots)
-                      } else {
-                        setTransferSlots([])
-                        setTransferSlot('')
-                      }
-                    }}
-                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
-                    min={new Date().toISOString().split('T')[0]}
-                    disabled={transferLoadingSlots || saving}
-                  />
-                </label>
-                <label className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-brown-dark">Available time</span>
-                  <select
-                    value={transferSlot}
-                    onChange={(event) => setTransferSlot(event.target.value)}
-                    disabled={transferLoadingSlots || transferSlots.length === 0 || saving}
-                    className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
-                  >
-                    <option value="">{transferLoadingSlots ? 'Loading slots…' : 'Select a time'}</option>
-                    {transferSlots.map((slot) => (
-                      <option key={slot.value} value={slot.value}>
-                        {slot.label}
-                      </option>
-                    ))}
-                  </select>
-                  {transferDate && !transferLoadingSlots && transferSlots.length === 0 && (
-                    <p className="text-xs text-brown">No open times for that day. Try another date.</p>
+                  <span className="text-sm font-medium text-brown-dark">New service</span>
+                  {loadingServices ? (
+                    <div className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark bg-gray-50">
+                      Loading services…
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedNewService}
+                      onChange={(event) => {
+                        setSelectedNewService(event.target.value)
+                      }}
+                      disabled={saving || availableServices.length === 0}
+                      className="rounded-xl border border-brown-light px-3 py-2 text-brown-dark focus:outline-none focus:ring-2 focus:ring-brown-dark/40"
+                    >
+                      <option value="">Select a service</option>
+                      {availableServices.map((service) => (
+                        <option key={service.name} value={service.name}>
+                          {service.name} - KSH {service.price.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {availableServices.length === 0 && !loadingServices && (
+                    <p className="text-xs text-brown">No other services available at this time.</p>
                   )}
                 </label>
+
+                {selectedNewService && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                    <p className="text-sm font-semibold text-blue-900">Service Change Summary</p>
+                    <p className="text-xs text-blue-800 mt-1">
+                      Your existing deposit and any discounts will be applied to the new service price.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button
-                onClick={handleTransfer}
-                disabled={saving}
-                className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-brown-dark text-white font-semibold shadow-soft hover:shadow-lg transition"
+                onClick={handleServiceChange}
+                disabled={saving || !selectedNewService}
+                className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-brown-dark text-white font-semibold shadow-soft hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Transferring…' : 'Confirm transfer'}
+                {saving ? 'Changing service…' : 'Confirm service change'}
               </button>
-
-              <p className="text-xs text-brown mt-2">
-                We’ll email {transferEmail || 'your guest'} the full booking details and a link to manage the appointment if they need to adjust anything.
-              </p>
             </div>
           )}
 

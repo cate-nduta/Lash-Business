@@ -76,7 +76,9 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 NEXT_PUBLIC_STUDIO_LOCATION="LashDiary Studio, Nairobi, Kenya"
 
 # Base URL (for production, use your domain)
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=https://lashdiary.co.ke
+# For local development, use: NEXT_PUBLIC_BASE_URL=http://localhost:3000
+
 ```
 
 **Important Notes:**

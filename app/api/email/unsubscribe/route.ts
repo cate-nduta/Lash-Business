@@ -7,6 +7,15 @@ interface UnsubscribeRecord {
   reason?: string
   token: string
   unsubscribedAt: string
+  originallyUnsubscribedAt?: string // Track when they first unsubscribed (permanent)
+}
+
+interface ManualSubscriber {
+  email: string
+  name?: string
+  source?: string
+  createdAt?: string
+  promoCode?: string
 }
 
 async function loadUnsubscribes(): Promise<UnsubscribeRecord[]> {
@@ -43,6 +52,7 @@ export async function GET(request: NextRequest) {
     email: record.email,
     name: record.name,
     unsubscribedAt: record.unsubscribedAt,
+    originallyUnsubscribedAt: record.originallyUnsubscribedAt,
   })
 }
 
@@ -65,12 +75,71 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 })
   }
 
+  const record = unsubscribes[index]
+  const normalizedEmail = record.email.toLowerCase().trim()
+
   if (action === 'resubscribe') {
+    // Allow resubscription, but keep the original unsubscribed timestamp
+    // so they still can't get first-time client discounts
     unsubscribes[index].unsubscribedAt = ''
     unsubscribes[index].reason = undefined
+    // Keep originallyUnsubscribedAt - don't clear it! This prevents first-time discounts
+    
+    // Add back to subscribers database (but they won't get first-time discounts)
+    try {
+      const subscribersData = await readDataFile<{ subscribers: ManualSubscriber[] }>(
+        'email-subscribers.json',
+        { subscribers: [] }
+      )
+      
+      // Check if already in subscribers list
+      const alreadySubscribed = subscribersData.subscribers.some(
+        (sub) => sub.email.toLowerCase() === normalizedEmail
+      )
+      
+      if (!alreadySubscribed) {
+        // Add back to subscribers
+        subscribersData.subscribers.push({
+          email: normalizedEmail,
+          name: record.name,
+          source: 'resubscribe',
+          createdAt: new Date().toISOString(),
+        })
+        
+        await writeDataFile('email-subscribers.json', subscribersData)
+      }
+    } catch (error) {
+      console.error('Error adding subscriber back to database:', error)
+      // Continue even if addition fails
+    }
   } else {
-    unsubscribes[index].unsubscribedAt = new Date().toISOString()
+    // Unsubscribe action
+    const unsubscribeTimestamp = new Date().toISOString()
+    unsubscribes[index].unsubscribedAt = unsubscribeTimestamp
     unsubscribes[index].reason = reason
+    
+    // Mark the original unsubscribe timestamp if this is their first time unsubscribing
+    if (!unsubscribes[index].originallyUnsubscribedAt) {
+      unsubscribes[index].originallyUnsubscribedAt = unsubscribeTimestamp
+    }
+
+    // Remove email from active subscribers database
+    try {
+      const subscribersData = await readDataFile<{ subscribers: ManualSubscriber[] }>(
+        'email-subscribers.json',
+        { subscribers: [] }
+      )
+      
+      // Remove from subscribers list
+      subscribersData.subscribers = subscribersData.subscribers.filter(
+        (sub) => sub.email.toLowerCase() !== normalizedEmail
+      )
+      
+      await writeDataFile('email-subscribers.json', subscribersData)
+    } catch (error) {
+      console.error('Error removing subscriber from database:', error)
+      // Continue even if removal fails
+    }
   }
 
   await saveUnsubscribes(unsubscribes)

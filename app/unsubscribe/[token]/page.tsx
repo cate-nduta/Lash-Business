@@ -85,7 +85,15 @@ export default function UnsubscribePage({ params }: { params: { token: string } 
 
         {status === 'unsubscribed' && (
           <div className="space-y-4">
-            <p className="text-brown font-semibold">You have been unsubscribed from future emails.</p>
+            <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+              <p className="text-green-800 font-semibold mb-2">✓ Successfully Unsubscribed</p>
+              <p className="text-green-700 text-sm">
+                You have been removed from our email list and will no longer receive emails from us.
+              </p>
+            </div>
+            <p className="text-brown text-sm">
+              Your email has been removed from our subscriber database. We respect your inbox and won't send you any more emails.
+            </p>
             <button
               onClick={handleResubscribe}
               className="px-5 py-3 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors font-semibold"

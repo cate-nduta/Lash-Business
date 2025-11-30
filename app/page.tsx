@@ -4,8 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useInView } from 'react-intersection-observer'
-
-export const dynamic = 'force-dynamic'
+import NewsletterPopup from '@/components/NewsletterPopup'
 
 interface HomepageData {
   hero: {
@@ -39,6 +38,28 @@ interface HomepageData {
     description: string
     images: string[]
   }
+  tsubokiMassage?: {
+    enabled?: boolean
+    badge?: string
+    title?: string
+    subtitle?: string
+    description?: string
+    benefits?: string[]
+    whyItMatters?: string
+    backgroundImage?: string
+  }
+  countdownBanner?: {
+    enabled?: boolean
+    eyebrow?: string
+    title?: string
+    message?: string
+    eventDate?: string
+    buttonText?: string
+    buttonUrl?: string
+  }
+  giftCardSection?: {
+    enabled?: boolean
+  }
   cta: {
     title: string
     description: string
@@ -66,6 +87,13 @@ export default function Home() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [loading, setLoading] = useState(true)
   const [fridaySlotsActivated, setFridaySlotsActivated] = useState(false)
+  const [countdownState, setCountdownState] = useState({
+    days: '00',
+    hours: '00',
+    minutes: '00',
+    seconds: '00',
+    expired: false,
+  })
 
   useEffect(() => {
     const timestamp = Date.now()
@@ -144,6 +172,136 @@ export default function Home() {
     description: '',
     buttonText: '',
   }, [homepageData?.cta])
+  const tsubokiMassage = useMemo(() => {
+    const data = homepageData?.tsubokiMassage
+    if (!data) {
+      return {
+        enabled: false,
+        badge: '',
+        title: '',
+        subtitle: '',
+        description: '',
+        benefits: [],
+      whyItMatters: '',
+      backgroundImage: '',
+      }
+    }
+    return {
+      enabled: data.enabled !== false,
+      badge: data.badge ?? '',
+      title: data.title ?? '',
+      subtitle: data.subtitle ?? '',
+      description: data.description ?? '',
+      benefits: Array.isArray(data.benefits) ? data.benefits : [],
+    whyItMatters: data.whyItMatters ?? '',
+    backgroundImage: data.backgroundImage ?? '',
+    }
+  }, [homepageData?.tsubokiMassage])
+
+  const countdownBanner = useMemo(() => {
+    if (!homepageData?.countdownBanner) return null
+    const banner = homepageData.countdownBanner
+    if (!banner.eventDate) {
+      return {
+        ...banner,
+        enabled: false,
+        eventDate: '',
+      }
+    }
+    return {
+      enabled: banner.enabled !== false,
+      eyebrow: banner.eyebrow ?? '',
+      title: banner.title ?? '',
+      message: banner.message ?? '',
+      eventDate: banner.eventDate,
+      buttonText: banner.buttonText ?? '',
+      buttonUrl: banner.buttonUrl ?? '',
+    }
+  }, [homepageData?.countdownBanner])
+
+  const giftCardSection = useMemo(() => {
+    return {
+      enabled: homepageData?.giftCardSection?.enabled !== false,
+    }
+  }, [homepageData?.giftCardSection])
+
+  useEffect(() => {
+    if (!countdownBanner?.enabled || !countdownBanner.eventDate) {
+      setCountdownState({
+        days: '00',
+        hours: '00',
+        minutes: '00',
+        seconds: '00',
+        expired: false,
+      })
+      return
+    }
+
+    const updateTimer = () => {
+      const target = new Date(countdownBanner.eventDate).getTime()
+      if (Number.isNaN(target)) {
+        setCountdownState({
+          days: '00',
+          hours: '00',
+          minutes: '00',
+          seconds: '00',
+          expired: true,
+        })
+        return
+      }
+      const diff = target - Date.now()
+      if (diff <= 0) {
+        setCountdownState({
+          days: '00',
+          hours: '00',
+          minutes: '00',
+          seconds: '00',
+          expired: true,
+        })
+        return
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+      setCountdownState({
+        days: String(days).padStart(2, '0'),
+        hours: String(hours).padStart(2, '0'),
+        minutes: String(minutes).padStart(2, '0'),
+        seconds: String(seconds).padStart(2, '0'),
+        expired: false,
+      })
+    }
+
+    updateTimer()
+    const interval = window.setInterval(updateTimer, 1000)
+    return () => window.clearInterval(interval)
+  }, [countdownBanner?.enabled, countdownBanner?.eventDate])
+
+  // Gift Card Form state
+  const [giftCardName, setGiftCardName] = useState('')
+  const [giftCardEmail, setGiftCardEmail] = useState('')
+
+  const handleGiftCardSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (giftCardName && giftCardEmail) {
+      // Get the secret token from environment or use default
+      const token = process.env.NEXT_PUBLIC_GIFT_CARD_SECRET_TOKEN || 'gift-card-secret-2024'
+      window.location.href = `/gift-cards?token=${token}&name=${encodeURIComponent(giftCardName)}&email=${encodeURIComponent(giftCardEmail)}`
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-brown text-lg">Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
@@ -197,8 +355,65 @@ export default function Home() {
               {hero.subtitle}
             </p>
           )}
+          {countdownBanner?.enabled && countdownBanner.eventDate && (
+            <div className="w-full max-w-2xl mx-auto mb-8 mt-6 px-4">
+              <div className="rounded-2xl border border-[var(--color-primary)]/30 bg-[var(--color-surface)]/80 backdrop-blur-xl shadow-xl px-5 py-4 text-center space-y-3">
+                {countdownBanner.eyebrow && (
+                  <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-[var(--color-text)]/70">
+                    {countdownBanner.eyebrow}
+                  </p>
+                )}
+                {countdownBanner.title && (
+                  <p className="text-lg sm:text-xl font-display text-[var(--color-text)]">
+                    {countdownBanner.title}
+                  </p>
+                )}
+                {countdownBanner.message && (
+                  <p className="text-xs sm:text-sm text-[var(--color-text)]/70">
+                    {countdownBanner.message}
+                  </p>
+                )}
+                {!countdownState.expired ? (
+                  <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                    {[
+                      { label: 'Days', value: countdownState.days },
+                      { label: 'Hours', value: countdownState.hours },
+                      { label: 'Mins', value: countdownState.minutes },
+                      { label: 'Secs', value: countdownState.seconds },
+                    ].map((unit) => (
+                      <div
+                        key={unit.label}
+                        className="rounded-xl bg-[var(--color-primary)] text-[var(--color-on-primary)] py-2 sm:py-3 px-2 border border-[var(--color-primary-dark)]/30"
+                      >
+                        <p className="text-lg sm:text-2xl font-display font-semibold">{unit.value}</p>
+                        <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.25em]">{unit.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--color-text)]/70">Countdown finished — tap below to see what’s new.</p>
+                )}
+                {countdownBanner.buttonText && countdownBanner.buttonUrl && (
+                  <div>
+                    <a
+                      href={countdownBanner.buttonUrl}
+                      target={countdownBanner.buttonUrl.startsWith('/') ? '_self' : '_blank'}
+                      rel={countdownBanner.buttonUrl.startsWith('/') ? undefined : 'noreferrer'}
+                      className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm px-4 py-2 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow hover:bg-[var(--color-primary-dark)] transition-colors"
+                    >
+                      {countdownBanner.buttonText}
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {hero.highlight && (
-            <div className="mb-8 inline-flex flex-wrap items-center justify-center gap-2 bg-[var(--color-surface)]/60 backdrop-blur-lg border border-[var(--color-primary)]/30 rounded-full px-6 py-3 shadow-lg">
+            <div
+              className={`mb-8 inline-flex flex-wrap items-center justify-center gap-2 bg-[var(--color-surface)]/60 backdrop-blur-lg border border-[var(--color-primary)]/30 rounded-full px-6 py-3 shadow-lg ${
+                countdownBanner?.enabled && countdownBanner.eventDate ? 'mt-6' : ''
+              }`}
+            >
               <span className="text-sm md:text-base font-semibold uppercase tracking-[0.2em] text-[var(--color-text)]/85">
                 {hero.highlight}
               </span>
@@ -328,7 +543,7 @@ export default function Home() {
             <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14">
               Why Choose LashDiary?
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8 lg:gap-10">
               {features.map((feature, index) => (
               <div
                 key={index}
@@ -357,6 +572,166 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
+
+      {/* Buy a Gift Card Section */}
+      {giftCardSection.enabled && (
+      <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[color-mix(in srgb,var(--color-secondary)_25%,var(--color-surface)_75%)] via-[color-mix(in srgb,var(--color-surface)_90%,var(--color-background)_10%)] to-[color-mix(in srgb,var(--color-background)_85%,var(--color-surface)_15%)]" />
+        <div className="relative max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30 text-sm font-medium text-[var(--color-text)] mb-6">
+              <span>🎁</span>
+              <span>Gift the Gift of Lashes</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-display text-[var(--color-text)] mb-6">
+              Buy a Gift Card
+            </h2>
+            <p className="text-lg text-[var(--color-text)]/80 max-w-2xl mx-auto">
+              Perfect for birthdays, holidays, or just because! Give someone special the gift of beautiful lashes.
+            </p>
+          </div>
+
+          <div className="bg-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] rounded-3xl shadow-xl border-2 border-[var(--color-primary)]/20 p-8 md:p-10">
+            <form onSubmit={handleGiftCardSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="gift-card-name" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
+                  Your Name *
+                </label>
+                <input
+                  type="text"
+                  id="gift-card-name"
+                  value={giftCardName}
+                  onChange={(e) => setGiftCardName(e.target.value)}
+                  required
+                  placeholder="Enter your name"
+                  className="w-full px-4 py-3 border-2 border-[var(--color-primary)]/30 rounded-xl focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] text-[var(--color-text)] bg-white"
+                />
+              </div>
+              <div>
+                <label htmlFor="gift-card-email" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
+                  Your Email *
+                </label>
+                <input
+                  type="email"
+                  id="gift-card-email"
+                  value={giftCardEmail}
+                  onChange={(e) => setGiftCardEmail(e.target.value)}
+                  required
+                  placeholder="your.email@example.com"
+                  className="w-full px-4 py-3 border-2 border-[var(--color-primary)]/30 rounded-xl focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] text-[var(--color-text)] bg-white"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full px-6 py-4 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white rounded-xl font-semibold text-lg transition-colors shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300"
+              >
+                Continue to Gift Cards →
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {/* Japanese Facial Massage Section */}
+      {tsubokiMassage.enabled && (
+        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_55%)] opacity-60" />
+          <div className="relative max-w-6xl mx-auto bg-white/85 border border-[var(--color-primary)]/20 rounded-3xl shadow-soft overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-5">
+              <div
+                className={`col-span-1 lg:col-span-2 rounded-3xl lg:rounded-[32px] p-8 sm:p-10 flex flex-col gap-4 justify-center ${
+                  tsubokiMassage.backgroundImage
+                    ? 'relative overflow-hidden text-white'
+                    : 'bg-[color-mix(in_srgb,var(--color-primary)_12%,var(--color-surface))] text-[var(--color-text)]'
+                }`}
+              >
+                {tsubokiMassage.backgroundImage && (
+                  <>
+                    <div
+                      className="absolute inset-0 -z-10"
+                      style={{
+                        backgroundImage: `linear-gradient(135deg, rgba(0,0,0,0.6), rgba(0,0,0,0.25)), url('${tsubokiMassage.backgroundImage}')`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }}
+                    />
+                    <div className="absolute inset-0 -z-10 bg-white/10 mix-blend-lighten" />
+                    <div className="absolute inset-0 pointer-events-none -z-10 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_60%)]" />
+                  </>
+                )}
+                {tsubokiMassage.badge && (
+                  <span
+                    className={`inline-flex items-center gap-2 text-xs font-semibold tracking-[0.35em] uppercase px-4 py-2 rounded-full w-fit ${
+                      tsubokiMassage.backgroundImage
+                        ? 'text-white bg-white/10 border border-white/30'
+                        : 'text-[var(--color-on-primary)]/80 bg-[var(--color-primary)]/60'
+                    }`}
+                  >
+                    ✨ {tsubokiMassage.badge}
+                  </span>
+                )}
+                {tsubokiMassage.title && (
+                  <h2
+                    className={`text-3xl sm:text-4xl font-display ${
+                      tsubokiMassage.backgroundImage ? 'text-white drop-shadow' : 'text-[var(--color-text)]'
+                    }`}
+                  >
+                    {tsubokiMassage.title}
+                  </h2>
+                )}
+                {tsubokiMassage.subtitle && (
+                  <p
+                    className={`text-base sm:text-lg ${
+                      tsubokiMassage.backgroundImage ? 'text-white/85' : 'text-[var(--color-text)]/85'
+                    }`}
+                  >
+                    {tsubokiMassage.subtitle}
+                  </p>
+                )}
+                {!tsubokiMassage.subtitle && tsubokiMassage.backgroundImage && (
+                  <p className="text-base sm:text-lg text-white/80">
+                    Complimentary ritual with every lash set for deeper relaxation.
+                  </p>
+                )}
+              </div>
+              <div className="col-span-1 lg:col-span-3 p-8 sm:p-12 space-y-6">
+                {tsubokiMassage.description && (
+                  <p className="text-lg text-[var(--color-text)]/85 leading-relaxed">
+                    {tsubokiMassage.description}
+                  </p>
+                )}
+                {tsubokiMassage.benefits && tsubokiMassage.benefits.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold tracking-[0.3em] uppercase text-[var(--color-text)]/60">
+                      Why you&apos;ll love it
+                    </h3>
+                    <ul className="space-y-3">
+                      {tsubokiMassage.benefits.map((benefit, index) => (
+                        <li
+                          key={`${benefit}-${index}`}
+                          className="flex items-start gap-3 text-[var(--color-text)]/85"
+                        >
+                          <span className="text-lg">🌸</span>
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {tsubokiMassage.whyItMatters && (
+                  <div className="rounded-2xl border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-5 text-[var(--color-text)]/85">
+                    <p className="text-sm font-semibold tracking-[0.2em] uppercase text-[var(--color-text)]/60 mb-2">
+                      Why it matters
+                    </p>
+                    <p>{tsubokiMassage.whyItMatters}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Our Studio Section */}
@@ -508,6 +883,40 @@ export default function Home() {
         </section>
       )}
 
+      {/* FAQ Link Section */}
+      <section className="relative py-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          <Link
+            href="/policies#faq"
+            className="group block relative overflow-hidden rounded-3xl bg-gradient-to-br from-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] to-[color-mix(in srgb,var(--color-surface)_88%,var(--color-primary)_12%)] border-2 border-[var(--color-primary)]/20 shadow-soft hover:shadow-soft-lg transition-all duration-300 hover:border-[var(--color-primary)]/40 hover-lift p-8 sm:p-10"
+          >
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
+            <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <div className="sticker-sparkle"></div>
+            </div>
+            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="flex-1 text-center sm:text-left">
+                <div className="inline-flex items-center gap-2 mb-3">
+                  <span className="text-2xl">💭</span>
+                  <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300">
+                    Frequently Asked Questions
+                  </h3>
+                </div>
+                <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
+                  Have questions? We&apos;ve got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
+                  <span>View FAQs</span>
+                  <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* CTA Section */}
       {(cta.title || cta.description || cta.buttonText) && (
         <section className="relative py-24 px-4 sm:px-6 lg:px-8">
@@ -548,6 +957,9 @@ export default function Home() {
         </div>
       </section>
       )}
+      
+      {/* Newsletter Popup - Only shows on homepage, once per visitor */}
+      <NewsletterPopup />
     </div>
   )
 }

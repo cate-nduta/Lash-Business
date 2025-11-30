@@ -85,6 +85,15 @@ export default function AdminShop() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [replacingImageId, setReplacingImageId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products')
+  const [showProductAnnouncementModal, setShowProductAnnouncementModal] = useState(false)
+  const [newlyAddedProduct, setNewlyAddedProduct] = useState<Product | null>(null)
+  const [announcementData, setAnnouncementData] = useState({
+    subject: '',
+    header: '',
+    benefits: [''] as string[],
+    body: '',
+  })
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
 
   const hasUnsavedChanges = useMemo(
     () => JSON.stringify(shop) !== JSON.stringify(originalShop),
@@ -427,6 +436,7 @@ export default function AdminShop() {
         uploadedImageUrls.push(data.url)
       }
 
+      const now = new Date().toISOString()
       const newProduct: Product = {
         id: generateId(),
         name,
@@ -435,6 +445,8 @@ export default function AdminShop() {
         quantity,
         imageUrl: uploadedImageUrls[0],
         images: uploadedImageUrls.slice(0, MAX_PRODUCT_IMAGES),
+        createdAt: now,
+        updatedAt: now,
       }
 
       const updatedShop: ShopState = {
@@ -457,12 +469,33 @@ export default function AdminShop() {
         throw new Error(saveData.error || 'Failed to publish product')
       }
 
-      setShop(updatedShop)
-      setOriginalShop(updatedShop)
+      // Reload shop data to ensure we have the latest state
+      const reloadResponse = await fetch('/api/admin/shop', {
+        credentials: 'include',
+      })
+      if (reloadResponse.ok) {
+        const reloadData = await reloadResponse.json()
+        setShop(reloadData)
+        setOriginalShop(reloadData)
+      } else {
+        setShop(updatedShop)
+        setOriginalShop(updatedShop)
+      }
+      
       setMessage({
         type: 'success',
         text: 'Product uploaded and is now visible in the shop.',
       })
+      
+      // Show product announcement modal
+      setNewlyAddedProduct(newProduct)
+      setAnnouncementData({
+        subject: `Say hello to something new… ✨ ${newProduct.name}`,
+        header: 'Something fresh just landed…',
+        benefits: [''],
+        body: `We've got a little secret… and it's too good to keep to ourselves.\n\nIntroducing ${newProduct.name} — your new go-to. Whether you're looking to level up your beauty game or feel extra confident, this one's a game-changer.`,
+      })
+      setShowProductAnnouncementModal(true)
       resetUploadState()
     } catch (error: any) {
       console.error('Upload error:', error)
@@ -1546,6 +1579,197 @@ export default function AdminShop() {
         onLeave={handleDialogLeave}
         onCancel={handleDialogCancel}
       />
+
+      {/* Product Announcement Email Modal */}
+      {showProductAnnouncementModal && newlyAddedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[9999] p-4 pt-20 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[calc(100vh-5rem)] my-4 overflow-hidden flex flex-col">
+            <div className="sticky top-0 bg-white border-b-2 border-brown-light px-6 py-4 z-10 flex justify-between items-center shadow-sm">
+              <h2 className="text-2xl font-semibold text-brown-dark">
+                Send Product Announcement Email
+              </h2>
+              <button
+                onClick={() => {
+                  setShowProductAnnouncementModal(false)
+                  setNewlyAddedProduct(null)
+                }}
+                className="text-brown-light hover:text-brown-dark text-3xl font-bold leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-brown-light transition-colors"
+                aria-label="Close modal"
+              >
+                ×
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-6">
+              <div className="mb-6 p-4 bg-pink-light rounded-lg border-2 border-brown-light">
+                <p className="text-sm font-semibold text-brown-dark mb-2">Product Details:</p>
+                <p className="text-brown-dark font-semibold">{newlyAddedProduct.name}</p>
+                {newlyAddedProduct.description && (
+                  <p className="text-brown text-sm mt-1">{newlyAddedProduct.description}</p>
+                )}
+                <p className="text-brown-dark font-semibold mt-2">
+                  KES {newlyAddedProduct.price.toLocaleString()}
+                </p>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  setSendingAnnouncement(true)
+                  setMessage(null)
+
+                  try {
+                    const response = await fetch('/api/admin/shop/send-product-announcement', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({
+                        productName: newlyAddedProduct.name,
+                        productDescription: newlyAddedProduct.description,
+                        productPrice: newlyAddedProduct.price,
+                        productImageUrl: newlyAddedProduct.imageUrl,
+                        productLink: `${window.location.origin}/shop`,
+                        subject: announcementData.subject,
+                        header: announcementData.header,
+                        benefits: announcementData.benefits.filter(b => b.trim().length > 0),
+                        body: announcementData.body,
+                      }),
+                    })
+
+                    const data = await response.json()
+
+                    if (!response.ok) {
+                      throw new Error(data.error || 'Failed to send announcement')
+                    }
+
+                    setMessage({
+                      type: 'success',
+                      text: `Product announcement sent to ${data.recipientsCount} subscribers!`,
+                    })
+                    setShowProductAnnouncementModal(false)
+                    setNewlyAddedProduct(null)
+                  } catch (error: any) {
+                    setMessage({ type: 'error', text: error?.message || 'Failed to send announcement' })
+                  } finally {
+                    setSendingAnnouncement(false)
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Email Subject *
+                  </label>
+                  <input
+                    type="text"
+                    value={announcementData.subject}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, subject: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown-dark"
+                    placeholder="Say hello to something new… ✨"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Header *
+                  </label>
+                  <input
+                    type="text"
+                    value={announcementData.header}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, header: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown-dark"
+                    placeholder="Something fresh just landed…"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Body (optional)
+                  </label>
+                  <textarea
+                    value={announcementData.body}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, body: e.target.value })}
+                    rows={4}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown-dark"
+                    placeholder="We've got a little secret… and it's too good to keep to ourselves."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">
+                    Benefits (Why they'll love it) *
+                  </label>
+                  <div className="space-y-2">
+                    {announcementData.benefits.map((benefit, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={benefit}
+                          onChange={(e) => {
+                            const newBenefits = [...announcementData.benefits]
+                            newBenefits[index] = e.target.value
+                            setAnnouncementData({ ...announcementData, benefits: newBenefits })
+                          }}
+                          className="flex-1 px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown-dark"
+                          placeholder={`Benefit ${index + 1} (e.g., Long-lasting formula)`}
+                        />
+                        {announcementData.benefits.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newBenefits = announcementData.benefits.filter((_, i) => i !== index)
+                              setAnnouncementData({ ...announcementData, benefits: newBenefits })
+                            }}
+                            className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAnnouncementData({
+                          ...announcementData,
+                          benefits: [...announcementData.benefits, ''],
+                        })
+                      }}
+                      className="px-4 py-2 bg-brown-light text-brown-dark rounded-lg hover:bg-brown hover:text-white transition-colors text-sm font-semibold"
+                    >
+                      + Add Benefit
+                    </button>
+                  </div>
+                  <p className="text-xs text-brown-light mt-2">
+                    At least one benefit is required. Add multiple benefits to highlight different features.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={sendingAnnouncement || !announcementData.subject || !announcementData.header || announcementData.benefits.filter(b => b.trim().length > 0).length === 0}
+                    className="flex-1 bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {sendingAnnouncement ? 'Sending...' : 'Send to All Subscribers'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProductAnnouncementModal(false)
+                      setNewlyAddedProduct(null)
+                    }}
+                    className="flex-1 bg-brown-light text-brown-dark px-6 py-3 rounded-lg hover:bg-brown hover:text-white transition-colors font-semibold"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

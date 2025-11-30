@@ -3,6 +3,7 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 import { readDataFile } from '@/lib/data-utils'
 import { loadPolicies } from '@/lib/policies-utils'
 import { sendPartnerOnboardingEmail } from '@/lib/email/send-partner-onboarding'
+import { formatEmailSubject } from '@/lib/email-subject-utils'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -70,24 +71,52 @@ function buildAnnouncementEmail({
   bookingLink,
   depositPercentage,
   cancellationWindowHours,
+  openDate,
+  closeDate,
+  recipientName,
 }: {
   monthLabel: string
   bookingPeriod: string
   bookingLink: string
   depositPercentage: number
   cancellationWindowHours: number
+  openDate?: string | null
+  closeDate?: string | null
+  recipientName?: string | null
 }) {
   const introMonth = monthLabel || 'the new month'
+  const friendlyName =
+    typeof recipientName === 'string' && recipientName.trim().length > 0
+      ? recipientName.trim().split(' ')[0]
+      : 'gorgeous'
+
+  const formatExactDate = (value?: string | null) => {
+    if (!value || typeof value !== 'string') return null
+    const parsed = new Date(`${value}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+  }
+
+  const openLabel = formatExactDate(openDate)
+  const closeLabel = formatExactDate(closeDate)
+
   const html = `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; background: #FDF9F4; color: #3E2A20;">
-      <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31;">✨ ${introMonth} Bookings Are Now Open!</h2>
-      <p>Hey gorgeous,</p>
-      <p>It’s that time again — a brand new month of beauty! Our appointment slots are officially open, and you can now secure your spot for your favourite lash or brow service.</p>
-      <p>Our calendar fills up fast, so if you already have your preferred dates in mind, go ahead and grab them early before they’re gone.</p>
+      <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31;">🌈 ${introMonth} Bookings Are Now Open! 🥰</h2>
+      <p>🥰 Hey ${friendlyName}, 💋</p>
+      <p>🌈 It's that time again — a brand new month of beauty! Our appointment slots are officially open, and you can now secure your spot for your favourite lash or brow service. 🥰</p>
+      <p>💋 Our calendar fills up fast, so if you already have your preferred dates in mind, go ahead and grab them early before they're gone. 🌈</p>
       <div style="margin: 24px 0; padding: 20px; background: #FFFFFF; border: 1px solid #E4D3C4; border-radius: 12px;">
-        <p style="margin: 0 0 12px;"><strong>Booking period:</strong> ${bookingPeriod}</p>
-        <p style="margin: 0 0 12px;"><strong>Deposit:</strong> ${depositPercentage}% to confirm your slot</p>
-        <p style="margin: 0;"><strong>Policy reminder:</strong> Cancellations made less than ${cancellationWindowHours} hours before your appointment are non-refundable (protecting both our time 💕).</p>
+        <p style="margin: 0 0 12px;"><strong>Booking period:</strong><br/>
+          ${openLabel ? `Open from <strong>${openLabel}</strong><br/>` : ''}
+          ${closeLabel ? `Close on <strong>${closeLabel}</strong>` : bookingPeriod}
+        </p>
+        <p style="margin: 0 0 12px;"><strong>Deposit:</strong> ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)</p>
+        <p style="margin: 0;"><strong>Policy:</strong> Please review our <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies" style="color:#7C4B31;text-decoration:underline;">booking policies</a> for full details</p>
       </div>
       <p style="margin-bottom: 28px;">You can book directly here:</p>
       <p style="margin-bottom: 28px;">
@@ -95,25 +124,27 @@ function buildAnnouncementEmail({
           Book ${introMonth}
         </a>
       </p>
-      <p>Can’t wait to see you soon and get those lashes/brows looking flawless for the new month!</p>
-      <p style="margin-top:24px;">With love,<br/>The LashDiary Team</p>
+      <p>🥰 Can't wait to see you soon and get those lashes/brows looking flawless for the new month! 💋</p>
+      <p style="margin-top:24px;">🤎 With love,<br/>The LashDiary Team 🥰</p>
       <hr style="margin:32px 0;border:none;border-top:1px solid #EADFD6;" />
       <p style="font-size:14px;color:#7C4B31;">Need support? Reply to this email or reach us at <a href="mailto:${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}" style="color:#7C4B31;">${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}</a>.</p>
     </div>
   `.replace(/\n\s+/g, '\n')
 
   const text = [
-    `✨ ${introMonth} Bookings Are Now Open!`,
+    `🌈 ${introMonth} Bookings Are Now Open! 🤎`,
     '',
-    'Hey gorgeous,',
+    `Hey ${friendlyName},`,
     '',
     'It’s that time again — a brand new month of beauty! Our appointment slots are officially open, and you can now secure your spot for your favourite lash or brow service.',
     '',
     'Our calendar fills up fast, so if you already have your preferred dates in mind, go ahead and grab them early before they’re gone.',
     '',
-    `Booking period: ${bookingPeriod}`,
-    `Deposit: ${depositPercentage}% to confirm your slot`,
-    `Policy reminder: Cancellations made less than ${cancellationWindowHours} hours before your appointment are non-refundable (protecting both our time 💕).`,
+    'Booking period:',
+    openLabel ? `Open from ${openLabel}` : '',
+    closeLabel ? `Close on ${closeLabel}` : bookingPeriod,
+    `Deposit: ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)`,
+    `Policy: Please review our booking policies at ${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies for full details`,
     '',
     `Book here: ${bookingLink}`,
     '',
@@ -161,12 +192,13 @@ export async function POST(request: NextRequest) {
       typeof windowDetails.emailSubject === 'string' &&
       windowDetails.emailSubject.trim().length > 0
         ? windowDetails.emailSubject.trim()
-        : `✨ ${monthLabel} Bookings Are Now Open!`
+        : `${monthLabel} Bookings Are Now Open!`
 
-    const subject =
+    const subject = formatEmailSubject(
       typeof body?.subject === 'string' && body.subject.trim().length > 0
         ? body.subject.trim()
         : defaultSubject
+    )
 
     const [policies, bookingsData, subscribersData] = await Promise.all([
       loadPolicies(),
@@ -207,19 +239,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { html, text } = buildAnnouncementEmail({
-      monthLabel,
-      bookingPeriod,
-      bookingLink,
-      depositPercentage,
-      cancellationWindowHours,
-    })
-
     const successes: string[] = []
     const failures: Array<{ email: string; error: string }> = []
 
-    for (const [email] of Array.from(recipients.entries())) {
+  for (const [email, name] of Array.from(recipients.entries())) {
       try {
+      const { html, text } = buildAnnouncementEmail({
+        monthLabel,
+        bookingPeriod,
+        bookingLink,
+        depositPercentage,
+        cancellationWindowHours,
+        openDate: windowDetails.startDate,
+        closeDate: windowDetails.endDate,
+        recipientName: name,
+      })
+
         const result = await sendPartnerOnboardingEmail({
           to: email,
           subject,

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "updatedAt": "",
+  "introText": "Follow these guidelines to ensure the best results and a smooth, comfortable experience. Your lashes will thank you! 🤎",
+  "fineAmount": 500,
+  "doItems": [
+    "Come with a completely clean face — no makeup, no mascara, no eye cream.",
+    "Wash your lashes the night before and the morning of the appointment.",
+    "Eat something before you come so you're comfortable lying down.",
+    "Arrive a little early so you're relaxed and not rushing.",
+    "Use the bathroom before your appointment starts.",
+    "Keep your phone on silent during the session.",
+    "Tell me if you've used lash serums, eye drops, or any intense skincare recently.",
+    "Remove contact lenses before the appointment.",
+    "Stay fragrance-free (no strong perfume, sprays, or scented oils).",
+    "Keep your eyes moisturized the day before, but avoid creams directly on the lash line."
+  ],
+  "dontItems": [
+    "Don't use retinol, acids (AHAs/BHAs), or exfoliants around the eyes for 48 hours.",
+    "Don't apply mascara — especially waterproof — for 72 hours before.",
+    "Don't use heavy oils, Vaseline, or oily skincare on your face or around your eyes.",
+    "Don't curl your lashes with a lash curler for 48 hours.",
+    "Don't drink caffeine or stimulants at least 3 hours before — it makes your eyes flutter.",
+    "Don't wear contact lenses during the appointment.",
+    "Don't arrive with tears, sweat, or wet lashes (crying, shower, gym).",
+    "Don't come wearing strip lashes.",
+    "Don't apply sunscreen on the eyelids or lash line before your appointment.",
+    "Don't chew gum during the session — it moves your eyes.",
+    "Don't rush in stressed or overheated — it affects retention."
+  ]
+}
+

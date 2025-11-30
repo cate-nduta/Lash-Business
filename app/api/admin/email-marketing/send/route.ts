@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { Resend } from 'resend'
+import { formatEmailSubject } from '@/lib/email-subject-utils'
 import {
   ABTestOptions,
   CampaignAttachment,
@@ -266,7 +267,7 @@ export async function POST(request: NextRequest) {
             from: `${business.name || 'LashDiary'} <${FROM_EMAIL}>`,
             to: recipient.email,
             replyTo: replyToEmail,
-            subject: personalizedSubject,
+            subject: formatEmailSubject(personalizedSubject),
             html: emailHtml,
             attachments: attachmentPayload,
           })

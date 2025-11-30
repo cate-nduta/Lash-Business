@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
+import EmailSubscribe from '@/components/EmailSubscribe'
 
 interface ContactData {
   phone: string
@@ -317,6 +318,21 @@ export default function Contact() {
                 {contact.bookingButtonText || 'Book Appointment'}
               </a>
             </div>
+          </div>
+        </div>
+
+        {/* Email Subscription Section */}
+        <div className="mt-12 md:mt-16">
+          <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-8 md:p-12 max-w-2xl mx-auto">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl md:text-3xl font-display text-brown font-bold mb-3">
+                Stay Updated
+              </h2>
+              <p className="text-gray-600 text-sm md:text-base">
+                Subscribe to get notified about new services and special offers.
+              </p>
+            </div>
+            <EmailSubscribe />
           </div>
         </div>
       </div>

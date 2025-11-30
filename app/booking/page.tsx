@@ -112,10 +112,20 @@ export default function Booking() {
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'none'>('none')
-  const [clientPhotoError, setClientPhotoError] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'none'>('none')
 
-  const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+  // Auto-switch to card payment if USD is selected and M-Pesa is selected (M-Pesa only accepts KES)
+  useEffect(() => {
+    if (currency === 'USD' && paymentMethod === 'mpesa') {
+      setPaymentMethod('card')
+    }
+  }, [currency, paymentMethod])
+  const [clientPhotoError, setClientPhotoError] = useState<string | null>(null)
+  const [studioLocation, setStudioLocation] = useState<string>(
+    process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+  )
+
+  const STUDIO_LOCATION = studioLocation
 
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
@@ -125,10 +135,43 @@ export default function Booking() {
     email: '',
     phone: '',
     service: '',
+    lastFullSetDate: '',
     date: '',
     timeSlot: '',
     notes: '',
   })
+
+  // Get service names from cart or fallback to legacy single-service field
+  const selectedServiceNames =
+    cartItems.length > 0
+      ? cartItems.map((item) => item.name)
+      : formData.service
+      ? [formData.service]
+      : []
+
+  // Debug helper to ensure cart + selection stay in sync (only runs in browser)
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    if (cartItems.length > 0) {
+      console.log('✅ Cart items loaded:', cartItems)
+      console.log('✅ Selected service names:', selectedServiceNames)
+    } else {
+      const savedCart = window.localStorage.getItem('serviceCart')
+      if (savedCart) {
+        console.warn('⚠️ Cart appears empty but localStorage has data:', savedCart)
+        try {
+          const parsed = JSON.parse(savedCart)
+          console.warn('⚠️ Parsed cart data:', parsed)
+        } catch (error) {
+          console.error('❌ Error parsing cart from localStorage:', error)
+        }
+      } else {
+        console.log('ℹ️ Cart is empty and no data in localStorage')
+      }
+    }
+  }, [cartItems, selectedServiceNames])
 
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([])
   const [availableDateStrings, setAvailableDateStrings] = useState<string[]>([])
@@ -153,6 +196,8 @@ export default function Booking() {
     originalPrice: string
     discount: string
     finalPrice: string
+    paymentType?: 'deposit' | 'full'
+    isFullPayment?: boolean
     returningClientEligible: boolean
   } | null>(null)
   const [isFirstTimeClient, setIsFirstTimeClient] = useState<boolean | null>(null)
@@ -162,6 +207,7 @@ export default function Booking() {
     success: boolean | null
     message: string
     checkoutRequestID?: string
+    orderTrackingId?: string
   }>({
     loading: false,
     success: null,
@@ -177,10 +223,13 @@ const [returningInfoError, setReturningInfoError] = useState<string | null>(null
     returningClientDiscount: { enabled: boolean; tier30Percentage: number; tier45Percentage: number }
     depositPercentage: number
     fridayNightDepositPercentage?: number
+    fridayNightEnabled?: boolean
+    paymentRequirement?: 'deposit' | 'full'
   } | null>(null)
 const [discountsLoaded, setDiscountsLoaded] = useState(false)
 const [termsAccepted, setTermsAccepted] = useState(false)
 const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false)
+const [fineAmount, setFineAmount] = useState<number>(500)
 
   const handleCloseSuccessModal = () => {
     setShowSuccessModal(false)
@@ -240,95 +289,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }, [formData.email])
 
+  // Returning client discount fetching disabled - discounts will be applied manually
   useEffect(() => {
-    const email = formData.email?.trim().toLowerCase()
-    const returningEnabled = discounts?.returningClientDiscount?.enabled ?? true
-    if (!email || !email.includes('@') || !formData.date) {
-      setReturningDiscountPercent(0)
-      setLastPaymentDate(null)
-      setReturningDaysSince(null)
-      setReturningInfoError(null)
-      setLoadingReturningDiscount(false)
-      return
-    }
-
-    if (isFirstTimeClient === null) {
-      setLoadingReturningDiscount(false)
-      setReturningInfoError(null)
-      return
-    }
-
-    if (isFirstTimeClient === true) {
-      setReturningDiscountPercent(0)
-      setLastPaymentDate(null)
-      setReturningDaysSince(null)
-      setReturningInfoError(null)
-      setLoadingReturningDiscount(false)
-      return
-    }
-
-    const isFill = isFillService(formData.service, serviceCategoryMap)
-    if (isFill) {
-      setReturningDiscountPercent(0)
-      setLastPaymentDate(null)
-      setReturningDaysSince(null)
-      setReturningInfoError(null)
-      setLoadingReturningDiscount(false)
-      return
-    }
-
-    if (!returningEnabled) {
-      setReturningDiscountPercent(0)
-      setLastPaymentDate(null)
-      setReturningDaysSince(null)
-      setReturningInfoError(null)
-      setLoadingReturningDiscount(false)
-      return
-    }
-
-    let cancelled = false
-    setLoadingReturningDiscount(true)
-
-    const timestamp = Date.now()
-    fetch(`/api/booking/returning-discount?email=${encodeURIComponent(email)}&date=${formData.date}&t=${timestamp}`, {
-      cache: 'no-store',
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}))
-        if (cancelled) return
-        if (!response.ok) {
-          setReturningDiscountPercent(0)
-          setLastPaymentDate(null)
-          setReturningDaysSince(null)
-          setReturningInfoError(data?.error || 'Unable to load returning discount')
-        } else {
-          setReturningDiscountPercent(
-            typeof data?.discountPercent === 'number' ? data.discountPercent : 0,
-          )
-          setLastPaymentDate(typeof data?.lastPaidAt === 'string' ? data.lastPaidAt : null)
-          setReturningDaysSince(
-            typeof data?.daysSince === 'number' ? data.daysSince : null,
-          )
-          setReturningInfoError(null)
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return
-        console.error('Error fetching returning discount:', error)
-        setReturningDiscountPercent(0)
-        setLastPaymentDate(null)
-        setReturningDaysSince(null)
-        setReturningInfoError('Error fetching returning discount')
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingReturningDiscount(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
+    // Always set returning discount to 0 - discounts will be applied manually
+    setReturningDiscountPercent(0)
+    setLastPaymentDate(null)
+    setReturningDaysSince(null)
+    setReturningInfoError(null)
+    setLoadingReturningDiscount(false)
   }, [formData.email, formData.date, formData.service, isFirstTimeClient, serviceCategoryMap, discounts])
 
   useEffect(() => {
@@ -363,6 +331,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           },
           depositPercentage: Number(data?.depositPercentage ?? 40),
           fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
+          fridayNightEnabled: data?.fridayNightEnabled !== false,
+          paymentRequirement: (data?.paymentRequirement === 'full' ? 'full' : 'deposit') as 'deposit' | 'full',
         }
         setDiscounts(normalized)
       })
@@ -374,6 +344,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           returningClientDiscount: { enabled: false, tier30Percentage: 0, tier45Percentage: 0 },
           depositPercentage: 40,
           fridayNightDepositPercentage: 50,
+          fridayNightEnabled: false,
         })
       })
       .finally(() => {
@@ -381,25 +352,78 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       })
   }, [])
 
+  // Fetch location from contact settings
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const timestamp = Date.now()
+        const response = await fetch(`/api/contact?t=${timestamp}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.location && data.location.trim()) {
+            setStudioLocation(data.location.trim())
+          }
+        }
+      } catch (error) {
+        console.error('Error loading location from contact settings:', error)
+        // Keep the default location if fetch fails
+      }
+    }
+    fetchLocation()
+  }, [])
+
   const firstTimeDiscountEnabled = discounts?.firstTimeClientDiscount?.enabled ?? false
   const firstTimeDiscountPercentage = discounts?.firstTimeClientDiscount?.percentage ?? 0
   const depositPercentage = discounts?.depositPercentage ?? 40
   const fridayNightDepositPercentage = discounts?.fridayNightDepositPercentage ?? 50
+  const fridayNightEnabled = discounts?.fridayNightEnabled === true
+  const depositNoticeTemplate = (discounts as any)?.depositNotice as string | undefined
+  
+  // Get payment requirement from admin settings (default to deposit)
+  const requiresFullPayment = discounts?.paymentRequirement === 'full'
   const returningClientDiscountConfig = discounts?.returningClientDiscount
   const returningClientDiscountEnabled = returningClientDiscountConfig?.enabled ?? false
   const returningTier30Percentage = returningClientDiscountConfig?.tier30Percentage ?? 0
   const returningTier45Percentage = returningClientDiscountConfig?.tier45Percentage ?? 0
 
+  const hasFillServiceSelected = selectedServiceNames.some((serviceName) =>
+    isFillService(serviceName, serviceCategoryMap),
+  )
+  const legacySelectedServiceIsFill = isFillService(formData.service, serviceCategoryMap)
+  const selectedServiceIsFill = hasFillServiceSelected || legacySelectedServiceIsFill
+  const INFILL_MAX_DAYS = 14
+  const parseDateOnly = (value?: string | null) => {
+    if (!value || typeof value !== 'string') return null
+    const parsed = new Date(`${value}T00:00:00`)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  const lastFullSetDateObj = hasFillServiceSelected ? parseDateOnly(formData.lastFullSetDate) : null
+  const appointmentDateObj = parseDateOnly(formData.date)
+  const daysSinceLastFullSet =
+    hasFillServiceSelected && lastFullSetDateObj && appointmentDateObj
+      ? Math.max(
+          0,
+          Math.floor((appointmentDateObj.getTime() - lastFullSetDateObj.getTime()) / (1000 * 60 * 60 * 24)),
+        )
+      : null
+  const fillOutsideWindow = typeof daysSinceLastFullSet === 'number' && daysSinceLastFullSet > INFILL_MAX_DAYS
+  const fillInfoMissing = hasFillServiceSelected && !formData.lastFullSetDate
+  const todayIsoString = new Date().toISOString().split('T')[0]
+  const lastFullSetDateMax = formData.date || todayIsoString
+
   const safeReturningDaysSince =
     typeof returningDaysSince === 'number' ? Math.max(0, Math.floor(returningDaysSince)) : null
   const effectiveIsFirstTimeClient = isFirstTimeClient === true
   const effectiveIsReturningClient = isFirstTimeClient === false
-  const selectedServiceIsFill = isFillService(formData.service, serviceCategoryMap)
-  const rawReturningDiscountPercent = returningClientDiscountEnabled ? returningDiscountPercent : 0
-  const appliedReturningDiscountPercent =
-    !effectiveIsFirstTimeClient && !selectedServiceIsFill && rawReturningDiscountPercent > 0
-      ? rawReturningDiscountPercent
-      : 0
+  // Returning client discount disabled - discounts will be applied manually
+  const rawReturningDiscountPercent = 0
+  const appliedReturningDiscountPercent = 0
   const activeReturningWindow =
     safeReturningDaysSince !== null && safeReturningDaysSince <= 30
       ? 30
@@ -512,9 +536,38 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     loadServices()
   }, [])
 
+  // Load fine amount from pre-appointment guidelines
+  useEffect(() => {
+    const loadFineAmount = async () => {
+      try {
+        const response = await fetch('/api/pre-appointment-guidelines', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          if (typeof data.fineAmount === 'number' && data.fineAmount > 0) {
+            setFineAmount(data.fineAmount)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading fine amount:', error)
+        // Keep default 500 if API fails
+      }
+    }
+    loadFineAmount()
+  }, [])
+
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('')
+  const [giftCardCode, setGiftCardCode] = useState('')
+  const [giftCardData, setGiftCardData] = useState<{
+    valid: boolean
+    code: string
+    amount: number
+    originalAmount: number
+    expiresAt: string
+  } | null>(null)
+  const [validatingGiftCard, setValidatingGiftCard] = useState(false)
+  const [giftCardError, setGiftCardError] = useState('')
   const [promoCodeData, setPromoCodeData] = useState<{
     valid: boolean
     code: string
@@ -548,14 +601,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
   const referralActive = referralMode !== 'none'
   const isReferralBasedBooking = referralActive
 
-  // Clear promo code when returning discount becomes active
-  useEffect(() => {
-    if (appliedReturningDiscountPercent > 0 && promoCodeData?.valid) {
-      setPromoCode('')
-      setPromoCodeData(null)
-      setPromoError('Automatic returning client discount applied. Promo codes cannot be used with automatic discounts.')
-    }
-  }, [appliedReturningDiscountPercent, promoCodeData])
+  // Returning discount promo code clearing removed - discounts will be applied manually
 
   const toggleReferralMode = (mode: 'friend' | 'salon') => {
     setReferralMode((prev) => (prev === mode ? 'none' : mode))
@@ -566,6 +612,50 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     setReferralDetails(null)
     setReferralError('')
     setReferralMessage('')
+  }
+
+  // Validate gift card code
+  const validateGiftCard = async (code: string) => {
+    const trimmed = code.trim().replace(/\s+/g, '').replace(/-/g, '')
+    if (!trimmed) {
+      setGiftCardData(null)
+      setGiftCardError('')
+      return
+    }
+
+    setValidatingGiftCard(true)
+    setGiftCardError('')
+
+    try {
+      const response = await fetch('/api/gift-cards/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: trimmed }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.valid) {
+        setGiftCardData(null)
+        setGiftCardError(data.error || 'Gift card code is not valid')
+        return
+      }
+
+      setGiftCardData({
+        valid: true,
+        code: data.code,
+        amount: data.amount,
+        originalAmount: data.originalAmount,
+        expiresAt: data.expiresAt,
+      })
+      setGiftCardError('')
+    } catch (error) {
+      console.error('Error validating gift card:', error)
+      setGiftCardError('Error validating gift card. Please try again.')
+      setGiftCardData(null)
+    } finally {
+      setValidatingGiftCard(false)
+    }
   }
 
   // Validate promo code (allows referral flow for first-time clients)
@@ -766,6 +856,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   // Check if booking is a Friday night slot
   const isFridayNightBooking = (): boolean => {
+    if (!fridayNightEnabled) return false
     if (!formData.date || !formData.timeSlot) return false
     
     // Check if date is a Friday (day of week = 5)
@@ -834,7 +925,10 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     const isSalonReferralPromo = Boolean(promoCodeData?.valid && promoCodeData?.isSalonReferral)
     const referralPromoApplied = isReferralPromo || isSalonReferralPromo
 
+    const promoOverridesFirstTimeDiscount = allowFirstTimePromoOverride && !hasFillService
+
     const firstTimeEligible =
+      !promoOverridesFirstTimeDiscount &&
       !hasFillService &&
       firstTimeDiscountEnabled &&
       effectiveIsFirstTimeClient === true &&
@@ -845,7 +939,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       promoCodeData?.valid &&
       !hasFillService &&
       appliedReturningDiscountPercent === 0 && // Cannot use promo if returning discount is active
-      !firstTimeEligible && // Cannot use promo if first-time discount is active
+      (!firstTimeEligible || promoOverridesFirstTimeDiscount) && // Allow promo when it overrides first-time discount
       (
         effectiveIsReturningClient === true ||
         (effectiveIsFirstTimeClient === true &&
@@ -889,7 +983,13 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     // Friday night bookings require configurable deposit percentage
     const isFridayNight = isFridayNightBooking()
     const effectiveDepositPercentage = isFridayNight ? fridayNightDepositPercentage : depositPercentage
-    const deposit = Math.round(finalPrice * (effectiveDepositPercentage / 100))
+    let deposit = Math.round(finalPrice * (effectiveDepositPercentage / 100))
+    
+    // Apply gift card balance to deposit if available
+    const giftCardBalance = giftCardData?.valid ? giftCardData.amount : 0
+    if (giftCardBalance > 0) {
+      deposit = Math.max(0, deposit - giftCardBalance)
+    }
 
     return {
       originalPrice,
@@ -901,38 +1001,14 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       depositPercentage: effectiveDepositPercentage,
     }
   }
+  
+  const allowFirstTimePromoOverride =
+    effectiveIsFirstTimeClient === true &&
+    promoCodeData?.valid &&
+    promoCodeData?.allowFirstTimeClient === true
 
-  // Get service names from cart or fallback to formData.service for backward compatibility
-  const selectedServiceNames = cartItems.length > 0 
-    ? cartItems.map(item => item.name)
-    : formData.service 
-    ? [formData.service]
-    : []
-  
-  // Debug: Log cart items to help diagnose issues
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (cartItems.length > 0) {
-        console.log('✅ Cart items loaded:', cartItems)
-        console.log('✅ Selected service names:', selectedServiceNames)
-      } else {
-        const savedCart = localStorage.getItem('serviceCart')
-        if (savedCart) {
-          console.warn('⚠️ Cart appears empty but localStorage has data:', savedCart)
-          try {
-            const parsed = JSON.parse(savedCart)
-            console.warn('⚠️ Parsed cart data:', parsed)
-          } catch (e) {
-            console.error('❌ Error parsing cart from localStorage:', e)
-          }
-        } else {
-          console.log('ℹ️ Cart is empty and no data in localStorage')
-        }
-      }
-    }
-  }, [cartItems, selectedServiceNames])
-  
   const pricing = calculatePricing(selectedServiceNames)
+  const promoOverridesFirstTimeNotice = allowFirstTimePromoOverride && !selectedServiceIsFill
   const depositAmount = pricing.deposit
 
   const formatDateDisplay = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
@@ -969,15 +1045,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
 
   const defaultBannerMessage = () => {
     if (!currentWindowLabel) return null
-    let base = `Bookings open monthly. Current calendar: ${currentWindowLabel}.`
-    if (nextWindowLabel && nextOpensDisplay) {
-      base += ` ${nextWindowLabel} opens ${nextOpensDisplay}.`
-    } else if (nextWindowLabel) {
-      base += ` Next calendar: ${nextWindowLabel}.`
-    } else if (nextOpensDisplay) {
-      base += ` Next booking release: ${nextOpensDisplay}.`
-    }
-    return base
+    return `Bookings open monthly. Current calendar: ${currentWindowLabel}.`
   }
 
   const bannerMessage =
@@ -1201,8 +1269,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }, [])
 
-  // Initiate M-Pesa payment
-  const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string) => {
+  // Initiate M-Pesa payment (for deposit or full payment)
+  const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string, isFullPayment: boolean = false) => {
     const formattedAmount = formatCurrencyContext(amount)
     setMpesaStatus({ loading: true, success: null, message: `Initiating M-Pesa payment for ${formattedAmount}...` })
     
@@ -1216,7 +1284,9 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           phone,
           amount,
           accountReference: bookingReference,
-          transactionDesc: `LashDiary Deposit - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
+          transactionDesc: isFullPayment
+            ? `LashDiary Full Payment - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`
+            : `LashDiary Deposit - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
         }),
       })
 
@@ -1248,6 +1318,63 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     }
   }
 
+  // Initiate card payment via Pesapal (full payment required)
+  const initiateCardPayment = async (amount: number, bookingReference: string) => {
+    setMpesaStatus({ loading: true, success: null, message: `Redirecting to secure payment page...` })
+    
+    try {
+      const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
+      const nameParts = formData.name.trim().split(' ')
+      const firstName = nameParts[0] || formData.name
+      const lastName = nameParts.slice(1).join(' ') || firstName
+
+      const response = await fetch('/api/pesapal/submit-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          currency: currency,
+          phoneNumber: fullPhone,
+          email: formData.email,
+          firstName,
+          lastName,
+          description: `LashDiary Full Payment - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
+          bookingReference,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success && data.redirectUrl) {
+        setMpesaStatus({
+          loading: false,
+          success: true,
+          message: 'Redirecting to secure payment page...',
+          orderTrackingId: data.orderTrackingId,
+        })
+        // Redirect to Pesapal payment page
+        window.location.href = data.redirectUrl
+        return { success: true, orderTrackingId: data.orderTrackingId }
+      } else {
+        setMpesaStatus({
+          loading: false,
+          success: false,
+          message: data.error || data.details || 'Failed to initiate card payment. Please try again or contact us.',
+        })
+        return { success: false, error: data.error || data.details }
+      }
+    } catch (error: any) {
+      setMpesaStatus({
+        loading: false,
+        success: false,
+        message: 'Failed to initiate card payment. Please try again or contact us.',
+      })
+      return { success: false, error: error.message }
+    }
+  }
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1258,7 +1385,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       setTermsAcknowledgementError(true)
       setSubmitStatus({
         type: 'error',
-        message: 'Please confirm that you have read and agree to The Lash Diary Terms & Conditions before continuing.',
+        message: 'Please confirm that you have read and agree to The Lash Diary Terms & Conditions and Pre-Appointment Guidelines before continuing.',
       })
       document.getElementById('terms-consent')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
@@ -1307,6 +1434,49 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         })
         return
       }
+
+      if (hasFillServiceSelected) {
+        if (!formData.lastFullSetDate) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Please tell us when you last had a full lash set so we can confirm fill eligibility.',
+          })
+          document.getElementById('lastFullSetDate')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return
+        }
+        if (!formData.date) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Select your appointment date before booking a fill so we can confirm eligibility.',
+          })
+          return
+        }
+        const lastFullSetDate = parseDateOnly(formData.lastFullSetDate)
+        const appointmentDate = parseDateOnly(formData.date)
+        if (!lastFullSetDate || !appointmentDate) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Please enter a valid date for your last full set.',
+          })
+          return
+        }
+        const diffDays = Math.max(
+          0,
+          Math.floor((appointmentDate.getTime() - lastFullSetDate.getTime()) / (1000 * 60 * 60 * 24)),
+        )
+        if (diffDays > INFILL_MAX_DAYS) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message: `Fills are only available within ${INFILL_MAX_DAYS} days of your last full set. Please book a new full set instead so we can deliver the best results.`,
+          })
+          document.getElementById('service-cart-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return
+        }
+      }
       
       const pricingDetails = calculatePricing(selectedServiceNames)
       const referralType = referralMode === 'friend' ? 'friend' : referralMode === 'salon' ? 'salon' : null
@@ -1325,22 +1495,58 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
       
       const bookingReference = `LashDiary-${Date.now()}-${formData.name.substring(0, 3).toUpperCase()}`
 
-      // Initiate payment based on selected method (or skip if 'none')
+      // Initiate payment based on selected method
       let paymentResult: { success: boolean; checkoutRequestID?: string | null; orderTrackingId?: string | null; error?: string } = { success: true }
 
+      // Handle payment based on method
+      if (paymentMethod === 'card') {
+        // Card payment - ALWAYS requires full payment
+        const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
+        paymentResult = cardResult
+        // Card payment redirects to Pesapal, so we don't create booking here
+        // Booking will be created after successful payment via callback
+        if (cardResult.success) {
+          setLoading(false)
+          return // User will be redirected to payment page
+        } else {
+          setSubmitStatus({
+            type: 'error',
+            message: 'Payment Failed',
+            details: cardResult.error || 'Failed to initiate card payment. Please try again or select a different payment method.',
+          })
+          setLoading(false)
+          return
+        }
+      }
+      
+      // At this point, paymentMethod is 'mpesa' or 'none' (card already returned above)
       if (paymentMethod === 'mpesa') {
-        // M-Pesa payment
+        // M-Pesa payment - allows deposit payment (not full payment required)
         const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
-        const mpesaResult = await initiateMpesaPayment(fullPhone, pricingDetails.deposit, bookingReference)
+        const paymentAmount = pricingDetails.deposit // M-Pesa always uses deposit
+        const mpesaResult = await initiateMpesaPayment(fullPhone, paymentAmount, bookingReference, false)
         paymentResult = mpesaResult
       } else {
         // No payment - booking will be created without payment
-        // User will be notified to pay later
+        // User will be notified to pay later (only if deposit allowed by admin)
+        if (requiresFullPayment) {
+          // Full payment required - cannot book without payment
+          setSubmitStatus({
+            type: 'error',
+            message: 'Payment Required',
+            details: `Full payment is required to book your appointment. Please select Card or M-Pesa payment method and complete the payment to confirm your booking.`,
+          })
+          setLoading(false)
+          return
+        }
+        // Deposit option allows pay later (if admin allows)
         paymentResult = { success: true }
       }
 
       // Proceed with booking creation (with or without payment)
-      if (paymentResult.success || paymentMethod === 'none') {
+      // Note: Card payments redirect to Pesapal, so booking is created via callback
+      // At this point, paymentMethod can only be 'mpesa' or 'none' (card already returned above)
+      if (paymentResult.success || (paymentMethod === 'none' && !requiresFullPayment)) {
         // Proceed with booking creation
         const timestamp = Date.now()
         const response = await fetch(`/api/calendar/book?t=${timestamp}`, {
@@ -1368,14 +1574,17 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
             originalPrice: pricingDetails.originalPrice,
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
-            deposit: pricingDetails.deposit,
+            deposit: pricingDetails.deposit, // M-Pesa or 'none' always uses deposit
+            paymentType: paymentMethod === 'mpesa' ? 'deposit' : 'deposit', // M-Pesa = deposit, 'none' = deposit
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
             salonReferral: salonReferralContext,
+            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
             mpesaCheckoutRequestID: paymentResult.checkoutRequestID || null,
+            pesapalOrderTrackingId: paymentResult.orderTrackingId || null,
+            paymentMethod: paymentMethod === 'mpesa' ? 'mpesa' : 'none',
             currency: currency,
-            eyeShapeSelection: null,
             desiredLook: 'Custom',
           }),
         })
@@ -1428,6 +1637,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           originalPrice: originalPriceFormatted,
           discount: discountFormatted,
           finalPrice: finalPriceFormatted,
+          paymentType: (requiresFullPayment ? 'full' : 'deposit') as 'deposit' | 'full',
+          isFullPayment: requiresFullPayment,
           returningClientEligible:
             appliedReturningDiscountPercent > 0 ||
             promoCodeData?.isReferral === true,
@@ -1482,7 +1693,11 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
         }
         
         const paymentNotice = paymentMethod === 'none' 
-          ? ' ⚠️ Payment Required: Please note that payment is required to secure your appointment. We will contact you shortly with payment instructions.'
+          ? (requiresFullPayment
+              ? ' ⚠️ Full payment is required to book your appointment. Please select M-Pesa payment and complete the payment to confirm your booking.'
+              : ' ⚠️ Payment Required: Please note that payment is required to secure your appointment. We will contact you shortly with payment instructions.')
+          : requiresFullPayment
+          ? ' ✅ Full payment has been processed. Your appointment is fully paid and confirmed.'
           : ''
         
         setSubmitStatus({
@@ -1540,6 +1755,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
           email: '',
           phone: '',
           service: '',
+          lastFullSetDate: '',
           date: '',
           timeSlot: '',
           notes: '',
@@ -1641,14 +1857,33 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </div>
                 <div className="ml-3">
                   <p className="text-base font-semibold text-black">
-                    {pricing.isFridayNight ? (
-                      <>A <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> non-refundable deposit is required to secure your Friday night booking.</>
+                    {depositNoticeTemplate && depositNoticeTemplate.trim().length > 0 ? (
+                      (() => {
+                        let text = depositNoticeTemplate
+                          .replace('{deposit}', `${depositPercentage}`)
+                          .replace('{fridayDeposit}', `${fridayNightDepositPercentage}`)
+                        if (!fridayNightEnabled) {
+                          // If Friday-night deposits are disabled, strip any leftover "{fridayDeposit}" tokens
+                          text = text.replace('{fridayDeposit}', '')
+                        }
+                        return text
+                      })()
+                    ) : pricing.isFridayNight && fridayNightEnabled ? (
+                      <>
+                        A <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> deposit
+                        is required to secure your Friday night booking. Deposits are strictly for securing your appointment and cannot be refunded under any circumstance.
+                      </>
                     ) : (
                       <>
-                        A {depositPercentage}% non-refundable deposit is required to secure your booking.
-                        {fridayNightDepositPercentage !== depositPercentage && (
-                          <> Friday night bookings require a <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> deposit.</>
-                        )}
+                        A {depositPercentage}% deposit is required to secure your booking. Deposits are strictly for securing your appointment and cannot be refunded under any circumstance.
+                        {fridayNightEnabled &&
+                          fridayNightDepositPercentage !== depositPercentage && (
+                            <>
+                              {' '}
+                              Friday night bookings require a{' '}
+                              <span className="text-brown-dark">{fridayNightDepositPercentage}%</span> deposit.
+                            </>
+                          )}
                       </>
                     )}
                   </p>
@@ -1716,84 +1951,6 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 )}
               </div>
             )}
-
-            {/* Service Cart - STEP 2 */}
-            <div id="service-cart-section" className="mt-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-semibold text-brown-dark">
-                  Selected Services *
-                </label>
-                {cartItems.length > 0 && (
-                  <Link
-                    href="/services"
-                    className="text-sm text-[var(--color-primary)] hover:underline font-medium"
-                  >
-                    + Add More Services
-                  </Link>
-                )}
-              </div>
-              {cartItems.length === 0 ? (
-                <div className="w-full px-4 py-6 border-2 border-dashed border-brown-light rounded-lg bg-white/50 text-center">
-                  <p className="text-sm text-brown-dark/70 mb-3">No services selected</p>
-                  <Link
-                    href="/services"
-                    className="inline-block px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors text-sm font-semibold"
-                  >
-                    Browse & Add Services
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cartItems.map((item) => {
-                    const price = currency === 'USD' && item.priceUSD !== undefined 
-                      ? item.priceUSD 
-                      : item.price
-                    return (
-                      <div
-                        key={item.serviceId}
-                        className="flex items-center justify-between p-4 border-2 border-brown-light rounded-lg bg-white"
-                      >
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-brown-dark">{item.name}</h4>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-brown-dark/70">
-                            <span>{formatCurrencyContext(price)}</span>
-                            <span>•</span>
-                            <span>{item.duration} min</span>
-                            <span>•</span>
-                            <span className="text-xs bg-brown-light/30 px-2 py-0.5 rounded">{item.categoryName}</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeService(item.serviceId)}
-                          className="ml-4 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
-                          aria-label={`Remove ${item.name}`}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )
-                  })}
-                  <div className="mt-4 p-4 bg-brown-light/20 rounded-lg border border-brown-light">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold text-brown-dark">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
-                        <span className="font-semibold text-brown-dark">{formatCurrencyContext(getTotalPrice(currency))}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-brown-dark/70 pt-2 border-t border-brown-light/50">
-                        <span>Total Duration:</span>
-                        <span>{getTotalDuration()} minutes</span>
-                      </div>
-                      {cartItems.length > 1 && (
-                        <div className="text-xs text-brown-dark/60 italic pt-1">
-                          💡 Deposit will be calculated as {depositPercentage}% of the total
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Personal Details Section - STEP 3 */}
             <div className="mt-6 space-y-4 sm:space-y-6">
@@ -1987,6 +2144,47 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </div>
               )}
 
+              {hasFillServiceSelected && (
+                <div className="mt-4 p-4 border-2 border-amber-300 bg-amber-50/60 rounded-xl">
+                  <label htmlFor="lastFullSetDate" className="block text-sm font-semibold text-brown-dark mb-2">
+                    When was your last full lash set? *
+                  </label>
+                  <input
+                    type="date"
+                    id="lastFullSetDate"
+                    name="lastFullSetDate"
+                    required
+                    value={formData.lastFullSetDate}
+                    onChange={handleChange}
+                    max={lastFullSetDateMax}
+                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all"
+                  />
+                  <p className="mt-2 text-xs text-brown-dark/80">
+                    Fills are only available within {INFILL_MAX_DAYS} days of your last full set so we can maintain your lash health.
+                  </p>
+                  {!formData.date && (
+                    <p className="mt-1 text-xs text-brown-dark/70">
+                      Select your appointment date above and we&apos;ll automatically check if you qualify for a fill.
+                    </p>
+                  )}
+                  {typeof daysSinceLastFullSet === 'number' && !fillOutsideWindow && formData.date && (
+                    <p className="mt-3 text-sm text-green-800 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
+                      Great! It&apos;s been {daysSinceLastFullSet} day{daysSinceLastFullSet === 1 ? '' : 's'} since your last full set, so a fill is perfect.
+                    </p>
+                  )}
+                  {fillOutsideWindow && (
+                    <div className="mt-3 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-3">
+                      Looks like it&apos;s been {daysSinceLastFullSet} days since your last full set. Fills are available only within{' '}
+                      {INFILL_MAX_DAYS} days. Please{' '}
+                      <Link href="/services" className="font-semibold underline">
+                        book a new full set
+                      </Link>{' '}
+                      so we can give you the best retention.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Promo Code / Referral Code Field */}
               {cartItems.length > 0 && (
                 <div className="mt-4">
@@ -2034,11 +2232,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                       {validatingPromo ? 'Checking...' : referralMode === 'none' ? 'Apply' : 'Apply referral'}
                     </button>
                   </div>
-                  {appliedReturningDiscountPercent > 0 && (
-                    <p className="text-xs text-orange-600 mt-1 font-medium">
-                      ⚠️ Automatic returning client discount is active. Promo codes cannot be used with automatic discounts.
-                    </p>
-                  )}
+                  {/* Returning discount warning removed - discounts will be applied manually */}
                   {referralMode === 'friend' && appliedReturningDiscountPercent === 0 && (
                     <p className="text-xs text-brown-dark/70 mt-1">
                       Enter the referral code your friend shared to unlock 10% off your first visit.
@@ -2112,6 +2306,86 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 </div>
               )}
 
+              {/* Gift Card Field */}
+              {cartItems.length > 0 && depositAmount > 0 && (
+                <div className="mt-4">
+                  <label
+                    htmlFor="giftCardCode"
+                    className="block text-sm font-semibold text-brown-dark mb-2"
+                  >
+                    Gift Card Code (Optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      id="giftCardCode"
+                      value={giftCardCode}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\s+/g, '').toUpperCase()
+                        setGiftCardCode(value)
+                        setGiftCardError('')
+                        if (!value.trim()) {
+                          setGiftCardData(null)
+                        }
+                      }}
+                      onBlur={() => {
+                        if (giftCardCode.trim()) {
+                          validateGiftCard(giftCardCode)
+                        }
+                      }}
+                      placeholder="Enter gift card code (e.g., ABCD-1234-EFGH)"
+                      className="flex-1 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => validateGiftCard(giftCardCode)}
+                      disabled={validatingGiftCard || !giftCardCode.trim()}
+                      className="bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {validatingGiftCard ? 'Checking...' : 'Apply'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-brown-dark/70 mt-1">
+                    Have a gift card? Enter the code to apply it to your booking.
+                  </p>
+                  {giftCardError && (
+                    <div className="mt-3 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <div className="text-red-600 text-xl font-bold flex-shrink-0">⚠️</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-red-800 mb-1">Gift Card Not Valid</p>
+                          <p className="text-sm text-red-700">{giftCardError}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGiftCardError('')
+                            setGiftCardCode('')
+                            setGiftCardData(null)
+                          }}
+                          className="text-red-600 hover:text-red-800 flex-shrink-0"
+                          aria-label="Dismiss error"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {giftCardData && giftCardData.valid && (
+                    <div className="mt-3 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+                      <p className="text-sm text-green-800 font-semibold">
+                        ✓ Gift card "{giftCardData.code}" applied! Available balance: {formatCurrencyContext(giftCardData.amount)}
+                      </p>
+                      {giftCardData.amount < depositAmount && (
+                        <p className="text-xs text-green-700 mt-1">
+                          Your gift card will cover {formatCurrencyContext(giftCardData.amount)}. You'll need to pay the remaining balance.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {cartItems.length > 0 && depositAmount > 0 && (
                 <div className="mt-3 p-4 bg-brown-light/20 border-2 border-brown-light rounded-lg">
                   {checkingFirstTime && formData.email && (
@@ -2119,17 +2393,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                       Checking eligibility for first-time client discount...
                     </div>
                   )}
-                  {loadingReturningDiscount && effectiveIsReturningClient === true && (
-                    <div className="mb-3 text-sm text-brown-dark/70 italic">
-                      Checking loyalty rewards…
-                    </div>
-                  )}
-
-                  {returningInfoError && (
-                    <div className="mb-3 p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">
-                      {returningInfoError}
-                    </div>
-                  )}
+                  {/* Returning discount loading and error messages removed - discounts will be applied manually */}
 
                   {selectedServiceIsFill && (
                     <div className="mb-3 p-3 rounded-lg border border-[#facc15] bg-[#fef3c7] text-sm leading-snug text-[#713f12]">
@@ -2189,7 +2453,8 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     effectiveIsFirstTimeClient === true &&
                     firstTimeDiscountEnabled &&
                     !isReferralBasedBooking &&
-                    !selectedServiceIsFill && (
+                    !selectedServiceIsFill &&
+                    !promoOverridesFirstTimeNotice && (
                     <div className="mb-3 p-3 rounded-lg border border-[#cbd5e1] bg-white/95">
                       <p
                         className="text-base font-semibold leading-snug"
@@ -2206,80 +2471,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     </div>
                   )}
 
-                  {returningClientDiscountEnabled && appliedReturningDiscountPercent > 0 && (
-                    <div className="mb-3 p-3 rounded-lg border border-[#cbd5e1] bg-white/95">
-                      <p
-                        className="text-base font-semibold leading-snug"
-                        style={{ color: '#111827' }}
-                      >
-                        💎 {safeReturningDaysSince !== null
-                          ? `You're ${safeReturningDaysSince} day${safeReturningDaysSince === 1 ? '' : 's'} from your last paid visit`
-                          : "You're rebooking within our loyalty window"
-                        }, so enjoy {appliedReturningDiscountPercent}% off automatically.
-                      </p>
-                      {lastPaymentDisplay && (
-                        <p className="mt-2 text-sm leading-snug" style={{ color: '#1f2937' }}>
-                          Last paid visit: {lastPaymentDisplay}. Loyalty discounts apply to bookings made within 30 days ({returningTier30Percentage}%) and between 31–45 days ({returningTier45Percentage}%), and are calculated once your previous service is marked paid in full.
-                        </p>
-                      )}
-                      <p className="mt-2 text-sm leading-snug" style={{ color: '#1f2937' }}>
-                        Have a promo code instead? Apply it above to replace the loyalty discount.
-                      </p>
-                      <div className="mt-3 bg-slate-100/60 border border-slate-200 rounded-lg p-3">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                          <div className="text-sm font-semibold" style={{ color: '#1f2937' }}>
-                            Share the glow: send a friend 10% off and unlock a 10% reward for yourself.
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateReferralCode()}
-                            disabled={referralStatus === 'loading'}
-                            className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-brown-dark text-white text-sm font-semibold shadow-sm hover:bg-brown transition-colors disabled:opacity-60"
-                          >
-                            {referralStatus === 'loading' ? 'Preparing code…' : 'Get referral code'}
-                          </button>
-                        </div>
-                        {referralDetails?.code && (
-                          <div className="mt-3 text-sm" style={{ color: '#111827' }}>
-                            <div className="font-semibold">
-                              Your referral code: <span className="text-brown-dark">{referralDetails?.code}</span>
-                            </div>
-                            <p className="mt-1">
-                              Share this code with a friend. They get 10% off, and you can use the same code after they book.
-                            </p>
-                          </div>
-                        )}
-                        {referralStatus === 'sent' && !referralDetails?.code && (
-                          <p className="mt-2 text-sm" style={{ color: '#111827' }}>
-                            Your referral email is on the way. Check your inbox for the code and instructions.
-                          </p>
-                        )}
-                        {referralMessage && (
-                          <p className="mt-2 text-sm text-green-700">{referralMessage}</p>
-                        )}
-                        {referralError && (
-                          <p className="mt-2 text-sm text-red-600">{referralError}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {returningClientDiscountEnabled &&
-                    effectiveIsReturningClient === true &&
-                    appliedReturningDiscountPercent === 0 &&
-                    lastPaymentDisplay &&
-                    !loadingReturningDiscount && (
-                      <div className="mb-3 p-3 rounded-lg border border-[#cbd5e1] bg-white/95 text-sm leading-snug" style={{ color: '#1f2937' }}>
-                        Last paid visit: {lastPaymentDisplay}. Bookings after 45 days don't include a loyalty discount, but once this service is paid in full we'll restart the clock for your next rebooking reward.
-                      </div>
-                    )}
-                  {returningClientDiscountEnabled &&
-                    effectiveIsReturningClient === true &&
-                    !lastPaymentDate &&
-                    !loadingReturningDiscount && (
-                    <div className="mb-3 p-3 rounded-lg border border-[#cbd5e1] bg-white/95 text-sm leading-snug" style={{ color: '#1f2937' }}>
-                      We'll unlock returning-client discounts as soon as your previous appointment is marked paid in full on our side.
-                    </div>
-                  )}
+                  {/* Returning client discount UI removed - discounts will be applied manually */}
                   <div className="space-y-2 text-sm sm:text-base">
                     {cartItems.length > 1 && (
                       <div className="mb-2 pb-2 border-b border-brown-light/50">
@@ -2313,14 +2505,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                         <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
-                    {pricing.discountType === 'returning' && (
-                      <div className="flex justify-between items-center" style={{ color: 'var(--color-text)' }}>
-                        <span className="font-semibold">
-                              Returning Client Discount ({activeReturningSummaryLabel}):
-                        </span>
-                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
-                      </div>
-                    )}
+                    {/* Returning client discount display removed - discounts will be applied manually */}
                     {pricing.discountType === 'promo' && promoCodeData && (
                       <div className="flex justify-between items-center text-blue-700">
                         <span className="font-semibold">
@@ -2424,21 +2609,52 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
               </label>
               
               {/* Payment Notice */}
-              <div className="mb-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+              <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <div className="text-2xl">💳</div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-yellow-900 mb-1">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">
                       Payment Information
                     </p>
-                    <p className="text-xs text-yellow-800">
-                      You can pay now via M-Pesa, or complete your booking and we'll contact you with payment instructions. Payment is required to secure your appointment.
+                    <p className="text-xs text-blue-800">
+                      <strong>Card Payment:</strong> Full payment required to secure your booking. Accepts both KES and USD. You'll be redirected to a secure payment page.
+                      <br />
+                      <strong>M-Pesa Payment:</strong> Pay the deposit ({pricing?.depositPercentage || depositPercentage}%) now via M-Pesa. <strong>KES only.</strong> You can pay the remaining balance later.
+                      {!requiresFullPayment && (
+                        <>
+                          <br />
+                          <strong>Pay Later:</strong> Complete your booking now and we'll contact you with payment instructions.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-3">
+                {/* Card Payment Option */}
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                  style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="card"
+                    checked={paymentMethod === 'card'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
+                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark">
+                      💳 Card Payment (Full Payment Required)
+                      <span className="ml-2 text-xs font-normal text-brown-dark/70">(KES & USD)</span>
+                    </div>
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                      Pay the full amount ({pricing ? formatCurrencyContext(pricing.finalPrice) : 'full price'}) securely via card. Accepts both KES and USD. You'll be redirected to a secure payment page.
+                  </div>
+                </div>
+                </label>
+
+                {/* M-Pesa Payment Option */}
                 <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
                   style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
                   <input
@@ -2446,14 +2662,24 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     name="paymentMethod"
                     value="mpesa"
                     checked={paymentMethod === 'mpesa'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'none')}
-                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
+                    disabled={currency === 'USD'}
+                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark">M-Pesa STK Push</div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">Pay directly via M-Pesa on your phone (KES only)</div>
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark">
+                      📱 M-Pesa STK Push (Deposit Payment)
+                      <span className="ml-2 text-xs font-normal text-brown-dark/70">(KES only)</span>
+                      {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-semibold">⚠️ Not available for USD</span>}
+                    </div>
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                      Pay the deposit ({pricing ? formatCurrencyContext(depositAmount) : 'deposit'}) now via M-Pesa. <strong>KES currency only.</strong> You can pay the remaining balance later.
+                    </div>
                   </div>
                 </label>
+
+                {/* Pay Later Option (only if deposit allowed) */}
+                {!requiresFullPayment && (
                 <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
                   style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
                   <input
@@ -2461,7 +2687,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     name="paymentMethod"
                     value="none"
                     checked={paymentMethod === 'none'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'none')}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
                     className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
@@ -2471,6 +2697,7 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     </div>
                   </div>
                 </label>
+                )}
               </div>
             </div>
 
@@ -2503,12 +2730,21 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   >
                     Terms &amp; Conditions
                   </a>
-                  .
+                  {' '}and I have read and agree to follow the{' '}
+                  <a
+                    href="/before-your-appointment"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brown-dark underline font-semibold hover:text-brown"
+                  >
+                    Pre-Appointment Guidelines (DO's and DON'Ts)
+                  </a>
+                  . I understand that failure to follow these health and safety guidelines may result in a fine of {fineAmount.toLocaleString()} KSH or cancellation of my appointment.
                 </span>
               </label>
               {termsAcknowledgementError && (
                 <p className="mt-2 text-xs text-red-600">
-                  Please review and accept the Terms &amp; Conditions before continuing.
+                  Please review and accept the Terms &amp; Conditions and Pre-Appointment Guidelines before continuing.
                 </p>
               )}
             </div>
@@ -2523,9 +2759,12 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                 !formData.date ||
                 !formData.timeSlot ||
                 cartItems.length === 0 ||
+                fillInfoMissing ||
+                fillOutsideWindow ||
                 mpesaStatus.loading ||
                 !termsAccepted ||
-                (currency === 'USD' && paymentMethod === 'mpesa')
+                (currency === 'USD' && paymentMethod === 'mpesa') ||
+                (requiresFullPayment && paymentMethod === 'none')
               }
               className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group"
             >
@@ -2537,7 +2776,13 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   </>
                 ) : (
                   <>
-                    {paymentMethod === 'none' ? 'Book Appointment (Pay Later)' : 'Book Appointment & Pay Deposit'}
+                    {paymentMethod === 'card'
+                      ? 'Book Appointment & Pay Full Amount (Card)'
+                      : paymentMethod === 'mpesa'
+                      ? 'Book Appointment & Pay Deposit (M-Pesa)'
+                      : requiresFullPayment
+                      ? 'Book Appointment & Pay Full Amount'
+                      : 'Book Appointment (Pay Deposit Later)'}
                     <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
                   </>
                 )}
@@ -2636,6 +2881,13 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                   </div>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                   </div>
+                  {bookingDetails!.isFullPayment ? (
+                    <div className="flex justify-between sm:flex-col sm:items-start">
+                      <dt className="text-brown-dark/70 font-medium">Full Payment</dt>
+                      <dd className="text-brown-dark font-bold">{bookingDetails!.finalPrice}</dd>
+                    </div>
+                  ) : (
+                    <>
                   <div className="flex justify-between sm:flex-col sm:items-start">
                     <dt className="text-brown-dark/70 font-medium">Deposit Required</dt>
                     <dd className="text-brown-dark font-bold">{bookingDetails!.deposit}</dd>
@@ -2644,16 +2896,20 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
                     <dt className="text-brown-dark/70 font-medium">Final Price</dt>
                     <dd className="text-brown-dark font-bold">{bookingDetails!.finalPrice}</dd>
                   </div>
+                    </>
+                  )}
                 </dl>
               </div>
 
               {/* Payment Instructions */}
               <div className="bg-brown-light/15 border-l-4 border-brown-dark p-4 rounded-lg mb-4 text-sm sm:text-base">
                 <p className="text-brown-dark font-semibold mb-2">
-                  Payment Instructions:
+                  {bookingDetails!.isFullPayment ? 'Payment Status:' : 'Payment Instructions:'}
                 </p>
                 <p className="text-brown-dark/80">
-                  You will receive payment instructions via email. Please pay the {bookingDetails!.deposit} deposit to secure your appointment. The remaining balance will be handled on the day of your appointment.
+                  {bookingDetails!.isFullPayment 
+                    ? `Your appointment is fully paid and confirmed! You will receive a confirmation email shortly. No remaining balance is due on the day of your appointment.`
+                    : `You will receive payment instructions via email. Please pay the ${bookingDetails!.deposit} deposit to secure your appointment. The remaining balance will be handled on the day of your appointment.`}
                 </p>
               </div>
 
@@ -2715,3 +2971,4 @@ const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false
     </div>
   )
 }
+

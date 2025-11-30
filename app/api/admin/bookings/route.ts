@@ -41,13 +41,6 @@ interface Booking {
     rescheduledBy: 'admin' | 'client'
     notes?: string | null
   }>
-  eyeShape?: {
-    id: string
-    label: string
-    imageUrl?: string | null
-    description?: string | null
-    recommendedStyles?: string[]
-  } | null
   desiredLook?: string | null
   desiredLookStatus?: 'recommended' | 'custom' | null
   desiredLookStatusMessage?: string | null

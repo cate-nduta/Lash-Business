@@ -14,9 +14,9 @@
       "title": "Cancellations",
       "description": "",
       "items": [
-        "Deposits are non-refundable because your appointment blocks the calendar just for you.",
+        "Deposits are strictly for securing your booking and cannot be refunded under any circumstance. Your deposit secures your appointment and blocks the calendar just for you.",
         "Cancel at least {{cancellationWindowHours}} hours before your appointment and we’re happy to move your deposit to a new date.",
-        "Need to cancel inside the window? You can transfer the appointment to a friend or reschedule the next available slot."
+        "Need to cancel inside the window? You can reschedule the next available slot."
       ]
     },
     {
@@ -35,7 +35,7 @@
       "description": "",
       "items": [
         "A {{depositPercentage}}% deposit secures every appointment. The balance is paid in-studio after your service.",
-        "Deposits are transferable to a new date when you reschedule within our policy window, but they aren’t refundable.",
+        "Deposits cannot be refunded under any circumstance. They can be applied to a new date when you reschedule within our policy window.",
         "If you can’t make it, gift the slot to someone you love—just let us know so we can greet them properly."
       ]
     },
