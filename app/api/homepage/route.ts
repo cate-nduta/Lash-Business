@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
+export const runtime = 'nodejs'
 export const revalidate = 0
 
 export async function GET(request: NextRequest) {

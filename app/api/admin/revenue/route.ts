@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()

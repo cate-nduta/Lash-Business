@@ -1,6 +1,8 @@
 import { MetadataRoute } from 'next'
 import { readDataFile } from '@/lib/data-utils'
 
+export const runtime = 'nodejs'
+
 function normalizeBaseUrl(): string {
   const raw =
     process.env.NEXT_PUBLIC_BASE_URL ||

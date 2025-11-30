@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { normalizeServiceCatalog } from '@/lib/services-utils'
 
+export const runtime = 'nodejs'
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 

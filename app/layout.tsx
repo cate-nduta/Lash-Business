@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, Playfair_Display, Monsieur_La_Doulaise, Ballet } from 'next/font/google'
+import { Inter, Playfair_Display, Monsieur_La_Doulaise } from 'next/font/google'
 import './globals.css'
 import Script from 'next/script'
 import Navbar from '@/components/Navbar'
@@ -38,12 +38,6 @@ const monsieurLaDoulaise = Monsieur_La_Doulaise({
   preload: true,
 })
 
-const ballet = Ballet({ 
-  subsets: ['latin'],
-  variable: '--font-ballet',
-  display: 'swap',
-  preload: true,
-})
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
@@ -180,7 +174,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${playfair.variable} ${monsieurLaDoulaise.variable} ${ballet.variable} font-body antialiased`} suppressHydrationWarning>
+      <body className={`${inter.variable} ${playfair.variable} ${monsieurLaDoulaise.variable} font-body antialiased`} suppressHydrationWarning>
         <StructuredDataScript id="structured-data-organization" data={organizationSchema} />
         <StructuredDataScript id="structured-data-localbusiness" data={localBusinessSchema} />
         {/* Google Analytics */}

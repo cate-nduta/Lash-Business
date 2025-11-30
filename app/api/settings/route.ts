@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
+export const runtime = 'nodejs'
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
@@ -50,9 +51,6 @@ export async function GET() {
           faviconVersion: Date.now(),
         },
         social: {},
-        substack: {
-          url: '',
-        },
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     )

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type ContactSettings = {
