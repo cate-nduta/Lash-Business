@@ -67,7 +67,12 @@ export function convertCurrency(
   }
   
   if (fromCurrency === 'KES' && toCurrency === 'USD') {
-    return amount / exchangeRate
+    const usdAmount = amount / exchangeRate
+    // Round up to next dollar if there are any decimals
+    if (usdAmount % 1 !== 0) {
+      return Math.ceil(usdAmount)
+    }
+    return usdAmount
   }
   
   return amount

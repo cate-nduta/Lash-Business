@@ -1,0 +1,11 @@
+{
+  "questions": [],
+  "settings": {
+    "enabled": true,
+    "quarterlySchedule": true,
+    "lastSentQuarter": null,
+    "emailSubject": "We'd Love Your Feedback!",
+    "emailMessage": "Thank you for being a valued client! We'd love to hear about your experience with us."
+  }
+}
+

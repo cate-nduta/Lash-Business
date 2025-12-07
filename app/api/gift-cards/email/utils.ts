@@ -7,7 +7,7 @@ const BUSINESS_NOTIFICATION_EMAIL =
   process.env.CALENDAR_EMAIL ||
   'hello@lashdiary.co.ke'
 const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
 const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
 const ZOHO_SMTP_USER =
@@ -290,7 +290,7 @@ export async function sendGiftCardPurchaseEmail(card: GiftCard) {
     const purchaserMailOptions = {
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: card.purchasedBy.email,
-      subject: 'Your Gift Card is Ready 🤎',
+      subject: 'Your Gift Card Purchase is Complete 🤎',
       html: htmlContent,
     }
 
@@ -317,7 +317,7 @@ export async function sendGiftCardPurchaseEmail(card: GiftCard) {
           const recipientMailOptions = {
             from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
             to: recipientEmail,
-            subject: '🎁 Surprise! You Have a Gift Card! 🤎',
+            subject: '🎁 Someone Special Sent You a Gift! 🤎',
             html: recipientHtmlContent,
           }
 

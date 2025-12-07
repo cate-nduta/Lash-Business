@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Logo from './Logo'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCart } from '@/contexts/CartContext'
@@ -9,14 +9,57 @@ import { Currency } from '@/lib/currency-utils'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const { currency, setCurrency } = useCurrency()
   const { getTotalItems } = useCart()
   const cartItemCount = getTotalItems()
+
+  useEffect(() => {
+    // Check if user is authenticated on mount - with timeout to prevent hanging
+    const checkAuth = async () => {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+        
+        const res = await fetch('/api/client/auth/me', {
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        
+        clearTimeout(timeoutId)
+        setIsAuthenticated(res.ok)
+      } catch (error) {
+        // Silently handle errors (network issues, timeouts, etc.)
+        setIsAuthenticated(false)
+      }
+    }
+    
+    checkAuth()
+    
+    // Only re-check when window gains focus (user returns to tab)
+    // This prevents excessive API calls while still catching logout events
+    // Throttle focus checks to prevent spam
+    let lastCheck = 0
+    const handleFocus = () => {
+      const now = Date.now()
+      if (now - lastCheck > 2000) { // Only check every 2 seconds max
+        lastCheck = now
+        checkAuth()
+      }
+    }
+    
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
 
   // Main navigation links - keep essential ones visible
   const mainNavLinks = [
     { href: '/', label: 'Home' },
     { href: '/services', label: 'Services' },
+    { href: '/booking', label: 'Booking' },
     { href: '/blog', label: 'Blog' },
     { href: '/contact', label: 'Contact' },
   ]
@@ -24,7 +67,6 @@ export default function Navbar() {
   // Secondary links - can be moved to footer or dropdown if needed
   const secondaryNavLinks = [
     { href: '/gallery', label: 'Gallery' },
-    { href: '/booking', label: 'Booking' },
     { href: '/policies', label: 'Policies' },
   ]
   
@@ -111,6 +153,27 @@ export default function Navbar() {
                 USD
               </button>
             </div>
+            
+            {/* Account Icon */}
+            <Link
+              href="/account/login"
+              className="relative p-2 text-brown-dark hover:text-brown transition-colors flex items-center justify-center flex-shrink-0 ml-2"
+              aria-label="Login or Register"
+              title="Login or Register"
+            >
+              <svg
+                className="w-6 h-6 flex-shrink-0"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                style={{ maxWidth: '24px', maxHeight: '24px', width: '24px', height: '24px' }}
+              >
+                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </Link>
           </div>
 
           {/* Mobile menu button */}
@@ -162,6 +225,26 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            
+            {/* Mobile Account Link */}
+            <Link
+              href="/account/login"
+              className="flex items-center gap-2 text-brown-dark hover:text-brown transition-colors duration-300 font-medium py-2"
+              onClick={() => setIsOpen(false)}
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Login / Register
+            </Link>
             
             {/* Mobile Shop Button */}
             <Link

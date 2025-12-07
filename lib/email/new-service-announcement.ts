@@ -26,7 +26,7 @@ const BUSINESS_NOTIFICATION_EMAIL =
   process.env.CALENDAR_EMAIL ||
   'hello@lashdiary.co.ke'
 const BASE_URL = normalizeBaseUrl()
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
 const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
 const ZOHO_SMTP_USER =

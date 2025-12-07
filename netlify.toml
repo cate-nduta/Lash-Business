@@ -11,3 +11,9 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Birthday email cron job - runs daily at 9:00 AM UTC
+# Make sure to set CRON_SECRET environment variable in Netlify dashboard
+[[cron]]
+  path = "/api/admin/birthday/send"
+  schedule = "0 9 * * *"
+

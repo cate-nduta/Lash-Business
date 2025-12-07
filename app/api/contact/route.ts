@@ -27,9 +27,6 @@ type ContactSettings = {
 export async function GET(request: NextRequest) {
   try {
     const contact = await readDataFile<ContactSettings>('contact.json', {})
-    
-    // Log what we're reading for debugging
-    console.log('Reading contact data from storage:', JSON.stringify(contact, null, 2))
 
     const coerceBoolean = (value: unknown, fallback: boolean) => {
       if (typeof value === 'boolean') return value
@@ -61,14 +58,10 @@ export async function GET(request: NextRequest) {
       bookingDescription: contact?.bookingDescription ?? '',
       bookingButtonText: contact?.bookingButtonText ?? '',
     }
-    
-    console.log('Returning contact data:', JSON.stringify(responseBody, null, 2))
 
     return NextResponse.json(responseBody, {
       headers: { 
-        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0'
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache for 5 minutes, serve stale for 10 minutes
       },
     })
   } catch (error) {

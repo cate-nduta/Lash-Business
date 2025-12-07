@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import Toast from '@/components/Toast'
+import PasswordInput from '@/components/PasswordInput'
 
 interface Settings {
   business: {
@@ -20,6 +21,7 @@ interface Settings {
     faviconUrl: string
     faviconVersion: number
     taxPercentage?: number
+    eyepatchImageUrl?: string
   }
   social: {
     instagram: string
@@ -47,6 +49,7 @@ export default function AdminSettings() {
       faviconUrl: '',
       faviconVersion: 0,
       taxPercentage: 0,
+      eyepatchImageUrl: '',
     },
     social: {
       instagram: '',
@@ -60,7 +63,9 @@ export default function AdminSettings() {
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
+  const [uploadingEyepatch, setUploadingEyepatch] = useState(false)
   const faviconInputRef = useRef<HTMLInputElement | null>(null)
+  const eyepatchInputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -127,6 +132,9 @@ export default function AdminSettings() {
         }
         if (!loaded.business.faviconVersion) {
           loaded.business.faviconVersion = Date.now()
+        }
+        if (!loaded.business.eyepatchImageUrl) {
+          loaded.business.eyepatchImageUrl = ''
         }
         // Ensure tax percentage exists
         if (typeof loaded.business.taxPercentage !== 'number') {
@@ -315,6 +323,45 @@ export default function AdminSettings() {
       if (faviconInputRef.current) {
         faviconInputRef.current.value = ''
       }
+    }
+  }
+
+  const handleUploadEyepatch = async (file: File) => {
+    setUploadingEyepatch(true)
+    setMessage(null)
+    try {
+      const formData = new FormData()
+      formData.append('eyepatch', file)
+      const response = await fetch('/api/admin/settings/upload-eyepatch', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload eyepatch image')
+      }
+      if (data.settings?.business) {
+        setSettings(data.settings as Settings)
+      } else {
+        setSettings((prev) => ({
+          ...prev,
+          business: {
+            ...prev.business,
+            eyepatchImageUrl: data.eyepatchImageUrl,
+          },
+        }))
+      }
+      setHasUnsavedChanges(true)
+      setMessage({ type: 'success', text: 'Eyepatch image uploaded! Save changes to apply it.' })
+      if (eyepatchInputRef.current) {
+        eyepatchInputRef.current.value = ''
+      }
+    } catch (error: any) {
+      console.error('Error uploading eyepatch image:', error)
+      setMessage({ type: 'error', text: error.message || 'Failed to upload eyepatch image' })
+    } finally {
+      setUploadingEyepatch(false)
     }
   }
 
@@ -689,6 +736,76 @@ export default function AdminSettings() {
             </div>
           </div>
 
+          {/* Eyepatch Image Settings */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-2">Lash Map Eyepatch Image</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Upload an image with two eyepatches (left and right) side by side. This image will be used throughout the website for lash mapping.
+            </p>
+            <div className="flex items-center gap-6 flex-wrap">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-64 h-32 border-2 border-brown-light flex items-center justify-center bg-white overflow-hidden">
+                  {settings.business.eyepatchImageUrl ? (
+                    <img
+                      src={settings.business.eyepatchImageUrl}
+                      alt="Eyepatch preview"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 text-center leading-tight px-1">
+                      No eyepatch image
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs text-gray-500">Preview</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => eyepatchInputRef.current?.click()}
+                    disabled={uploadingEyepatch}
+                    className="px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown disabled:opacity-50"
+                  >
+                    {uploadingEyepatch ? 'Uploading...' : 'Upload Eyepatch Image'}
+                  </button>
+                  {settings.business.eyepatchImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettings((prev) => ({
+                          ...prev,
+                          business: {
+                            ...prev.business,
+                            eyepatchImageUrl: '',
+                          },
+                        }))
+                        setHasUnsavedChanges(true)
+                        setMessage({ type: 'success', text: 'Eyepatch image removed. Save to apply.' })
+                      }}
+                      className="px-4 py-2 bg-white border-2 border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/70"
+                    >
+                      Remove Image
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Recommended: Image with two eyepatches side by side. Max size: 5MB.</p>
+                <input
+                  ref={eyepatchInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      handleUploadEyepatch(file)
+                    }
+                  }}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Social Media Links */}
           <div className="mb-8">
             <h2 className="text-2xl font-display text-brown-dark mb-4">Social Media Links</h2>
@@ -838,12 +955,12 @@ export default function AdminSettings() {
                 <label className="block text-sm font-semibold text-brown-dark mb-2">
                   Current Password
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={passwordData.currentPassword}
                   onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                   required
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  className="border-2 border-brown-light"
+                  autoComplete="current-password"
                 />
               </div>
 
@@ -851,13 +968,13 @@ export default function AdminSettings() {
                 <label className="block text-sm font-semibold text-brown-dark mb-2">
                   New Password
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={passwordData.newPassword}
                   onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                   required
                   minLength={8}
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  className="border-2 border-brown-light"
+                  autoComplete="new-password"
                 />
                 <p className="text-xs text-gray-500 mt-1">At least 8 characters</p>
               </div>
@@ -866,13 +983,13 @@ export default function AdminSettings() {
                 <label className="block text-sm font-semibold text-brown-dark mb-2">
                   Confirm New Password
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={passwordData.confirmPassword}
                   onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                   required
                   minLength={8}
-                  className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  className="border-2 border-brown-light"
+                  autoComplete="new-password"
                 />
               </div>
 

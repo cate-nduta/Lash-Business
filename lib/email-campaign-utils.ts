@@ -269,142 +269,63 @@ export async function createEmailTemplate(options: {
   const resolvedBusiness = business || (await getBusinessSettings())
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${unsubscribeToken}`
   const brandName = resolvedBusiness.name || 'LashDiary'
-  const brandTagline = resolvedBusiness.description || 'Luxury Lash Extensions & Beauty Services'
   const businessAddress = resolvedBusiness.address || 'Nairobi, Kenya'
   const displayUrl = baseUrl.replace(/^https?:\/\//, '')
 
+  // Use the same email styles as booking emails
+  const EMAIL_STYLES = {
+    background: '#FDF9F4',
+    card: '#FFFFFF',
+    accent: '#F3E6DC',
+    textPrimary: '#3E2A20',
+    textSecondary: '#6B4A3B',
+    brand: '#7C4B31',
+  }
+
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+
+  // Convert content to safe HTML (preserve line breaks)
   const safeContent = content.replace(/\n/g, '<br>')
-
-  const absoluteLogoUrl = resolvedBusiness.logoUrl
-    ? resolvedBusiness.logoUrl.startsWith('http')
-      ? resolvedBusiness.logoUrl
-      : `${baseUrl.replace(/\/$/, '')}${resolvedBusiness.logoUrl.startsWith('/') ? '' : '/'}${resolvedBusiness.logoUrl}`
-    : ''
-
-  const logoMarkup = absoluteLogoUrl
-    ? `<img src="${absoluteLogoUrl}" alt="${brandName} logo" width="64" style="display:block;height:auto;border:0;max-width:64px;">`
-    : `<span style="display:inline-block;font-family:'Montserrat','Trebuchet MS',sans-serif;font-size:24px;font-weight:700;letter-spacing:0.08em;color:#2C2B2B;text-transform:uppercase;">${brandName}</span>`
 
   return `
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${brandName}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet" type="text/css" />
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #fdeef1;
-      font-family: 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
-      color: #2c2b2b;
-    }
-    table {
-      border-collapse: collapse;
-    }
-    a {
-      color: #7a6cff;
-      text-decoration: none;
-    }
-    .desktop-hide {
-      display: none;
-      max-height: 0;
-      overflow: hidden;
-    }
-    @media only screen and (max-width: 700px) {
-      .row-content {
-        width: 100% !important;
-      }
-      .stack .column {
-        width: 100% !important;
-        display: block !important;
-      }
-      .desktop-hide {
-        display: block !important;
-        max-height: none !important;
-      }
-      .hero-title {
-        font-size: 30px !important;
-      }
-      .hero-subtitle {
-        font-size: 16px !important;
-      }
-    }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
 </head>
-<body style="margin:0;padding:0;background-color:#fdeef1;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" role="presentation" style="background-color:#fdeef1;">
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
     <tr>
-      <td align="center" style="padding: 24px 12px 32px;">
-        <table class="row-content stack" align="center" width="680" role="presentation" style="background-color:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 22px 45px rgba(122,108,255,0.1);">
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
-            <td class="column" width="100%" style="padding:0;">
-              <table width="100%" role="presentation">
-                <tr>
-                  <td align="center" style="background: linear-gradient(135deg, #c2f3f8 0%, #fbd3dc 100%); padding: 48px 32px 56px; background-position: top center; background-repeat: no-repeat;">
-                    <div style="margin-bottom: 24px;">
-                      ${logoMarkup}
-                    </div>
-                    <h1 class="hero-title" style="margin:0;font-size:34px;font-weight:800;font-family:'Montserrat','Trebuchet MS',sans-serif;color:#2c2b2b;letter-spacing:0.05em;text-transform:uppercase;">
-                      ${brandName}
-                    </h1>
-                    <h2 class="hero-subtitle" style="margin:12px 0 0;font-size:18px;font-weight:500;color:#3b3a3c;letter-spacing:0.12em;text-transform:uppercase;">
-                      ${brandTagline}
-                    </h2>
-                    <div style="margin-top:28px;border-top:1px solid rgba(44,43,43,0.15);width:72px;" aria-hidden="true"></div>
-                    <p style="margin:24px auto 0;max-width:420px;font-size:16px;line-height:1.7;color:#3c3b3d;">
-                      We travel to you with premium lash artistry, curated beauty, and calm energy—wherever you are.
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:48px 48px 32px;background-color:#ffffff;">
-                    <table width="100%" role="presentation" style="background-color:#ffffff;">
-                      <tr>
-                        <td style="background-color:#ffffff;border-radius:20px;padding:0;">
-                          <div style="background-color:#ffffff;border:1px solid rgba(122,108,255,0.15);border-radius:20px;padding:32px 36px;">
-                            <div style="font-size:16px;line-height:1.8;color:#2f2e30;font-family:'Open Sans','Helvetica Neue',Arial,sans-serif;">
-                              ${safeContent}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center" style="padding:0 48px 8px;">
-                    <table width="100%" role="presentation">
-                      <tr>
-                        <td style="border-top:1px solid rgba(122,108,255,0.15);"></td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:28px 48px 36px;background-color:#ffffff;">
-                    <p style="font-size:15px;line-height:1.6;color:#4a4950;margin:0 0 12px;">With love and gratitude,</p>
-                    <p style="font-size:17px;font-weight:700;color:#2f2e30;margin:0 0 22px;">The ${brandName} Team</p>
-                    <a href="${baseUrl}" style="display:inline-block;padding:14px 32px;border-radius:999px;background:linear-gradient(135deg,#7a6cff 0%,#f6b5ff 100%);color:#ffffff;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;font-size:13px;box-shadow:0 12px 22px rgba(122,108,255,0.28);">Visit ${brandName}</a>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background-color:#fbd3dc;padding:30px 28px 34px;text-align:center;">
-                    <p style="margin:0 0 10px;font-size:13px;color:#3b3a3c;">Questions or rescheduling? Reply directly to this email and we’ll take care of you.</p>
-                    <p style="margin:0 0 10px;font-size:12px;color:#3f3e40;">
-                      ${brandName} • ${businessAddress} • <a href="${baseUrl}" style="color:#3f3e40;text-decoration:underline;">${displayUrl}</a>
-                    </p>
-                    <p style="margin:0;font-size:11px;color:#5a5960;">
-                      You’re receiving this email because you opted in for ${brandName} updates. <a href="${unsubscribeUrl}" style="color:#5a5960;text-decoration:underline;">Unsubscribe</a>
-                    </p>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">${brandName}</p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:8px 32px 24px 32px;">
+              <div style="font-size:16px; line-height:1.8; color:${textPrimary}; font-family:'DM Serif Text', Georgia, serif;">
+                ${safeContent}
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 32px; background:${background}; text-align:center;">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">Questions? Reply directly to this email and we'll take care of you.</p>
+              <p style="margin:8px 0 0 0; font-size:12px; color:${textSecondary};">
+                ${brandName} • ${businessAddress} • <a href="${baseUrl}" style="color:${brand}; text-decoration:none;">${displayUrl}</a>
+              </p>
+              <p style="margin:12px 0 0 0; font-size:11px; color:${textSecondary};">
+                You're receiving this email because you opted in for ${brandName} updates. <a href="${unsubscribeUrl}" style="color:${brand}; text-decoration:underline;">Unsubscribe</a>
+              </p>
             </td>
           </tr>
         </table>

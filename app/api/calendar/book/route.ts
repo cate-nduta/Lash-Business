@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { google } from 'googleapis'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { sendEmailNotification } from '../../booking/email/utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
@@ -16,6 +16,8 @@ import {
   sanitizeText,
   ValidationError,
 } from '@/lib/input-validation'
+import type { ClientData, ClientUsersData, ClientProfile, LashHistory } from '@/types/client'
+
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
   process.env.OWNER_EMAIL ||
@@ -24,10 +26,35 @@ const BUSINESS_NOTIFICATION_EMAIL =
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
 const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL || 'onboarding@resend.dev'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const OWNER_NOTIFICATION_EMAIL = BUSINESS_NOTIFICATION_EMAIL
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
 
@@ -53,6 +80,100 @@ const isWithinBookingWindow = (dateStr: string, bookingWindow?: any) => {
   if (start && target < start) return false
   if (end && target > end) return false
   return true
+}
+
+// Create or update client account when booking is made
+async function createOrUpdateClientAccount(data: {
+  email: string
+  name: string
+  phone: string
+  bookingId: string
+  appointmentDate: string
+  service: string
+  serviceType: 'full-set' | 'refill' | 'removal' | 'other'
+}): Promise<{ isNewUser: boolean }> {
+  const normalizedEmail = data.email.toLowerCase().trim()
+  const usersData = await readDataFile<ClientUsersData>('users.json', { users: [] })
+  
+  // Find existing user by email
+  let user = usersData.users.find(u => u.email.toLowerCase().trim() === normalizedEmail)
+  let isNewUser = false
+  
+  if (!user) {
+    isNewUser = true
+    // Create new user account (without password - they can set it later)
+    const userId = randomBytes(16).toString('hex')
+    const now = new Date().toISOString()
+    
+    // Create account without verification (bookings don't require verification)
+    user = {
+      id: userId,
+      email: normalizedEmail,
+      name: data.name,
+      phone: data.phone,
+      passwordHash: '', // Empty - user will set password when they register
+      createdAt: now,
+      isActive: true,
+      emailVerified: false, // Not verified yet - they'll verify when they register
+    }
+    
+    usersData.users.push(user)
+    await writeDataFile('users.json', usersData)
+    
+    // Create client data file
+    const clientData: ClientData = {
+      profile: user,
+      lashHistory: [],
+      preferences: {
+        preferredCurl: null,
+        lengthRange: null,
+        densityLevel: null,
+        eyeShape: null,
+        mappingStyle: null,
+        signatureLook: null,
+      },
+      allergies: {
+        hasReaction: false,
+      },
+      aftercare: {},
+      lashMaps: [],
+      retentionCycles: [],
+    }
+    
+    const clientDataFile = `client-${userId}.json`
+    await writeDataFile(clientDataFile, clientData)
+  } else {
+    // Update existing user info if needed
+    if (user.name !== data.name) user.name = data.name
+    if (user.phone !== data.phone) user.phone = data.phone
+    await writeDataFile('users.json', usersData)
+  }
+  
+  // Add appointment to lash history
+  const clientDataFile = `client-${user.id}.json`
+  const clientData = await readDataFile<ClientData>(clientDataFile, undefined)
+  
+  if (clientData) {
+    const lashHistoryEntry: LashHistory = {
+      appointmentId: data.bookingId,
+      date: data.appointmentDate,
+      service: data.service,
+      serviceType: data.serviceType,
+      lashTech: 'Lash Technician',
+    }
+    
+    clientData.lashHistory.push(lashHistoryEntry)
+    
+    // Update last appointment date
+    const appointmentDate = new Date(data.appointmentDate)
+    if (!clientData.lastAppointmentDate || appointmentDate > new Date(clientData.lastAppointmentDate)) {
+      clientData.lastAppointmentDate = data.appointmentDate
+    }
+    
+    await writeDataFile(clientDataFile, clientData)
+  }
+  
+  return { isNewUser }
 }
 
 // Initialize Google Calendar API with write access
@@ -88,11 +209,11 @@ function formatFriendlyDate(dateStr: string) {
 }
 
 async function sendFullyBookedEmail(dateStr: string) {
-  if (!resend) return
+  if (!zohoTransporter) return
   try {
     const formattedDate = formatFriendlyDate(dateStr)
-    await resend.emails.send({
-      from: `LashDiary Alerts <${FROM_EMAIL}>`,
+    await zohoTransporter.sendMail({
+      from: FROM_EMAIL,
       to: OWNER_NOTIFICATION_EMAIL,
       subject: `Fully Booked Date Alert 🤎`,
       html: `
@@ -125,6 +246,7 @@ export async function POST(request: NextRequest) {
       lastFullSetDate: rawLastFullSetDate,
       location: rawLocation,
       notes: rawNotes,
+      appointmentPreference: rawAppointmentPreference,
       isFirstTimeClient,
       originalPrice,
       discount,
@@ -168,6 +290,7 @@ export async function POST(request: NextRequest) {
     let services: string[]
     let bookingLocation: string
     let notes: string
+    let appointmentPreference: string
     let promoCode: string
     let salonReferral: string
     let desiredLook: string
@@ -187,6 +310,11 @@ export async function POST(request: NextRequest) {
         sanitizeOptionalText(bookingLocationInput, { fieldName: 'Location', maxLength: 160, optional: true }) ||
         STUDIO_LOCATION
       notes = sanitizeNotes(rawNotes, 'Notes', 1500)
+      appointmentPreference = sanitizeOptionalText(rawAppointmentPreference, {
+        fieldName: 'Appointment preference',
+        maxLength: 100,
+        optional: true,
+      })
       promoCode = sanitizeOptionalText(rawPromoCode, {
         fieldName: 'Promo code',
         maxLength: 40,
@@ -270,6 +398,21 @@ export async function POST(request: NextRequest) {
     if (!isWithinBookingWindow(appointmentDateStr, availability.bookingWindow)) {
       return NextResponse.json(
         { error: 'Bookings for this date are not open yet. Please choose another date.' },
+        { status: 400 },
+      )
+    }
+
+    // Enforce 24-hour advance booking requirement
+    const now = new Date()
+    const hoursUntilAppointment = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+    const MIN_ADVANCE_BOOKING_HOURS = 24
+    
+    if (hoursUntilAppointment < MIN_ADVANCE_BOOKING_HOURS) {
+      return NextResponse.json(
+        { 
+          error: `All appointments must be booked at least ${MIN_ADVANCE_BOOKING_HOURS} hours in advance. Please select a later date and time.`,
+          details: `The selected appointment time is only ${Math.round(hoursUntilAppointment * 10) / 10} hours away. Bookings must be made at least ${MIN_ADVANCE_BOOKING_HOURS} hours before the appointment time.`
+        },
         { status: 400 },
       )
     }
@@ -436,6 +579,7 @@ export async function POST(request: NextRequest) {
         manageToken,
         policyWindowHours,
         notes: typeof notes === 'string' ? notes : undefined,
+        appointmentPreference: appointmentPreference || undefined,
         desiredLook: desiredLookLabel,
         desiredLookStatus: lashMapStatus,
         isGiftCardBooking: !!giftCardCode,
@@ -507,6 +651,7 @@ export async function POST(request: NextRequest) {
         desiredLookStatusMessage: lashMapStatusMessage,
         desiredLookMatchesRecommendation,
         notes: notes || '',
+        appointmentPreference: appointmentPreference || '',
         originalPrice: originalPrice || 0,
         discount: discount || 0,
         finalPrice: finalPrice || originalPrice || 0,
@@ -569,6 +714,25 @@ export async function POST(request: NextRequest) {
 
       await writeDataFile('bookings.json', { bookings })
 
+      // Create or update client account (no verification required for bookings)
+      let isNewUser = false
+      try {
+        const normalizedEmail = email.toLowerCase().trim()
+        const clientAccountResult = await createOrUpdateClientAccount({
+          email: normalizedEmail,
+          name,
+          phone,
+          bookingId,
+          appointmentDate: date,
+          service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
+          serviceType: hasFillServiceSelected ? 'refill' : 'full-set',
+        })
+        isNewUser = clientAccountResult.isNewUser
+      } catch (clientError) {
+        console.error('Error creating/updating client account:', clientError)
+        // Don't fail booking if client account creation fails
+      }
+
       try {
         await updateFullyBookedState(date, bookings, {
           onDayFullyBooked: sendFullyBookedEmail,
@@ -585,6 +749,7 @@ export async function POST(request: NextRequest) {
         emailError,
         emailStatus,
         calendarConfigured,
+        isNewUser,
       })
     } catch (fileError: any) {
       console.error('Error saving booking:', fileError)
@@ -606,6 +771,7 @@ export async function POST(request: NextRequest) {
           ? 'Appointment booked successfully!'
           : 'Booking request received!',
         calendarConfigured: calendarConfigured,
+        isNewUser: false, // This path shouldn't reach here for new bookings, but set default
       })
     }
 

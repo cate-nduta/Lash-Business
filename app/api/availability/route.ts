@@ -10,9 +10,7 @@ export async function GET(request: NextRequest) {
     const availability = await readDataFile('availability.json', {})
     return NextResponse.json(availability, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // Cache for 1 minute, serve stale for 2 minutes
       },
     })
   } catch (error) {

@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useInView } from 'react-intersection-observer'
-import CalendarPicker from '@/components/CalendarPicker'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
+
+// Lazy load CalendarPicker for faster initial page load
+const CalendarPicker = lazy(() => import('@/components/CalendarPicker'))
 
 export const dynamic = 'force-dynamic'
 
@@ -139,7 +141,10 @@ export default function Booking() {
     date: '',
     timeSlot: '',
     notes: '',
+    appointmentPreference: '',
   })
+  const [clientData, setClientData] = useState<any>(null)
+  const [loadingClientData, setLoadingClientData] = useState(true)
 
   // Get service names from cart or fallback to legacy single-service field
   const selectedServiceNames =
@@ -199,6 +204,7 @@ export default function Booking() {
     paymentType?: 'deposit' | 'full'
     isFullPayment?: boolean
     returningClientEligible: boolean
+    isNewUser?: boolean
   } | null>(null)
   const [isFirstTimeClient, setIsFirstTimeClient] = useState<boolean | null>(null)
   const [checkingFirstTime, setCheckingFirstTime] = useState(false)
@@ -227,9 +233,9 @@ const [returningInfoError, setReturningInfoError] = useState<string | null>(null
     paymentRequirement?: 'deposit' | 'full'
   } | null>(null)
 const [discountsLoaded, setDiscountsLoaded] = useState(false)
-const [termsAccepted, setTermsAccepted] = useState(false)
-const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false)
-const [fineAmount, setFineAmount] = useState<number>(500)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [termsAcknowledgementError, setTermsAcknowledgementError] = useState(false)
+  const [fineAmount, setFineAmount] = useState<number>(500)
 
   const handleCloseSuccessModal = () => {
     setShowSuccessModal(false)
@@ -240,7 +246,77 @@ const [fineAmount, setFineAmount] = useState<number>(500)
     }, 100)
   }
 
-  // Check if email is a first-time client
+  // Load client data if logged in (for faster booking with saved preferences)
+  // Load client data if authenticated (non-blocking, handles 401 gracefully)
+  useEffect(() => {
+    const loadClientData = async () => {
+      setLoadingClientData(true)
+      try {
+        const response = await fetch('/api/client/auth/me', {
+          credentials: 'include',
+          cache: 'default',
+        })
+        
+        // 401 is expected for non-authenticated users - not an error
+        if (response.status === 401) {
+          setClientData(null)
+          setLoadingClientData(false)
+          return // User is not logged in, which is fine
+        }
+        
+        if (response.ok) {
+          const data = await response.json()
+          setClientData(data)
+          
+          // Pre-fill form with saved client data
+          if (data.user) {
+            setFormData(prev => ({
+              ...prev,
+              name: prev.name || data.user.name || '',
+              email: prev.email || data.user.email || '',
+              phone: prev.phone || data.user.phone || '',
+            }))
+            
+            // Parse phone number if it includes country code
+            if (data.user.phone) {
+              const phone = data.user.phone
+              const countryCode = PHONE_COUNTRY_CODES.find(code => phone.startsWith(code.dialCode))
+              if (countryCode) {
+                setPhoneCountryCode(countryCode.dialCode)
+                setPhoneLocalNumber(phone.replace(countryCode.dialCode, '').trim())
+              } else {
+                // Default to Kenya if no match
+                setPhoneCountryCode('+254')
+                setPhoneLocalNumber(phone.replace(/^\+254/, '').trim())
+              }
+            }
+            
+            // Pre-fill appointment preference if available
+            if (data.preferences?.mappingStyle) {
+              setFormData(prev => ({
+                ...prev,
+                appointmentPreference: prev.appointmentPreference || data.preferences.mappingStyle || '',
+              }))
+            }
+          }
+        } else {
+          // Other errors - user not logged in or other issue
+          setClientData(null)
+        }
+      } catch (error) {
+        // Silently handle errors - user might not be logged in
+        console.debug('Client data not available (user may not be logged in)')
+        setClientData(null)
+      } finally {
+        setLoadingClientData(false)
+      }
+    }
+    
+    // Don't block page load - load in background
+    loadClientData()
+  }, [])
+
+  // Check if email is a first-time client - debounced to prevent excessive API calls
   useEffect(() => {
     const checkFirstTimeClient = async () => {
       if (!formData.email || !formData.email.includes('@')) {
@@ -252,7 +328,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       try {
         const timestamp = Date.now()
         const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}&t=${timestamp}`, {
-          cache: 'no-store',
+          cache: 'default',
         })
         if (!response.ok) {
           throw new Error(`Failed to check first-time client: ${response.status}`)
@@ -268,8 +344,8 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       }
     }
     
-    // Debounce the check
-    const timeoutId = setTimeout(checkFirstTimeClient, 500)
+    // Increased debounce time to 800ms to reduce API calls and prevent lag
+    const timeoutId = setTimeout(checkFirstTimeClient, 800)
     return () => clearTimeout(timeoutId)
   }, [formData.email])
 
@@ -299,45 +375,139 @@ const [fineAmount, setFineAmount] = useState<number>(500)
     setLoadingReturningDiscount(false)
   }, [formData.email, formData.date, formData.service, isFirstTimeClient, serviceCategoryMap, discounts])
 
+  // Load blocked dates immediately on page load - CRITICAL for instant blocking
   useEffect(() => {
+    const loadBlockedDates = async () => {
+      try {
+        const timestamp = Date.now()
+        const response = await fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, { 
+          cache: 'default' 
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setFullyBookedDates(Array.isArray(data?.fullyBookedDates) ? data.fullyBookedDates : [])
+        }
+      } catch (error) {
+        console.error('Error loading blocked dates:', error)
+      }
+    }
+    loadBlockedDates()
+  }, [])
+
+  // Load initial data in parallel for faster page load with optimized caching and error handling
+  useEffect(() => {
+    let isMounted = true
     const timestamp = Date.now()
-    fetch(`/api/discounts?t=${timestamp}`, { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Failed to load discounts: ${res.status}`)
-        }
+    const fetchOptions = { 
+      cache: 'default' as RequestCache,
+      // Add timeout to prevent hanging requests
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    } as RequestInit
+    
+    // Fetch all initial data in parallel with individual error handling
+    Promise.allSettled([
+      fetch(`/api/discounts?t=${timestamp}`, fetchOptions).then((res) => {
+        if (!res.ok) throw new Error(`Failed to load discounts: ${res.status}`)
         return res.json()
-      })
-      .then((data) => {
-        const normalized = {
-          firstTimeClientDiscount: {
-            enabled: Boolean(data?.firstTimeClientDiscount?.enabled),
-            percentage: Number(data?.firstTimeClientDiscount?.percentage ?? 0),
-          },
-          returningClientDiscount: {
-            enabled: Boolean(data?.returningClientDiscount?.enabled),
-            tier30Percentage: Number(
-              data?.returningClientDiscount?.tier30Percentage ??
-                data?.returningClientDiscount?.within30DaysPercentage ??
-                data?.returningClientDiscount?.percentage ??
-                0,
-            ),
-            tier45Percentage: Number(
-              data?.returningClientDiscount?.tier45Percentage ??
-                data?.returningClientDiscount?.within31To45DaysPercentage ??
-                data?.returningClientDiscount?.percentage ??
-                0,
-            ),
-          },
-          depositPercentage: Number(data?.depositPercentage ?? 40),
-          fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
-          fridayNightEnabled: data?.fridayNightEnabled !== false,
-          paymentRequirement: (data?.paymentRequirement === 'full' ? 'full' : 'deposit') as 'deposit' | 'full',
+      }),
+      fetch(`/api/contact?t=${timestamp}`, fetchOptions).then((res) => {
+        if (!res.ok) return null
+        return res.json()
+      }),
+      fetch(`/api/availability?t=${timestamp}`, fetchOptions).then((res) => {
+        if (!res.ok) return null
+        return res.json()
+      }),
+      // Also load blocked dates here as backup/update
+      fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, fetchOptions).then((res) => {
+        if (!res.ok) return null
+        return res.json()
+      }),
+    ])
+      .then((results) => {
+        if (!isMounted) return
+        
+        // Extract data from settled promises
+        const discountsData = results[0].status === 'fulfilled' ? results[0].value : null
+        const contactData = results[1].status === 'fulfilled' ? results[1].value : null
+        const availabilityData = results[2].status === 'fulfilled' ? results[2].value : null
+        const blockedDatesData = results[3].status === 'fulfilled' ? results[3].value : null
+        // Process discounts
+        if (discountsData) {
+          const normalized = {
+            firstTimeClientDiscount: {
+              enabled: Boolean(discountsData?.firstTimeClientDiscount?.enabled),
+              percentage: Number(discountsData?.firstTimeClientDiscount?.percentage ?? 0),
+            },
+            returningClientDiscount: {
+              enabled: Boolean(discountsData?.returningClientDiscount?.enabled),
+              tier30Percentage: Number(
+                discountsData?.returningClientDiscount?.tier30Percentage ??
+                  discountsData?.returningClientDiscount?.within30DaysPercentage ??
+                  discountsData?.returningClientDiscount?.percentage ??
+                  0,
+              ),
+              tier45Percentage: Number(
+                discountsData?.returningClientDiscount?.tier45Percentage ??
+                  discountsData?.returningClientDiscount?.within31To45DaysPercentage ??
+                  discountsData?.returningClientDiscount?.percentage ??
+                  0,
+              ),
+            },
+            depositPercentage: Number(discountsData?.depositPercentage ?? 40),
+            fridayNightDepositPercentage: Number(discountsData?.fridayNightDepositPercentage ?? 50),
+            fridayNightEnabled: discountsData?.fridayNightEnabled !== false,
+            paymentRequirement: (discountsData?.paymentRequirement === 'full' ? 'full' : 'deposit') as 'deposit' | 'full',
+          }
+          setDiscounts(normalized)
+        } else {
+          // Set default discounts on error
+          setDiscounts({
+            firstTimeClientDiscount: { enabled: false, percentage: 0 },
+            returningClientDiscount: { enabled: false, tier30Percentage: 0, tier45Percentage: 0 },
+            depositPercentage: 40,
+            fridayNightDepositPercentage: 50,
+            fridayNightEnabled: false,
+          })
         }
-        setDiscounts(normalized)
+        
+        // Process contact/location
+        if (contactData?.location?.trim()) {
+          setStudioLocation(contactData.location.trim())
+        }
+        
+        // Process availability
+        if (availabilityData) {
+          const normalized = {
+            businessHours: availabilityData?.businessHours || {},
+            timeSlots: availabilityData?.timeSlots || {},
+            bookingWindow: {
+              current: { ...(availabilityData?.bookingWindow?.current ?? {}) },
+              next: { ...(availabilityData?.bookingWindow?.next ?? {}) },
+              bookingLink: availabilityData?.bookingWindow?.bookingLink ?? '',
+              note: availabilityData?.bookingWindow?.note ?? '',
+              bannerMessage: availabilityData?.bookingWindow?.bannerMessage ?? '',
+            },
+          }
+          setAvailabilityData(normalized)
+        } else {
+          setAvailabilityData({
+            businessHours: {},
+            timeSlots: {},
+            bookingWindow: {},
+          })
+        }
+        
+        // Update blocked dates immediately from the parallel fetch
+        if (blockedDatesData?.fullyBookedDates) {
+          setFullyBookedDates(Array.isArray(blockedDatesData.fullyBookedDates) ? blockedDatesData.fullyBookedDates : [])
+        }
+        
+        setDiscountsLoaded(true)
       })
       .catch((error) => {
-        console.error('Error loading discounts:', error)
+        if (!isMounted) return
+        console.error('Error loading initial data:', error)
         // Set default discounts on error
         setDiscounts({
           firstTimeClientDiscount: { enabled: false, percentage: 0 },
@@ -346,36 +516,12 @@ const [fineAmount, setFineAmount] = useState<number>(500)
           fridayNightDepositPercentage: 50,
           fridayNightEnabled: false,
         })
-      })
-      .finally(() => {
         setDiscountsLoaded(true)
       })
-  }, [])
-
-  // Fetch location from contact settings
-  useEffect(() => {
-    const fetchLocation = async () => {
-      try {
-        const timestamp = Date.now()
-        const response = await fetch(`/api/contact?t=${timestamp}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
-        })
-        if (response.ok) {
-          const data = await response.json()
-          if (data.location && data.location.trim()) {
-            setStudioLocation(data.location.trim())
-          }
-        }
-      } catch (error) {
-        console.error('Error loading location from contact settings:', error)
-        // Keep the default location if fetch fails
-      }
+    
+    return () => {
+      isMounted = false
     }
-    fetchLocation()
   }, [])
 
   const firstTimeDiscountEnabled = discounts?.firstTimeClientDiscount?.enabled ?? false
@@ -458,107 +604,116 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       })
     : null
 
-  // Load services data from API
+  // Load services and pre-appointment guidelines in parallel with caching and timeout
   useEffect(() => {
-    const loadServices = async () => {
-      try {
-        const timestamp = Date.now()
-        const response = await fetch(`/api/services?t=${timestamp}`, { cache: 'no-store' })
-        if (!response.ok) {
-          throw new Error('Failed to load services')
-        }
-        const data = await response.json()
+    let isMounted = true
+    const timestamp = Date.now()
+    // Use default cache for better performance with timeout
+    const fetchOptions: RequestInit = { 
+      cache: 'default' as RequestCache,
+      signal: AbortSignal.timeout(8000), // 8 second timeout
+    }
+    
+    Promise.allSettled([
+      fetch(`/api/services?t=${timestamp}`, fetchOptions).then((res) => {
+        if (!res.ok) throw new Error('Failed to load services')
+        return res.json()
+      }),
+      fetch('/api/pre-appointment-guidelines', fetchOptions).then((res) => {
+        if (!res.ok) return null
+        return res.json()
+      }),
+    ])
+      .then((results) => {
+        if (!isMounted) return
+        
+        const servicesData = results[0].status === 'fulfilled' ? results[0].value : null
+        const guidelinesData = results[1].status === 'fulfilled' ? results[1].value : null
+        
+        // Process services
+        if (servicesData) {
+          const groups: ServiceOptionGroup[] = Array.isArray(servicesData?.categories)
+            ? servicesData.categories.map((category: any) => {
+                const categoryId: string =
+                  typeof category?.id === 'string' && category.id.trim().length > 0
+                    ? category.id
+                    : `category-${Math.random().toString(36).slice(2, 10)}`
+                const categoryName =
+                  typeof category?.name === 'string' && category.name.trim().length > 0
+                    ? category.name.trim()
+                    : 'Category'
 
-        const groups: ServiceOptionGroup[] = Array.isArray(data?.categories)
-          ? data.categories.map((category: any) => {
-              const categoryId: string =
-                typeof category?.id === 'string' && category.id.trim().length > 0
-                  ? category.id
-                  : `category-${Math.random().toString(36).slice(2, 10)}`
-              const categoryName =
-                typeof category?.name === 'string' && category.name.trim().length > 0
-                  ? category.name.trim()
-                  : 'Category'
+                const options: ServiceOption[] = Array.isArray(category?.services)
+                  ? category.services.map((service: any) => ({
+                      id:
+                        typeof service?.id === 'string' && service.id.trim().length > 0
+                          ? service.id
+                          : `${categoryId}-${Math.random().toString(36).slice(2, 10)}`,
+                      name: typeof service?.name === 'string' ? service.name : 'Service',
+                      price: typeof service?.price === 'number' ? service.price : Number(service?.price) || 0,
+                      priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
+                      duration:
+                        typeof service?.duration === 'number' ? service.duration : Number(service?.duration) || 0,
+                      categoryId,
+                      categoryName,
+                    }))
+                  : []
 
-              const options: ServiceOption[] = Array.isArray(category?.services)
-                ? category.services.map((service: any) => ({
-                    id:
-                      typeof service?.id === 'string' && service.id.trim().length > 0
-                        ? service.id
-                        : `${categoryId}-${Math.random().toString(36).slice(2, 10)}`,
-                    name: typeof service?.name === 'string' ? service.name : 'Service',
-                    price: typeof service?.price === 'number' ? service.price : Number(service?.price) || 0,
-                    priceUSD: typeof service?.priceUSD === 'number' ? service.priceUSD : undefined,
-                    duration:
-                      typeof service?.duration === 'number' ? service.duration : Number(service?.duration) || 0,
-                    categoryId,
-                    categoryName,
-                  }))
-                : []
+                return {
+                  categoryId,
+                  categoryName,
+                  options,
+                }
+              })
+            : []
 
-              return {
-                categoryId,
-                categoryName,
-                options,
+          const prices: Record<string, number> = {}
+          const pricesUSD: Record<string, number> = {}
+          const durations: Record<string, number> = {}
+
+          const categoryMap: Record<string, { id: string; name: string }> = {}
+
+          groups.forEach((group) => {
+            group.options.forEach((option) => {
+              prices[option.name] = option.price
+              if (option.priceUSD !== undefined) {
+                pricesUSD[option.name] = option.priceUSD
               }
+              durations[option.name] = option.duration
+              categoryMap[option.name] = { id: option.categoryId, name: option.categoryName }
             })
-          : []
-
-        const prices: Record<string, number> = {}
-        const pricesUSD: Record<string, number> = {}
-        const durations: Record<string, number> = {}
-
-        const categoryMap: Record<string, { id: string; name: string }> = {}
-
-        groups.forEach((group) => {
-          group.options.forEach((option) => {
-            prices[option.name] = option.price
-            if (option.priceUSD !== undefined) {
-              pricesUSD[option.name] = option.priceUSD
-            }
-            durations[option.name] = option.duration
-            categoryMap[option.name] = { id: option.categoryId, name: option.categoryName }
           })
-        })
 
-        setServicePrices(prices)
-        setServicePricesUSD(pricesUSD)
-        setServiceDurations(durations)
-        setServiceOptionGroups(groups)
-        setServiceCategoryMap(categoryMap)
-      } catch (error) {
-        console.error('Error loading services:', error)
-      } finally {
-        setLoadingServices(false)
-      }
-    }
-
-    loadServices()
-  }, [])
-
-  // Load fine amount from pre-appointment guidelines
-  useEffect(() => {
-    const loadFineAmount = async () => {
-      try {
-        const response = await fetch('/api/pre-appointment-guidelines', { cache: 'no-store' })
-        if (response.ok) {
-          const data = await response.json()
-          if (typeof data.fineAmount === 'number' && data.fineAmount > 0) {
-            setFineAmount(data.fineAmount)
-          }
+          setServicePrices(prices)
+          setServicePricesUSD(pricesUSD)
+          setServiceDurations(durations)
+          setServiceOptionGroups(groups)
+          setServiceCategoryMap(categoryMap)
         }
-      } catch (error) {
-        console.error('Error loading fine amount:', error)
-        // Keep default 500 if API fails
-      }
+        
+        // Process fine amount
+        if (guidelinesData?.fineAmount && typeof guidelinesData.fineAmount === 'number' && guidelinesData.fineAmount > 0) {
+          setFineAmount(guidelinesData.fineAmount)
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) return
+        console.error('Error loading services/guidelines:', error)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingServices(false)
+        }
+      })
+    
+    return () => {
+      isMounted = false
     }
-    loadFineAmount()
   }, [])
 
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('')
-  const [giftCardCode, setGiftCardCode] = useState('')
   const [giftCardData, setGiftCardData] = useState<{
     valid: boolean
     code: string
@@ -614,51 +769,140 @@ const [fineAmount, setFineAmount] = useState<number>(500)
     setReferralMessage('')
   }
 
-  // Validate gift card code
-  const validateGiftCard = async (code: string) => {
-    const trimmed = code.trim().replace(/\s+/g, '').replace(/-/g, '')
+  // Unified validation function that tries both promo codes and gift cards
+  const validateUnifiedCode = async (code: string) => {
+    const trimmed = code.trim()
     if (!trimmed) {
+      setPromoCodeData(null)
       setGiftCardData(null)
+      setPromoError('')
       setGiftCardError('')
       return
     }
 
-    setValidatingGiftCard(true)
+    setValidatingPromo(true)
+    setPromoError('')
     setGiftCardError('')
 
+    // Try gift card first (they usually have a specific format)
+    const giftCardTrimmed = trimmed.replace(/\s+/g, '').replace(/-/g, '')
     try {
-      const response = await fetch('/api/gift-cards/validate', {
+      const giftCardResponse = await fetch('/api/gift-cards/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: trimmed }),
+        body: JSON.stringify({ code: giftCardTrimmed }),
+      })
+
+      const giftCardData = await giftCardResponse.json()
+
+      if (giftCardResponse.ok && giftCardData.valid) {
+        setGiftCardData({
+          valid: true,
+          code: giftCardData.code,
+          amount: giftCardData.amount,
+          originalAmount: giftCardData.originalAmount,
+          expiresAt: giftCardData.expiresAt,
+        })
+        setPromoCodeData(null)
+        setPromoError('')
+        setGiftCardError('')
+        setValidatingPromo(false)
+        return
+      }
+    } catch (error) {
+      // Continue to try promo code
+    }
+
+    // Try promo code if gift card didn't work
+    try {
+      const timestamp = Date.now()
+      const response = await fetch(`/api/promo-codes/validate?t=${timestamp}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: trimmed,
+          email: formData.email,
+          isFirstTimeClient: effectiveIsFirstTimeClient === true,
+          referralType: referralMode === 'friend' ? 'friend' : referralMode === 'salon' ? 'salon' : null,
+        }),
       })
 
       const data = await response.json()
 
-      if (!response.ok || !data.valid) {
+      if (!response.ok || !data.valid || !data.promoCode) {
+        const errorMessage =
+          data.error ||
+          (data.code === 'REFERRAL_FRIEND_LIMIT'
+            ? 'This referral code has already been used by a friend.'
+            : data.code === 'REFERRAL_REFERRER_ONLY'
+            ? 'This referral code is now reserved for the referrer.'
+            : data.code === 'SALON_LIMIT_REACHED'
+            ? 'This salon referral card has already been fully used.'
+            : data.code === 'SALON_USE_REQUIRED'
+            ? 'Please select "Referred by a salon/beautician" before entering this code.'
+            : data.code === 'SALON_FIRST_TIME_BLOCKED'
+            ? 'This salon referral code can only be used by new clients.'
+            : data.code === 'CARD_FIRST_TIME_BLOCKED'
+            ? 'This promo code cannot be used by first-time clients. Please book your first appointment to become eligible.'
+            : data.code === 'PROMO_ALREADY_USED'
+            ? 'You have already used this promo code. Each promo code can only be used once per email address.'
+            : 'Code is not valid. Please check and try again.')
+
+        setPromoCodeData(null)
         setGiftCardData(null)
-        setGiftCardError(data.error || 'Gift card code is not valid')
+        setPromoError(errorMessage)
+        setGiftCardError('')
         return
       }
 
-      setGiftCardData({
+      if (effectiveIsFirstTimeClient === true && data.promoCode.allowFirstTimeClient !== true && !data.promoCode.isSalonReferral) {
+        setPromoCodeData(null)
+        setGiftCardData(null)
+        setPromoError('This promo code is not available for first-time clients.')
+        return
+      }
+
+      if (data.promoCode.isSalonReferral) {
+        setReferralMode('salon')
+      } else if (data.promoCode.isReferral) {
+        setReferralMode('friend')
+      }
+
+      setPromoCodeData({
         valid: true,
-        code: data.code,
-        amount: data.amount,
-        originalAmount: data.originalAmount,
-        expiresAt: data.expiresAt,
+        code: data.promoCode.code,
+        discountType: data.promoCode.discountType,
+        discountValue: data.promoCode.discountValue,
+        maxDiscount: data.promoCode.maxDiscount,
+        description: data.promoCode.description,
+        allowFirstTimeClient: data.promoCode.allowFirstTimeClient,
+        isReferral: data.promoCode.isReferral,
+        isSalonReferral: data.promoCode.isSalonReferral,
+        referrerEmail: data.promoCode.referrerEmail,
+        friendUsesRemaining: data.promoCode.friendUsesRemaining,
+        referrerRewardAvailable: data.promoCode.referrerRewardAvailable,
+        appliesToReferrer: data.promoCode.appliesToReferrer,
+        appliesToFriend: data.promoCode.appliesToFriend,
+        salonName: data.promoCode.salonName,
+        salonEmail: data.promoCode.salonEmail,
+        clientDiscountPercent: data.promoCode.clientDiscountPercent,
+        salonCommissionPercent: data.promoCode.salonCommissionPercent,
       })
+      setGiftCardData(null)
+      setPromoError('')
       setGiftCardError('')
     } catch (error) {
-      console.error('Error validating gift card:', error)
-      setGiftCardError('Error validating gift card. Please try again.')
+      console.error('Error validating code:', error)
+      setPromoError('Error validating code. Please try again.')
+      setGiftCardError('Error validating code. Please try again.')
+      setPromoCodeData(null)
       setGiftCardData(null)
     } finally {
-      setValidatingGiftCard(false)
+      setValidatingPromo(false)
     }
   }
 
-  // Validate promo code (allows referral flow for first-time clients)
+  // Legacy validatePromoCode for backward compatibility
   const validatePromoCode = async (code: string) => {
     const trimmed = code.trim()
     if (!trimmed) {
@@ -1058,40 +1302,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       : ((bookingWindow?.bannerEnabled === true || bookingWindow?.bannerEnabled === null || bookingWindow?.bannerEnabled === undefined) &&
          (bannerMessage?.length ?? 0) > 0)
 
-  // Load availability data
-  useEffect(() => {
-    const timestamp = Date.now()
-    fetch(`/api/availability?t=${timestamp}`, { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Failed to load availability: ${res.status}`)
-        }
-        return res.json()
-      })
-      .then((data) => {
-        const normalized = {
-          businessHours: data?.businessHours || {},
-          timeSlots: data?.timeSlots || {},
-          bookingWindow: {
-            current: { ...(data?.bookingWindow?.current ?? {}) },
-            next: { ...(data?.bookingWindow?.next ?? {}) },
-            bookingLink: data?.bookingWindow?.bookingLink ?? '',
-            note: data?.bookingWindow?.note ?? '',
-            bannerMessage: data?.bookingWindow?.bannerMessage ?? '',
-          },
-        }
-        setAvailabilityData(normalized)
-      })
-      .catch((error) => {
-        console.error('Error loading availability:', error)
-        // Set default availability data on error
-        setAvailabilityData({
-          businessHours: {},
-          timeSlots: {},
-          bookingWindow: {},
-        })
-      })
-  }, [])
+  // Availability data is now loaded in parallel with discounts and contact (see useEffect above)
 
   useEffect(() => {
     let cancelled = false
@@ -1099,7 +1310,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       setLoadingDates(true)
       try {
         const timestamp = Date.now()
-        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'no-store' })
+        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'default' })
         if (!response.ok) {
           throw new Error(`Failed to load available dates: ${response.status}`)
         }
@@ -1109,7 +1320,10 @@ const [fineAmount, setFineAmount] = useState<number>(500)
         const dateStrings = dates.map((entry) => entry.value)
         setAvailableDates(dates)
         setAvailableDateStrings(dateStrings)
-        setFullyBookedDates(Array.isArray(data?.fullyBookedDates) ? data.fullyBookedDates : [])
+        // Always update blocked dates to ensure they're current
+        if (Array.isArray(data?.fullyBookedDates)) {
+          setFullyBookedDates(data.fullyBookedDates)
+        }
         // Store minimum booking date in availabilityData for CalendarPicker
         if (data?.minimumBookingDate) {
           setAvailabilityData((prev) => ({
@@ -1180,7 +1394,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
     try {
       const timestamp = Date.now()
       const response = await fetch(`/api/calendar/available-slots?date=${date}&t=${timestamp}`, {
-        cache: 'no-store',
+        cache: 'default',
       })
       const data = await response.json()
       if (data.slots) {
@@ -1385,7 +1599,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
       setTermsAcknowledgementError(true)
       setSubmitStatus({
         type: 'error',
-        message: 'Please confirm that you have read and agree to The Lash Diary Terms & Conditions and Pre-Appointment Guidelines before continuing.',
+        message: 'Please confirm that you have read and agree to The Lash Diary Policies and Pre-Appointment Guidelines before continuing.',
       })
       document.getElementById('terms-consent')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
@@ -1591,6 +1805,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
 
         const data = await response.json()
 
+
         if (response.ok && data.success) {
         // Format the date and time for display
         const appointmentDate = new Date(formData.date)
@@ -1642,6 +1857,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
           returningClientEligible:
             appliedReturningDiscountPercent > 0 ||
             promoCodeData?.isReferral === true,
+          isNewUser: data.isNewUser === true,
         }
         
         // Store booking details for modal
@@ -1759,6 +1975,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
           date: '',
           timeSlot: '',
           notes: '',
+          appointmentPreference: '',
         })
         setTimeSlots([])
         setTermsAccepted(false)
@@ -1828,9 +2045,6 @@ const [fineAmount, setFineAmount] = useState<number>(500)
               <div className="sticker-sparkle animate-rotate-slow"></div>
             </div>
           </div>
-          <p className="text-base sm:text-lg md:text-xl text-gray-700 max-w-2xl mx-auto leading-relaxed mb-4 px-2">
-            Schedule your luxury studio appointment with ease. Select a date and time below, share your contact details, and we'll prepare a bespoke lash experience waiting for you at {STUDIO_LOCATION}.
-          </p>
           <div className="mt-6 mb-8" />
           {bannerEnabled && bannerMessage && (
             <div className="max-w-2xl mx-auto mb-6 rounded-xl border border-brown-light bg-white/90 px-5 py-4 text-sm md:text-base text-brown-dark/80 shadow-sm">
@@ -1898,15 +2112,31 @@ const [fineAmount, setFineAmount] = useState<number>(500)
           <div className="cartoon-sticker top-2 right-2 opacity-30 hidden sm:block">
             <div className="sticker-heart animate-float-sticker"></div>
           </div>
-          <CalendarPicker
-            selectedDate={formData.date}
-            onDateSelect={handleDateSelect}
-            availableDates={availableDateStrings}
-            fullyBookedDates={fullyBookedDates}
-            loading={loadingDates}
-            minimumBookingDate={availabilityData?.minimumBookingDate}
-            availabilityData={availabilityData || undefined}
-          />
+          <Suspense fallback={
+            <div className="bg-[var(--color-surface)] rounded-3xl shadow-soft p-6 border border-[var(--color-text)]/10 animate-pulse">
+              <div className="h-8 bg-gray-200 rounded mb-4 w-1/3 mx-auto"></div>
+              <div className="grid grid-cols-7 gap-2 mb-2">
+                {[...Array(7)].map((_, i) => (
+                  <div key={i} className="h-6 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-2">
+                {[...Array(35)].map((_, i) => (
+                  <div key={i} className="aspect-square bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            </div>
+          }>
+            <CalendarPicker
+              selectedDate={formData.date}
+              onDateSelect={handleDateSelect}
+              availableDates={availableDateStrings}
+              fullyBookedDates={fullyBookedDates}
+              loading={loadingDates}
+              minimumBookingDate={availabilityData?.minimumBookingDate}
+              availabilityData={availabilityData || undefined}
+            />
+          </Suspense>
         </div>
 
         {/* Booking Form */}
@@ -1962,7 +2192,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                 htmlFor="name"
                 className="block text-sm font-semibold text-brown-dark mb-2"
               >
-                Full Name *
+                Name *
               </label>
               <div className="relative group">
                 <input
@@ -1973,7 +2203,7 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                   value={formData.name}
                   onChange={handleChange}
                   className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
-                  placeholder="Enter your full name"
+                  placeholder="Enter your name"
                 />
               </div>
             </div>
@@ -2040,6 +2270,33 @@ const [fineAmount, setFineAmount] = useState<number>(500)
               </div>
               <p className="mt-2 text-sm text-brown-dark/70">
                 Choose your country code and enter the rest of your number. International numbers are accepted.
+              </p>
+            </div>
+
+            {/* Appointment Preference Field */}
+            <div>
+              <label
+                htmlFor="appointmentPreference"
+                className="block text-sm font-semibold text-brown-dark mb-2"
+              >
+                Appointment Preference (Optional)
+              </label>
+              <div className="relative group">
+                <select
+                  id="appointmentPreference"
+                  name="appointmentPreference"
+                  value={formData.appointmentPreference}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                >
+                  <option value="">Select your preference...</option>
+                  <option value="quiet">Quiet Appointment - I prefer minimal conversation</option>
+                  <option value="chat">Small Chat Session - I enjoy friendly conversation</option>
+                  <option value="either">Either is fine - I'm flexible</option>
+                </select>
+              </div>
+              <p className="mt-2 text-sm text-brown-dark/70">
+                Let us know your preference for conversation during your appointment.
               </p>
             </div>
 
@@ -2185,14 +2442,14 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                 </div>
               )}
 
-              {/* Promo Code / Referral Code Field */}
+              {/* Unified Promo Code / Gift Card Field */}
               {cartItems.length > 0 && (
                 <div className="mt-4">
                   <label
                     htmlFor="promoCode"
                     className="block text-sm font-semibold text-brown-dark mb-2"
                   >
-                    {isReferralBasedBooking ? 'Referral Code' : 'Promo Code (Optional)'}
+                    Promo Code (Optional)
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -2204,64 +2461,49 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                         setPromoCode(value)
                         // Clear previous validation
                         setPromoError('')
+                        setGiftCardError('')
                         if (!value.trim()) {
                           setPromoCodeData(null)
+                          setGiftCardData(null)
                         }
                       }}
                       onBlur={() => {
                         if (promoCode.trim() && appliedReturningDiscountPercent === 0) {
-                          validatePromoCode(promoCode)
+                          validateUnifiedCode(promoCode)
                         }
                       }}
-              disabled={selectedServiceIsFill || appliedReturningDiscountPercent > 0}
-                      placeholder={
-                referralMode === 'friend'
-                  ? 'Enter friend referral code'
-                  : referralMode === 'salon'
-                  ? 'Enter salon / beautician / influencer code'
-                  : 'Enter promo code'
-                      }
+                      disabled={selectedServiceIsFill || appliedReturningDiscountPercent > 0}
+                      placeholder="Enter promo code"
                       className="flex-1 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
                     />
                     <button
                       type="button"
-                      onClick={() => validatePromoCode(promoCode)}
-              disabled={selectedServiceIsFill || validatingPromo || !promoCode.trim() || appliedReturningDiscountPercent > 0}
+                      onClick={() => validateUnifiedCode(promoCode)}
+                      disabled={selectedServiceIsFill || validatingPromo || !promoCode.trim() || appliedReturningDiscountPercent > 0}
                       className="bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {validatingPromo ? 'Checking...' : referralMode === 'none' ? 'Apply' : 'Apply referral'}
+                      {validatingPromo ? 'Checking...' : 'Apply'}
                     </button>
                   </div>
-                  {/* Returning discount warning removed - discounts will be applied manually */}
-                  {referralMode === 'friend' && appliedReturningDiscountPercent === 0 && (
-                    <p className="text-xs text-brown-dark/70 mt-1">
-                      Enter the referral code your friend shared to unlock 10% off your first visit.
-                    </p>
-                  )}
-                  {referralMode === 'salon' && appliedReturningDiscountPercent === 0 && (
-                <p className="text-xs text-brown-dark/70 mt-1">
-                  Enter the code printed on the salon / beautician / influencer card you received.
-                </p>
-                  )}
-                  {referralMode === 'none' && appliedReturningDiscountPercent === 0 && (
-                    <p className="text-xs text-brown-dark/70 mt-1">
-                      Have a promo code from a card? Enter it here to apply your discount. Note: Some promo codes are only available for returning clients.
-                    </p>
-                  )}
-                  {promoError && (
+                  <p className="text-xs text-brown-dark/70 mt-1">
+                    Have a promo code from a card? Enter it here to apply your discount. Note: Some promo codes are only available for returning clients.
+                  </p>
+                  {(promoError || giftCardError) && (
                     <div className="mt-3 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
                       <div className="flex items-start gap-3">
                         <div className="text-red-600 text-xl font-bold flex-shrink-0">⚠️</div>
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-red-800 mb-1">Promo Code Not Valid</p>
-                          <p className="text-sm text-red-700">{promoError}</p>
+                          <p className="text-sm font-semibold text-red-800 mb-1">Code Not Valid</p>
+                          <p className="text-sm text-red-700">{promoError || giftCardError}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => {
                             setPromoError('')
+                            setGiftCardError('')
                             setPromoCode('')
                             setPromoCodeData(null)
+                            setGiftCardData(null)
                           }}
                           className="text-red-600 hover:text-red-800 flex-shrink-0"
                           aria-label="Dismiss error"
@@ -2301,74 +2543,6 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                           })()}
                         </p>
                       )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Gift Card Field */}
-              {cartItems.length > 0 && depositAmount > 0 && (
-                <div className="mt-4">
-                  <label
-                    htmlFor="giftCardCode"
-                    className="block text-sm font-semibold text-brown-dark mb-2"
-                  >
-                    Gift Card Code (Optional)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      id="giftCardCode"
-                      value={giftCardCode}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\s+/g, '').toUpperCase()
-                        setGiftCardCode(value)
-                        setGiftCardError('')
-                        if (!value.trim()) {
-                          setGiftCardData(null)
-                        }
-                      }}
-                      onBlur={() => {
-                        if (giftCardCode.trim()) {
-                          validateGiftCard(giftCardCode)
-                        }
-                      }}
-                      placeholder="Enter gift card code (e.g., ABCD-1234-EFGH)"
-                      className="flex-1 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => validateGiftCard(giftCardCode)}
-                      disabled={validatingGiftCard || !giftCardCode.trim()}
-                      className="bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {validatingGiftCard ? 'Checking...' : 'Apply'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-brown-dark/70 mt-1">
-                    Have a gift card? Enter the code to apply it to your booking.
-                  </p>
-                  {giftCardError && (
-                    <div className="mt-3 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <div className="text-red-600 text-xl font-bold flex-shrink-0">⚠️</div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-red-800 mb-1">Gift Card Not Valid</p>
-                          <p className="text-sm text-red-700">{giftCardError}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGiftCardError('')
-                            setGiftCardCode('')
-                            setGiftCardData(null)
-                          }}
-                          className="text-red-600 hover:text-red-800 flex-shrink-0"
-                          aria-label="Dismiss error"
-                        >
-                          ✕
-                        </button>
-                      </div>
                     </div>
                   )}
                   {giftCardData && giftCardData.valid && (
@@ -2723,12 +2897,12 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                 <span className="text-sm text-brown-dark leading-relaxed">
                   I have read and agree to The Lash Diary{' '}
                   <a
-                    href="/terms"
+                    href="/policies"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-brown-dark underline font-semibold hover:text-brown"
                   >
-                    Terms &amp; Conditions
+                    Policies
                   </a>
                   {' '}and I have read and agree to follow the{' '}
                   <a
@@ -2739,12 +2913,11 @@ const [fineAmount, setFineAmount] = useState<number>(500)
                   >
                     Pre-Appointment Guidelines (DO's and DON'Ts)
                   </a>
-                  . I understand that failure to follow these health and safety guidelines may result in a fine of {fineAmount.toLocaleString()} KSH or cancellation of my appointment.
                 </span>
               </label>
               {termsAcknowledgementError && (
                 <p className="mt-2 text-xs text-red-600">
-                  Please review and accept the Terms &amp; Conditions and Pre-Appointment Guidelines before continuing.
+                  Please review and accept the Policies and Pre-Appointment Guidelines before continuing.
                 </p>
               )}
             </div>

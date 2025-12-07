@@ -141,6 +141,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Clients',
+      description: 'Manage client accounts and track refill schedules',
+      href: '/admin/clients',
+      icon: '👤',
+      ownerOnly: false,
+    },
+    {
       title: 'Contact Information',
       description: 'Update phone, email, Instagram, and location',
       href: '/admin/contact',
@@ -194,6 +201,13 @@ export default function AdminDashboard() {
       description: 'Edit homepage text and content',
       href: '/admin/homepage',
       icon: '🏠',
+      ownerOnly: false,
+    },
+    {
+      title: 'Model Applications',
+      description: 'View and manage model applications',
+      href: '/admin/models',
+      icon: '👗',
       ownerOnly: false,
     },
     {
@@ -295,6 +309,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Surveys',
+      description: 'Create and manage quarterly client surveys with AI analytics',
+      href: '/admin/surveys',
+      icon: '📊',
+      ownerOnly: false,
+    },
+    {
       title: 'Workflows & Help',
       description: 'Step-by-step guides for all admin panels and workflows',
       href: '/admin/workflows',
@@ -303,10 +324,14 @@ export default function AdminDashboard() {
     },
   ]
 
+  // IMPORTANT: Keep panels sorted alphabetically by title
+  // When adding new panels, insert them in alphabetical order, or they will be auto-sorted below
+  const sortedMenuItems = [...allMenuItems].sort((a, b) => a.title.localeCompare(b.title))
+
   // Filter menu items based on user role
   const baseMenuItems = userRole === 'owner' 
-    ? allMenuItems 
-    : allMenuItems.filter(item => !item.ownerOnly)
+    ? sortedMenuItems 
+    : sortedMenuItems.filter(item => !item.ownerOnly)
 
   // Filter menu items based on search query
   const menuItems = searchQuery.trim() === ''

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import PasswordInput from '@/components/PasswordInput'
 
 interface InviteDetails {
   id: string
@@ -187,25 +188,25 @@ export default function AdminInviteAcceptPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-brown-dark mb-2">Create Password *</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={8}
                 required
-                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                className="border-2 border-brown-light"
+                autoComplete="new-password"
               />
               <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters.</p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-brown-dark mb-2">Confirm Password *</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 minLength={8}
                 required
-                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                className="border-2 border-brown-light"
+                autoComplete="new-password"
               />
             </div>
             <button

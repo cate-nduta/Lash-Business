@@ -20,7 +20,9 @@ function computePolicyState(booking: any) {
       ? booking.cancellationWindowHours
       : CLIENT_MANAGE_WINDOW_HOURS
   const withinWindow = hoursUntil < windowHours
-  const within24Hours = hoursUntil <= 24 // Exactly 24 hours or less - cannot reschedule
+  // Rescheduling must be done at least 12 hours before the appointment
+  const RESCHEDULE_WINDOW_HOURS = 12
+  const withinRescheduleWindow = hoursUntil <= RESCHEDULE_WINDOW_HOURS
 
   return {
     now,
@@ -28,7 +30,7 @@ function computePolicyState(booking: any) {
     hoursUntil,
     windowHours,
     withinWindow,
-    within24Hours,
+    withinRescheduleWindow,
     isPast: start.getTime() <= now.getTime(),
   }
 }
@@ -38,7 +40,8 @@ function sanitizeBooking(booking: any) {
   const status = booking.status || 'confirmed'
   const canManage =
     status === 'confirmed' && !policy.isPast && booking.clientManageDisabled !== true && booking.cancelledAt == null
-  const canAct = canManage && !policy.isPast && !policy.within24Hours
+  // Rescheduling must be done at least 12 hours before the appointment
+  const canAct = canManage && !policy.isPast && !policy.withinRescheduleWindow
 
   return {
     id: booking.id,
@@ -59,7 +62,7 @@ function sanitizeBooking(booking: any) {
         ? booking.cancellationCutoffAt
         : new Date(policy.start.getTime() - policy.windowHours * 60 * 60 * 1000).toISOString(),
     withinPolicyWindow: policy.withinWindow,
-    within24Hours: policy.within24Hours,
+    withinRescheduleWindow: policy.withinRescheduleWindow,
     isPast: policy.isPast,
     canCancel: false,
     canReschedule: canAct,
@@ -148,15 +151,16 @@ export async function POST(
   const policy = computePolicyState(booking)
   const canManage =
     booking.status === 'confirmed' && !policy.isPast && booking.clientManageDisabled !== true && booking.cancelledAt == null
-  const canAct = canManage && !policy.within24Hours
+  const canAct = canManage && !policy.withinRescheduleWindow
 
-  // Check policy for reschedule action
+  // Check policy for reschedule action - must be at least 12 hours before appointment
   if (!canAct) {
+    const RESCHEDULE_WINDOW_HOURS = 12
     return NextResponse.json(
       {
         error:
-          policy.within24Hours || policy.isPast
-            ? 'Appointments can no longer be changed online. Please contact the studio for assistance.'
+          policy.withinRescheduleWindow || policy.isPast
+            ? `You may reschedule your appointment up to ${RESCHEDULE_WINDOW_HOURS} hours before your scheduled time. Please contact the studio for assistance.`
             : policy.withinWindow
             ? `Online changes are only available more than ${policy.windowHours} hours before your appointment. Please contact the studio so we can assist.`
             : 'This booking cannot be modified online.',
@@ -306,6 +310,21 @@ export async function POST(
   }
 
   if (!isSameSlot) {
+    // Enforce 24-hour advance booking requirement for rescheduled appointments
+    const now = new Date()
+    const hoursUntilNewAppointment = (newStart.getTime() - now.getTime()) / (1000 * 60 * 60)
+    const MIN_ADVANCE_BOOKING_HOURS = 24
+    
+    if (hoursUntilNewAppointment < MIN_ADVANCE_BOOKING_HOURS) {
+      return NextResponse.json(
+        { 
+          error: `All appointments must be booked at least ${MIN_ADVANCE_BOOKING_HOURS} hours in advance. Please select a later date and time.`,
+          details: `The selected appointment time is only ${Math.round(hoursUntilNewAppointment * 10) / 10} hours away. Bookings must be made at least ${MIN_ADVANCE_BOOKING_HOURS} hours before the appointment time.`
+        },
+        { status: 400 },
+      )
+    }
+    
     const availability = await readDataFile<any>('availability.json', { fullyBookedDates: [] })
     const allowedSlots = generateTimeSlotsForDateLocal(targetDate, availability)
     const normalizedRequestedSlot = normalizeSlotForComparison(newStart.toISOString())

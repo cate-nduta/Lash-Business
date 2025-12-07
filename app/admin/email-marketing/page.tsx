@@ -774,17 +774,17 @@ export default function AdminEmailMarketing() {
                 { key: 'automation', label: 'Automations' },
               ] as Array<{ key: Tab; label: string }>
             ).map((tab) => (
-              <button
+              <span
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-0 py-2 text-sm font-semibold transition-colors ${
+                className={`px-0 py-2 text-sm font-semibold transition-colors cursor-pointer ${
                   activeTab === tab.key
                     ? 'text-gray-900'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 {tab.label}
-              </button>
+              </span>
             ))}
           </div>
 
@@ -839,15 +839,15 @@ export default function AdminEmailMarketing() {
                     Trim
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3 mt-2">
                   {personalizationTokens.map((item) => (
-                    <button
+                    <span
                       key={item.token}
                       onClick={() => handleInsertToken(item.token)}
-                      className="px-3 py-1 text-xs text-brown-dark border border-brown-light rounded-full hover:text-brown hover:border-brown hover:underline transition-colors"
+                      className="text-xs text-brown-dark cursor-pointer hover:text-brown hover:underline transition-colors"
                     >
                       {item.label}
-                    </button>
+                    </span>
                   ))}
                 </div>
               </div>

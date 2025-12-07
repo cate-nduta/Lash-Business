@@ -178,6 +178,30 @@ export default function BlogPostPage() {
             )}
           </div>
         </article>
+
+        {/* Back to Blog Link */}
+        <div className="mt-8 flex justify-start">
+          <Link
+            href="/blog"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-brown-dark text-white rounded-full font-semibold hover:bg-brown transition-colors duration-200 shadow-soft hover:shadow-soft-lg"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            <span>Back</span>
+          </Link>
+        </div>
       </div>
     </div>
   )

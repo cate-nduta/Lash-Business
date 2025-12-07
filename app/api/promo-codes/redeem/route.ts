@@ -1,14 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { normalizePromoCatalog } from '@/lib/promo-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev'
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 function trackEmailUsage(promo: any, email: string | null | undefined) {
   if (email) {
@@ -22,7 +51,7 @@ function trackEmailUsage(promo: any, email: string | null | undefined) {
 }
 
 async function sendRewardReadyEmail(referrerEmail: string, code: string) {
-  if (!resend) return
+  if (!zohoTransporter) return
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; color: #2F1A16; background-color: #FFF8FB;">
@@ -39,8 +68,8 @@ async function sendRewardReadyEmail(referrerEmail: string, code: string) {
     </div>
   `
 
-  await resend.emails.send({
-    from: `LashDiary Referrals <${FROM_EMAIL}>`,
+  await zohoTransporter.sendMail({
+    from: FROM_EMAIL,
     to: referrerEmail,
     subject: 'Your Referral Reward is Ready 🤎',
     html,
@@ -66,7 +95,7 @@ async function sendSalonReferralEmail({
   usageSummary: string
   bookingLink: string
 }) {
-  if (!resend || !salonEmail) return
+  if (!zohoTransporter || !salonEmail) return
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; background: #FFFDF8; color: #2F1A16;">
@@ -81,8 +110,8 @@ async function sendSalonReferralEmail({
     </div>
   `
 
-  await resend.emails.send({
-    from: `LashDiary Referrals <${FROM_EMAIL}>`,
+  await zohoTransporter.sendMail({
+    from: FROM_EMAIL,
     to: salonEmail,
     subject: 'Commission Earned from Your Referral 🤎',
     html,
@@ -297,7 +326,7 @@ export async function POST(request: NextRequest) {
     promoCodes[index] = promo
     await writeDataFile('promo-codes.json', { promoCodes })
 
-    if (friendRedeemed && resend && normalizedRefEmail) {
+    if (friendRedeemed && zohoTransporter && normalizedRefEmail) {
       try {
         await sendRewardReadyEmail(normalizedRefEmail, promo.code)
       } catch (emailError) {

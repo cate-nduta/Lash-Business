@@ -1,9 +1,32 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Logo from './Logo'
 
+interface HomepageData {
+  modelSignup?: {
+    enabled?: boolean
+  }
+}
+
 export default function Footer() {
+  const [modelSignupEnabled, setModelSignupEnabled] = useState(false)
+
+  useEffect(() => {
+    const checkModelSignup = async () => {
+      try {
+        const response = await fetch('/api/homepage')
+        if (response.ok) {
+          const data: HomepageData = await response.json()
+          setModelSignupEnabled(data.modelSignup?.enabled || false)
+        }
+      } catch (error) {
+        console.error('Error checking model signup status:', error)
+      }
+    }
+    checkModelSignup()
+  }, [])
   return (
     <footer className="bg-pink-light border-t border-brown-light mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -57,6 +80,12 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/policies" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
+                  Booking Policies
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
+                </Link>
+              </li>
+              <li>
                 <Link href="/terms" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
                   Terms &amp; Conditions
                   <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
@@ -91,6 +120,13 @@ export default function Footer() {
                   hello@lashdiary.co.ke
                 </a>
               </li>
+              {modelSignupEnabled && (
+                <li>
+                  <Link href="/modelsignup" className="hover:text-brown transition-colors">
+                    Sign up as a model
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 

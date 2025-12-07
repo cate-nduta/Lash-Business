@@ -17,6 +17,7 @@ interface Booking {
   timeSlot: string
   location?: string
   notes?: string
+  appointmentPreference?: string
   originalPrice: number
   discount: number
   finalPrice: number
@@ -1995,6 +1996,22 @@ export default function AdminBookings() {
                   <div className="mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
                     <p className="text-sm font-semibold text-yellow-800 mb-1">Special Notes / Instructions:</p>
                     <p className="text-sm text-yellow-900 whitespace-pre-wrap">{selectedBooking.notes}</p>
+                  </div>
+                )}
+
+                {/* Appointment Preference */}
+                {selectedBooking.appointmentPreference && (
+                  <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+                    <p className="text-sm font-semibold text-blue-800 mb-1">Appointment Preference:</p>
+                    <p className="text-sm text-blue-900">
+                      {selectedBooking.appointmentPreference === 'quiet' 
+                        ? 'Quiet Appointment - I prefer minimal conversation' 
+                        : selectedBooking.appointmentPreference === 'chat' 
+                        ? 'Small Chat Session - I enjoy friendly conversation' 
+                        : selectedBooking.appointmentPreference === 'either' 
+                        ? 'Either is fine - I\'m flexible' 
+                        : selectedBooking.appointmentPreference}
+                    </p>
                   </div>
                 )}
               </div>

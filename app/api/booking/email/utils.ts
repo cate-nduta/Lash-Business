@@ -1,4 +1,12 @@
-import nodemailer from 'nodemailer'
+import { readDataFile } from '@/lib/data-utils'
+import { normalizeServiceCatalog } from '@/lib/services-utils'
+import {
+  getZohoTransporter,
+  isZohoConfigured,
+  BUSINESS_NOTIFICATION_EMAIL,
+  FROM_EMAIL,
+  EMAIL_FROM_NAME,
+} from '@/lib/email/zoho-config'
 
 function normalizeBaseUrl(): string {
   const raw =
@@ -19,30 +27,9 @@ function normalizeBaseUrl(): string {
   return 'https://lashdiary.co.ke'
 }
 
-const BUSINESS_NOTIFICATION_EMAIL =
-  process.env.BUSINESS_NOTIFICATION_EMAIL ||
-  process.env.OWNER_EMAIL ||
-  process.env.CALENDAR_EMAIL ||
-  'hello@lashdiary.co.ke'
 const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
 const DEFAULT_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 const BASE_URL = normalizeBaseUrl()
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
-const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
-const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
-const ZOHO_SMTP_USER =
-  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
-const ZOHO_SMTP_PASS =
-  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
-const ZOHO_FROM_EMAIL =
-  process.env.ZOHO_FROM_EMAIL ||
-  process.env.ZOHO_FROM ||
-  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
-  BUSINESS_NOTIFICATION_EMAIL
-const FROM_EMAIL =
-  process.env.FROM_EMAIL ||
-  ZOHO_FROM_EMAIL ||
-  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 
 const EMAIL_STYLES = {
   background: '#FDF9F4',
@@ -52,19 +39,6 @@ const EMAIL_STYLES = {
   textSecondary: '#6B4A3B',
   brand: '#7C4B31',
 }
-
-const zohoTransporter =
-  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
-    ? nodemailer.createTransport({
-        host: ZOHO_SMTP_HOST,
-        port: ZOHO_SMTP_PORT,
-        secure: ZOHO_SMTP_PORT === 465,
-        auth: {
-          user: ZOHO_SMTP_USER,
-          pass: ZOHO_SMTP_PASS,
-        },
-      })
-    : null
 
 // Service price mapping for deposit calculation
 const servicePrices: { [key: string]: number } = {
@@ -83,21 +57,109 @@ const servicePrices: { [key: string]: number } = {
   'Lash Lift': 4500,
 }
 
-// Service duration mapping in minutes
-const serviceDurations: { [key: string]: number } = {
-  'Classic Lashes': 90,
-  'Subtle Hybrid Lashes': 120,
-  'Hybrid Lashes': 120,
-  'Volume Lashes': 150,
-  'Mega Volume Lashes': 180,
-  'Wispy Lashes': 150,
-  'Classic Infill': 60,
-  'Subtle Hybrid Infill': 75,
-  'Hybrid Infill': 75,
-  'Volume Infill': 90,
-  'Mega Volume Infill': 120,
-  'Wispy Infill': 90,
-  'Lash Lift': 60,
+// Cache for service durations to avoid reading file on every call
+let serviceDurationCache: { [key: string]: number } | null = null
+let serviceDurationCacheTime: number = 0
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes cache
+
+// Load service durations from services.json
+async function loadServiceDurations(): Promise<{ [key: string]: number }> {
+  const now = Date.now()
+  
+  // Return cached data if still valid
+  if (serviceDurationCache && (now - serviceDurationCacheTime) < CACHE_TTL) {
+    return serviceDurationCache
+  }
+  
+  try {
+    const raw = await readDataFile('services.json', {})
+    const { catalog } = normalizeServiceCatalog(raw)
+    
+    const durations: { [key: string]: number } = {}
+    
+    // Extract all services from all categories
+    catalog.categories.forEach((category) => {
+      category.services.forEach((service) => {
+        if (service.name && service.duration) {
+          // Store with exact name
+          durations[service.name] = service.duration
+          
+          // Also store common variations for flexible matching
+          const nameLower = service.name.toLowerCase()
+          if (nameLower.includes('classic') && !nameLower.includes('infill')) {
+            durations['Classic'] = service.duration
+            durations['Classic Lashes'] = service.duration
+          }
+          if (nameLower.includes('hybrid') && !nameLower.includes('infill')) {
+            if (nameLower.includes('subtle')) {
+              durations['Subtle Hybrid'] = service.duration
+              durations['Subtle Hybrid Lashes'] = service.duration
+            } else {
+              durations['Hybrid'] = service.duration
+              durations['Hybrid Lashes'] = service.duration
+            }
+          }
+          if (nameLower.includes('volume') && !nameLower.includes('infill')) {
+            if (nameLower.includes('mega')) {
+              durations['Mega Volume'] = service.duration
+              durations['Mega Volume Lashes'] = service.duration
+            } else {
+              durations['Volume'] = service.duration
+              durations['Volume Lashes'] = service.duration
+            }
+          }
+          if (nameLower.includes('wispy') && !nameLower.includes('infill')) {
+            durations['Wispy'] = service.duration
+            durations['Wispy Lashes'] = service.duration
+          }
+        }
+      })
+    })
+    
+    // Update cache
+    serviceDurationCache = durations
+    serviceDurationCacheTime = now
+    
+    return durations
+  } catch (error) {
+    console.error('Error loading service durations:', error)
+    // Return empty object on error, will fall back to default
+    return {}
+  }
+}
+
+// Helper function to get service duration with flexible matching
+async function getServiceDuration(service: string): Promise<number> {
+  if (!service || typeof service !== 'string') {
+    return 90 // Default
+  }
+  
+  const durations = await loadServiceDurations()
+  const normalized = service.trim()
+  
+  // Try exact match first
+  if (durations[normalized]) {
+    return durations[normalized]
+  }
+  
+  // Try case-insensitive match
+  const lowerNormalized = normalized.toLowerCase()
+  for (const [key, duration] of Object.entries(durations)) {
+    if (key.toLowerCase() === lowerNormalized) {
+      return duration
+    }
+  }
+  
+  // Try partial match (e.g., "Classic" matches "Classic Lashes")
+  for (const [key, duration] of Object.entries(durations)) {
+    const keyLower = key.toLowerCase()
+    if (keyLower.includes(lowerNormalized) || lowerNormalized.includes(keyLower)) {
+      return duration
+    }
+  }
+  
+  // Default fallback
+  return 90
 }
 
 type SendEmailPayload = {
@@ -117,12 +179,14 @@ type SendEmailPayload = {
   manageToken?: string
   policyWindowHours?: number
   notes?: string
+  appointmentPreference?: string
   desiredLook: string
   desiredLookStatus: 'recommended' | 'custom'
   isReminder?: boolean
   isWalkIn?: boolean
   walkInFee?: number
   isGiftCardBooking?: boolean
+  isNewUser?: boolean
 }
 
 // Calculate deposit amount (35% of service price)
@@ -170,6 +234,42 @@ function buildGoogleCalendarLink(options: {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
+// Convert minutes to readable duration format
+function formatDuration(minutes: number): string {
+  if (!minutes || minutes <= 0) {
+    return 'Not specified'
+  }
+  
+  // Calculate range (base duration to base + 30 minutes)
+  const baseHours = Math.floor(minutes / 60)
+  const baseMins = minutes % 60
+  const upperMinutes = minutes + 30
+  const upperHours = Math.floor(upperMinutes / 60)
+  const upperMins = upperMinutes % 60
+  
+  let baseText = ''
+  if (baseHours > 0) {
+    baseText = `${baseHours} ${baseHours === 1 ? 'hour' : 'hours'}`
+    if (baseMins > 0) {
+      baseText += ` ${baseMins} ${baseMins === 1 ? 'minute' : 'minutes'}`
+    }
+  } else {
+    baseText = `${baseMins} ${baseMins === 1 ? 'minute' : 'minutes'}`
+  }
+  
+  let upperText = ''
+  if (upperHours > 0) {
+    upperText = `${upperHours} ${upperHours === 1 ? 'hour' : 'hours'}`
+    if (upperMins > 0) {
+      upperText += ` ${upperMins} ${upperMins === 1 ? 'minute' : 'minutes'}`
+    }
+  } else {
+    upperText = `${upperMins} ${upperMins === 1 ? 'minute' : 'minutes'}`
+  }
+  
+  return `${baseText} to ${upperText}, averagely`
+}
+
 // Create HTML email template for customer
 function createCustomerEmailTemplate(bookingData: {
   name: string
@@ -188,6 +288,9 @@ function createCustomerEmailTemplate(bookingData: {
   lashMapStatusMessage: string
   walkInFee?: string
   isGiftCardBooking?: boolean
+  appointmentPreference?: string
+  isNewUser?: boolean
+  durationText?: string
 }) {
   const {
     name,
@@ -206,6 +309,7 @@ function createCustomerEmailTemplate(bookingData: {
     lashMapStatusMessage,
     walkInFee,
     isGiftCardBooking,
+    durationText,
   } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
   const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
@@ -234,15 +338,15 @@ function createCustomerEmailTemplate(bookingData: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">🥰 Appointment confirmed</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}! 💋</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment confirmed</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}!</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:8px 32px 24px 32px;">
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🥰 We've reserved your spot and will have everything ready for you. Here's a quick summary you can keep handy. 🌈
+                We've reserved your spot and will have everything ready for you. Here's a quick summary you can keep handy.
               </p>
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
@@ -254,16 +358,18 @@ function createCustomerEmailTemplate(bookingData: {
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Time</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime} – ${formattedEndTime}</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${formattedTime}</td>
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
+                  ${durationText ? `
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Duration</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${durationText}</td>
                   </tr>
+                  ` : ''}
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Service Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
@@ -289,16 +395,16 @@ function createCustomerEmailTemplate(bookingData: {
 
               ${isGiftCardBooking ? `
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:2px solid ${brand}; margin-bottom:24px;">
-                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">🎁 Gift Card Booking</h2>
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">Gift Card Booking</h2>
                 <p style="margin:0; color:${textPrimary}; font-size:14px; line-height:1.7;">
-                  As this is a gift card booking, your service type and desired lash look will be discussed during your appointment. We'll work together to create the perfect look for you! 🥰
+                  As this is a gift card booking, your service type and desired lash look will be discussed during your appointment. We'll work together to create the perfect look for you!
                 </p>
               </div>
               ` : ''}
 
               ${walkInFee && walkInFee.trim().length > 0 ? `
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:2px solid #FCD34D; margin-bottom:24px;">
-                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">⚠️ Walk-In Booking Payment</h2>
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand}; font-weight:600;">Walk-In Booking Payment</h2>
                 <p style="margin:0 0 12px 0; color:${textPrimary}; font-size:14px; line-height:1.7; font-weight:600;">
                   As a walk-in booking, you will pay the full amount of <strong>${servicePrice}${walkInFee ? ' + ' + walkInFee : ''}</strong> after your appointment is completed.
                 </p>
@@ -356,8 +462,8 @@ function createCustomerEmailTemplate(bookingData: {
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We're so excited to see you soon! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">We're so excited to see you soon!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -384,6 +490,7 @@ function createReminderEmailTemplate(bookingData: {
   policyWindowHours?: number
   desiredLookLabel: string
   lashMapStatusMessage: string
+  durationText?: string
 }) {
   const {
     name,
@@ -399,6 +506,7 @@ function createReminderEmailTemplate(bookingData: {
     policyWindowHours,
     desiredLookLabel,
     lashMapStatusMessage,
+    durationText,
   } = bookingData
   const appointmentLocation = location || DEFAULT_LOCATION
   const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
@@ -427,15 +535,15 @@ function createReminderEmailTemplate(bookingData: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">🧐 Appointment reminder</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}! 🥰</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment reminder</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}!</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:8px 32px 24px 32px;">
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🥰 This is a friendly reminder about your upcoming appointment with us. We're looking forward to seeing you! 💋
+                This is a friendly reminder about your upcoming appointment with us. We're looking forward to seeing you!
               </p>
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
@@ -447,16 +555,18 @@ function createReminderEmailTemplate(bookingData: {
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Time</td>
-                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedTime} – ${formattedEndTime}</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedTime}</td>
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
+                  ${durationText ? `
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Lash map status</td>
-                    <td style="padding:6px 0; color:${textPrimary};">${lashMapStatusMessage}</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Duration</td>
+                    <td style="padding:6px 0; color:${textPrimary};">${durationText}</td>
                   </tr>
+                  ` : ''}
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
@@ -518,8 +628,8 @@ function createReminderEmailTemplate(bookingData: {
 
           <tr>
             <td style="padding:24px 32px; background:${background}; text-align:center; border-top:1px solid ${accent};">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We can't wait to see you! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">We can't wait to see you!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -549,6 +659,7 @@ function createOwnerEmailTemplate(bookingData: {
   manageLink?: string
   policyWindowHours?: number
   notes?: string
+  appointmentPreference?: string
   addToCalendarLink?: string
   desiredLookLabel: string
   lashMapStatusMessage: string
@@ -573,6 +684,7 @@ function createOwnerEmailTemplate(bookingData: {
     manageLink,
     policyWindowHours,
     notes,
+    appointmentPreference,
     addToCalendarLink,
     desiredLookLabel,
     lashMapStatusMessage,
@@ -584,6 +696,7 @@ function createOwnerEmailTemplate(bookingData: {
   const windowHours = typeof policyWindowHours === 'number' ? Math.max(policyWindowHours, 1) : 72
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   const hasNotes = typeof notes === 'string' && notes.trim().length > 0
+  const hasAppointmentPreference = typeof appointmentPreference === 'string' && appointmentPreference.trim().length > 0
 
   const emailIssueBlock = customerEmailError && customerEmail
     ? `
@@ -631,9 +744,9 @@ The LashDiary Team
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 16px 32px; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">😎 New booking</p>
-              <h1 style="margin:12px 0 0 0; font-size:32px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">${name} just booked an appointment 🥰</h1>
-              ${isFirstTimeClient ? `<p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary}; background:${background}; padding:10px 14px; border-radius:10px; display:inline-block;">💋 First-time client</p>` : ''}
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">New booking</p>
+              <h1 style="margin:12px 0 0 0; font-size:32px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">${name} just booked an appointment</h1>
+              ${isFirstTimeClient ? `<p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary}; background:${background}; padding:10px 14px; border-radius:10px; display:inline-block;">First-time client</p>` : ''}
             </td>
           </tr>
 
@@ -687,13 +800,24 @@ The LashDiary Team
                   <p style="margin:0; font-size:15px; line-height:1.6; color:${textPrimary}; white-space:pre-line;">${notes?.trim()}</p>
                 </div>
                 ` : ''}
+                ${appointmentPreference ? `
+                <div style="margin-top:16px; padding:14px 16px; border-radius:12px; background:${background}; border:1px dashed ${accent};">
+                  <p style="margin:0 0 6px 0; font-size:14px; color:${textSecondary}; text-transform:uppercase; letter-spacing:1px;">Appointment Preference</p>
+                  <p style="margin:0; font-size:15px; line-height:1.6; color:${textPrimary};">
+                    ${appointmentPreference === 'quiet' ? 'Quiet Appointment - I prefer minimal conversation' : 
+                      appointmentPreference === 'chat' ? 'Small Chat Session - I enjoy friendly conversation' : 
+                      appointmentPreference === 'either' ? 'Either is fine - I\'m flexible' : 
+                      appointmentPreference}
+                  </p>
+                </div>
+                ` : ''}
               </div>
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:18px 22px; background:${background}; margin-bottom:10px;">
                 <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Payment summary</h2>
                 ${isWalkIn ? `
                 <div style="margin-bottom:12px; padding:12px 14px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px;">
-                  <p style="margin:0; font-size:13px; color:#92400E; font-weight:600;">⚠️ Walk-In Booking</p>
+                  <p style="margin:0; font-size:13px; color:#92400E; font-weight:600;">Walk-In Booking</p>
                   <p style="margin:4px 0 0 0; font-size:12px; color:#78350F; line-height:1.5;">
                     This is a walk-in booking. The client will pay the full amount of <strong>${servicePrice}</strong> after the appointment is completed. No deposit required.
                   </p>
@@ -747,8 +871,8 @@ The LashDiary Team
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">😎 LashDiary booking assistant</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 You've got this 🥰</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">LashDiary booking assistant</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 You've got this</p>
             </td>
           </tr>
         </table>
@@ -799,15 +923,15 @@ function createAftercareEmailTemplate(bookingData: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">💋 Your lash care journey</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Keep Your Lashes Beautiful, ${friendlyName}! 🌈</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Your lash care journey</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Keep Your Lashes Beautiful, ${friendlyName}!</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:8px 32px 24px 32px;">
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🥰 We hope you love your new lashes! To keep them looking beautiful and maintain their longevity, please follow these essential aftercare tips. 💋
+                We hope you love your new lashes! To keep them looking beautiful and maintain their longevity, please follow these essential aftercare tips.
               </p>
 
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
@@ -883,8 +1007,8 @@ function createAftercareEmailTemplate(bookingData: {
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We can't wait to see you again for your next appointment! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">We can't wait to see you again for your next appointment!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -905,7 +1029,8 @@ export async function sendAftercareEmail(bookingData: {
   timeSlot: string
   location?: string
 }) {
-  if (!zohoTransporter) {
+  const transporter = getZohoTransporter()
+  if (!transporter) {
     console.warn('Email transporter not configured. Skipping aftercare email.')
     return { success: false, error: 'Email not configured' }
   }
@@ -939,11 +1064,11 @@ export async function sendAftercareEmail(bookingData: {
     const mailOptions = {
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: email,
-      subject: 'Your Lash Aftercare Guide 🤎',
+      subject: 'Essential Aftercare Tips for Your Beautiful Lashes',
       html: htmlContent,
     }
 
-    const info = await zohoTransporter.sendMail(mailOptions)
+    const info = await transporter.sendMail(mailOptions)
     console.log('Aftercare email sent successfully:', info.messageId)
     return { success: true, messageId: info.messageId }
   } catch (error: any) {
@@ -971,6 +1096,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     manageToken,
     policyWindowHours,
     notes,
+    appointmentPreference,
     desiredLook,
     desiredLookStatus,
     isWalkIn,
@@ -1050,7 +1176,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
   })
   
   // Calculate end time based on service duration
-  const serviceDuration = serviceDurations[service] || 90 // Default to 90 minutes
+  const serviceDuration = await getServiceDuration(service) // Use flexible lookup from services.json
   const endTime = new Date(appointmentTime)
   endTime.setMinutes(endTime.getMinutes() + serviceDuration)
   const formattedEndTime = endTime.toLocaleTimeString('en-US', {
@@ -1058,6 +1184,9 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     minute: '2-digit',
     hour12: true,
   })
+  
+  // Format duration text for email
+  const durationText = formatDuration(serviceDuration)
   
   // Format prices
   const servicePriceFormatted = servicePrice > 0 
@@ -1115,6 +1244,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     manageLink,
     policyWindowHours: windowHours,
     notes: ownerNotes,
+    appointmentPreference: appointmentPreference || undefined,
     addToCalendarLink,
     desiredLookLabel,
     lashMapStatusMessage,
@@ -1126,9 +1256,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
   const baseOwnerEmailHtml = createOwnerEmailTemplate(ownerEmailTemplateData)
   let ownerEmailHtml = baseOwnerEmailHtml
 
-  const hasZoho = Boolean(zohoTransporter)
-
-  if (!hasZoho) {
+  if (!isZohoConfigured()) {
     console.error('⚠️ Zoho SMTP credentials are not configured. Email notifications will not be sent.')
     console.error('Please add ZOHO_SMTP_USER and ZOHO_SMTP_PASS to your environment.')
     console.log('=== NEW BOOKING REQUEST (Email not sent) ===')
@@ -1144,12 +1272,19 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
     }
   }
 
-  if (hasZoho) {
-    try {
-      console.log('📧 Attempting to send emails via Zoho SMTP...')
-      const transporter = zohoTransporter!
-      const zohoFromEmail = ZOHO_FROM_EMAIL || ZOHO_SMTP_USER || FROM_EMAIL
-      const fromAddress = `${EMAIL_FROM_NAME} <${zohoFromEmail}>`
+  const transporter = getZohoTransporter()
+  if (!transporter) {
+    console.error('❌ Failed to create Zoho transporter despite configuration being present')
+    return {
+      success: false,
+      status: 'error',
+      error: 'Failed to initialize email service. Please check Zoho SMTP configuration.',
+    }
+  }
+
+  try {
+    console.log('📧 Attempting to send emails via Zoho SMTP...')
+    const fromAddress = `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`
 
       // Validate email address
       if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -1169,8 +1304,8 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
             : ''
           
           const emailSubject = bookingData.isReminder
-            ? `Reminder: Your appointment is at ${appointmentTimeForSubject} 🤎`
-            : 'Your Appointment is Confirmed 🤎'
+            ? `Reminder: Your appointment is at ${appointmentTimeForSubject}`
+            : 'Your Appointment is Confirmed'
           
           console.log(`📧 Email subject: ${emailSubject}`)
           
@@ -1189,6 +1324,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
                 policyWindowHours: windowHours,
                 desiredLookLabel,
                 lashMapStatusMessage,
+                durationText,
               })
             : createCustomerEmailTemplate({
                 name,
@@ -1207,6 +1343,8 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
                 lashMapStatusMessage,
                 walkInFee: walkInFeeFormatted,
                 isGiftCardBooking: isGiftCardBooking === true,
+                appointmentPreference: appointmentPreference || undefined,
+                durationText,
               })
 
           console.log(`📧 Sending email via Zoho SMTP to: ${email}`)
@@ -1256,7 +1394,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
         from: fromAddress,
         to: OWNER_EMAIL,
         replyTo: email || OWNER_EMAIL,
-        subject: `New Booking Request 🤎`,
+        subject: `New Booking Request`,
         html: ownerEmailHtml,
       })
 
@@ -1289,6 +1427,112 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
         details: zohoError.stack,
       }
     }
+}
+
+// Create HTML email template for verification code
+function createVerificationCodeEmailTemplate(data: {
+  name: string
+  code: string
+}) {
+  const { name, code } = data
+  const friendlyName = typeof name === 'string' && name.trim().length > 0 ? name.trim().split(' ')[0] : 'there'
+  const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Your Email - LashDiary</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0; padding:0; background:${background}; font-family: 'DM Serif Text', Georgia, serif; color:${textPrimary};">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${background}; padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
+          <tr>
+            <td style="padding:32px; background:${card}; text-align:center;">
+              <h1 style="margin:0 0 16px 0; font-size:28px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600;">Verify Your Email Address</h1>
+              <p style="margin:0; font-size:16px; color:${textSecondary}; line-height:1.6;">
+                Hi ${friendlyName}!
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 32px 32px 32px;">
+              <div style="border-radius:14px; padding:24px; background:${background}; border:2px solid ${brand}; margin-bottom:24px; text-align:center;">
+                <p style="margin:0 0 12px 0; font-size:14px; color:${textSecondary}; text-transform:uppercase; letter-spacing:1px;">Your Verification Code</p>
+                <div style="font-size:36px; font-weight:700; letter-spacing:8px; color:${brand}; font-family:'Courier New', monospace; padding:16px; background:${card}; border-radius:10px; border:2px dashed ${accent};">
+                  ${code}
+                </div>
+              </div>
+
+              <p style="margin:0 0 16px 0; font-size:15px; color:${textPrimary}; line-height:1.7;">
+                To complete your account setup and secure your booking, please enter this verification code in the booking form.
+              </p>
+
+              <div style="border-radius:10px; padding:16px; background:${accent}; margin-bottom:20px;">
+                <p style="margin:0; font-size:13px; color:${textSecondary};">
+                  <strong>Security Note:</strong> This code expires in 30 minutes. If you didn't request this code, please ignore this email.
+                </p>
+              </div>
+
+              <p style="margin:0; font-size:14px; color:${textSecondary};">
+                Questions? Reply to this email or contact us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 32px; background:${background}; text-align:center; border-top:1px solid ${accent};">
+              <p style="margin:0; font-size:13px; color:${textSecondary};">Welcome to LashDiary!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+// Send verification code email
+export async function sendVerificationCodeEmail(data: {
+  name: string
+  email: string
+  code: string
+}) {
+  const { name, email, code } = data
+
+  const transporter = getZohoTransporter()
+  if (!transporter) {
+    console.warn('Email transporter not configured. Skipping verification code email.')
+    return { success: false, error: 'Email not configured' }
+  }
+
+  try {
+    const htmlContent = createVerificationCodeEmailTemplate({ name, code })
+
+    const mailOptions = {
+      from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: 'Complete Your Account Setup - Verification Code Inside',
+      html: htmlContent,
+    }
+
+    const info = await transporter.sendMail(mailOptions)
+    console.log('Verification code email sent successfully:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error: any) {
+    console.error('Error sending verification code email:', error)
+    return { success: false, error: error.message || 'Failed to send email' }
   }
 }
 

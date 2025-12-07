@@ -34,5 +34,11 @@
     "title": "",
     "description": "",
     "buttonText": ""
+  },
+  "modelSignup": {
+    "enabled": false,
+    "title": "Model Casting Call",
+    "description": "Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.",
+    "buttonText": "Apply Now"
   }
 }

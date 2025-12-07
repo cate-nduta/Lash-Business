@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo, useMemo } from 'react'
 
 interface CalendarPickerProps {
   selectedDate: string
@@ -22,15 +22,20 @@ interface CalendarPickerProps {
   }
 }
 
-export default function CalendarPicker({ selectedDate, onDateSelect, availableDates, fullyBookedDates = [], loading = false, minimumBookingDate, availabilityData }: CalendarPickerProps) {
+function CalendarPicker({ selectedDate, onDateSelect, availableDates, fullyBookedDates = [], loading = false, minimumBookingDate, availabilityData }: CalendarPickerProps) {
   const [viewMonth, setViewMonth] = useState(new Date())
 
-
-  // Get first day of month and number of days
-  const firstDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
-  const lastDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0)
-  const daysInMonth = lastDayOfMonth.getDate()
-  const startingDayOfWeek = firstDayOfMonth.getDay()
+  // Memoize expensive date calculations
+  const { firstDayOfMonth, lastDayOfMonth, daysInMonth, startingDayOfWeek } = useMemo(() => {
+    const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
+    const last = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0)
+    return {
+      firstDayOfMonth: first,
+      lastDayOfMonth: last,
+      daysInMonth: last.getDate(),
+      startingDayOfWeek: first.getDay()
+    }
+  }, [viewMonth])
 
   // Navigate months
   const goToPreviousMonth = (e?: React.MouseEvent) => {
@@ -104,19 +109,19 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     }
   }
 
-  // Generate calendar days
-  const calendarDays = []
-  
-  // Empty cells for days before month starts
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    calendarDays.push(null)
-  }
-
-  // Days of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
-    calendarDays.push(day)
-  }
+  // Memoize calendar days generation
+  const calendarDays = useMemo(() => {
+    const days: (number | null)[] = []
+    // Empty cells for days before month starts
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null)
+    }
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(day)
+    }
+    return days
+  }, [startingDayOfWeek, daysInMonth, viewMonth])
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -288,4 +293,7 @@ export default function CalendarPicker({ selectedDate, onDateSelect, availableDa
     </>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders
+export default memo(CalendarPicker)
 

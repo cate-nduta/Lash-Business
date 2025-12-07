@@ -21,7 +21,7 @@ type ManageBookingResponse = {
     cancellationPolicyHours: number
     cancellationCutoffAt: string
     withinPolicyWindow: boolean
-    within24Hours?: boolean
+    withinRescheduleWindow?: boolean
     isPast: boolean
     canCancel: boolean
     canReschedule: boolean
@@ -297,7 +297,7 @@ export default function ManageBookingPage() {
   }
 
   const isWithinWindow = booking.withinPolicyWindow
-  const isWithin24Hours = booking.within24Hours ?? false
+  const isWithinRescheduleWindow = booking.withinRescheduleWindow ?? false
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-12 px-4">
@@ -317,7 +317,7 @@ export default function ManageBookingPage() {
           </div>
 
           <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs sm:text-sm text-orange-900">
-            Deposits are strictly for securing your booking and cannot be refunded under any circumstance. Reschedule your appointment up to 24 hours before your start time.
+            Deposits are strictly for securing your booking and cannot be refunded under any circumstance. You may reschedule your appointment up to 12 hours before your scheduled time.
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -347,15 +347,15 @@ export default function ManageBookingPage() {
             </div>
           )}
 
-          {isWithin24Hours ? (
+          {booking.withinRescheduleWindow ? (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-900">
-              You're inside the 24-hour window. Online reschedules are paused so we can keep the studio
+              You're inside the 12-hour window. Online reschedules are paused so we can keep the studio
               running smoothly. Please call or text LashDiary and we'll help you personally.
             </div>
-          ) : isWithinWindow ? (
+          ) : booking.withinPolicyWindow ? (
             <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
               You're inside the {booking.cancellationPolicyHours}-hour policy window. Deposits stay on file, and you can
-              reschedule this appointment up until 24 hours before your start time.
+              reschedule this appointment up until 12 hours before your scheduled time.
             </div>
           ) : null}
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { generateInviteToken, hashInviteToken } from '@/lib/password-utils'
 import { requireOwnerAuth, getAdminUser } from '@/lib/admin-auth'
@@ -38,7 +38,39 @@ interface AdminInvite {
 
 const INVITE_EXPIRY_HOURS = 72
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 function getBaseUrl(request: NextRequest) {
   return (
@@ -83,9 +115,9 @@ async function sendInviteEmail(invite: AdminInvite, token: string, request: Next
   const baseUrl = getBaseUrl(request)
   const inviteLink = `${baseUrl.replace(/\/$/, '')}/admin/invite/${token}`
 
-  if (!resend) {
-    console.warn('RESEND_API_KEY not configured. Unable to send admin invite email.')
-    return { sent: false, error: 'Email service not configured' }
+  if (!zohoTransporter) {
+    console.warn('Zoho SMTP not configured. Unable to send admin invite email.')
+    return { sent: false, error: 'Email service not configured. Please set up ZOHO_SMTP credentials.' }
   }
 
   const subject = formatEmailSubject(`You have been invited to manage Lash Diary`)
@@ -126,17 +158,17 @@ async function sendInviteEmail(invite: AdminInvite, token: string, request: Next
   `
 
   try {
-    const response = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'Lash Diary Admin <no-reply@lashdiary.com>',
+    const response = await zohoTransporter.sendMail({
+      from: FROM_EMAIL,
       to: invite.email,
-      replyTo: process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke',
+      replyTo: process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL,
       subject,
       html: emailHtml,
     })
 
-    if (response.error) {
-      console.error('Failed to send invite email:', response.error)
-      return { sent: false, error: response.error.message }
+    if (!response) {
+      console.error('Failed to send invite email')
+      return { sent: false, error: 'Failed to send email' }
     }
 
     return { sent: true }

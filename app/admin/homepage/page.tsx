@@ -60,6 +60,12 @@ interface HomepageData {
   giftCardSection?: {
     enabled?: boolean
   }
+  modelSignup?: {
+    enabled?: boolean
+    title?: string
+    description?: string
+    buttonText?: string
+  }
   cta: {
     title: string
     description: string
@@ -138,6 +144,7 @@ export default function AdminHomepage() {
     tsubokiMassage: createDefaultMassage(),
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
+    modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
@@ -163,6 +170,7 @@ export default function AdminHomepage() {
     tsubokiMassage: createDefaultMassage(),
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
+    modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
@@ -271,6 +279,12 @@ export default function AdminHomepage() {
           },
           giftCardSection: {
             enabled: data.giftCardSection?.enabled !== false,
+          },
+          modelSignup: {
+            enabled: data.modelSignup?.enabled ?? false,
+            title: data.modelSignup?.title ?? 'Model Casting Call',
+            description: data.modelSignup?.description ?? 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
+            buttonText: data.modelSignup?.buttonText ?? 'Apply Now',
           },
           showFridayBooking: data.showFridayBooking !== undefined ? data.showFridayBooking : true,
           fridayBookingMessage: data.fridayBookingMessage ?? 'Friday Night Bookings Available',
@@ -988,6 +1002,111 @@ export default function AdminHomepage() {
                 />
                 <span className="text-sm font-medium text-brown-dark">Show gift card section on homepage</span>
               </label>
+            </div>
+          </div>
+
+          {/* Model Signup Section */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Model Signup Section</h2>
+            <p className="text-sm text-brown-dark/80 mb-4">
+              Show or hide the model casting call section on the homepage. When enabled, this section will appear on the homepage and a link will be added to the footer.
+            </p>
+            <div className="space-y-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={homepage.modelSignup?.enabled ?? false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      modelSignup: {
+                        ...(prev.modelSignup || {
+                          enabled: false,
+                          title: 'Model Casting Call',
+                          description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
+                          buttonText: 'Apply Now',
+                        }),
+                        enabled: e.target.checked,
+                      },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show model signup section on homepage</span>
+              </label>
+              {homepage.modelSignup?.enabled && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
+                    <input
+                      type="text"
+                      value={homepage.modelSignup.title || 'Model Casting Call'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          modelSignup: {
+                            ...(prev.modelSignup || {
+                              enabled: true,
+                              title: 'Model Casting Call',
+                              description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
+                              buttonText: 'Apply Now',
+                            }),
+                            title: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Model Casting Call"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
+                    <textarea
+                      value={homepage.modelSignup.description || ''}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          modelSignup: {
+                            ...(prev.modelSignup || {
+                              enabled: true,
+                              title: 'Model Casting Call',
+                              description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
+                              buttonText: 'Apply Now',
+                            }),
+                            description: e.target.value,
+                          },
+                        }))
+                      }
+                      rows={2}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Button Text</label>
+                    <input
+                      type="text"
+                      value={homepage.modelSignup.buttonText || 'Apply Now'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          modelSignup: {
+                            ...(prev.modelSignup || {
+                              enabled: true,
+                              title: 'Model Casting Call',
+                              description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
+                              buttonText: 'Apply Now',
+                            }),
+                            buttonText: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Apply Now"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

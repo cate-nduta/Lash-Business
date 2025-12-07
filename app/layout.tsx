@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import PromoBanner from '@/components/PromoBanner'
 import WebsiteProtection from '@/components/WebsiteProtection'
+import ClientAuthMonitor from '@/components/ClientAuthMonitor'
 import ThemeProvider from './theme-provider'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { CartProvider } from '@/contexts/CartContext'
@@ -21,6 +22,8 @@ const inter = Inter({
   variable: '--font-inter',
   display: 'swap',
   preload: true,
+  fallback: ['system-ui', 'arial'],
+  adjustFontFallback: true,
 })
 
 const playfair = Playfair_Display({ 
@@ -28,6 +31,8 @@ const playfair = Playfair_Display({
   variable: '--font-playfair',
   display: 'swap',
   preload: true,
+  fallback: ['Georgia', 'serif'],
+  adjustFontFallback: true,
 })
 
 const monsieurLaDoulaise = Monsieur_La_Doulaise({ 
@@ -36,6 +41,8 @@ const monsieurLaDoulaise = Monsieur_La_Doulaise({
   weight: '400',
   display: 'swap',
   preload: true,
+  fallback: ['cursive'],
+  adjustFontFallback: true,
 })
 
 
@@ -174,6 +181,37 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        {/* Inject theme colors immediately before React hydrates to prevent flash of wrong theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const root = document.documentElement;
+                  if (root) {
+                    root.style.setProperty('--color-primary', ${JSON.stringify(colors.primary)});
+                    root.style.setProperty('--color-primary-dark', ${JSON.stringify(colors.primaryDark)});
+                    root.style.setProperty('--color-primary-light', ${JSON.stringify(colors.primaryLight)});
+                    root.style.setProperty('--color-secondary', ${JSON.stringify(colors.secondary)});
+                    root.style.setProperty('--color-secondary-dark', ${JSON.stringify(colors.secondaryDark)});
+                    root.style.setProperty('--color-accent', ${JSON.stringify(colors.accent)});
+                    root.style.setProperty('--color-background', ${JSON.stringify(colors.background)});
+                    root.style.setProperty('--color-surface', ${JSON.stringify(colors.surface)});
+                    root.style.setProperty('--color-text', ${JSON.stringify(colors.text)});
+                    root.style.setProperty('--color-on-primary', ${JSON.stringify(colors.onPrimary || '#ffffff')});
+                    root.style.setProperty('--color-on-secondary', ${JSON.stringify(colors.onSecondary || colors.text)});
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={`${inter.variable} ${playfair.variable} ${monsieurLaDoulaise.variable} font-body antialiased`} suppressHydrationWarning>
         <StructuredDataScript id="structured-data-organization" data={organizationSchema} />
         <StructuredDataScript id="structured-data-localbusiness" data={localBusinessSchema} />
@@ -201,6 +239,7 @@ export default async function RootLayout({
             <CartProvider>
               <ServiceCartProvider>
                 <WebsiteProtection />
+                <ClientAuthMonitor />
                 <div className="sticky top-0 z-[70]">
                   <PromoBanner />
                   <Navbar />

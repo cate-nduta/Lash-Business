@@ -20,7 +20,7 @@ function normalizeBaseUrl(): string {
 }
 
 const BASE_URL = normalizeBaseUrl()
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
 const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
 const ZOHO_SMTP_USER =
@@ -84,8 +84,8 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
           <tr>
             <td style="background: linear-gradient(135deg, ${brand} 0%, #9A5B3A 100%); padding:48px 32px 40px 32px; text-align:center;">
               <div style="font-size:48px; margin-bottom:16px;">🤎</div>
-              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">Welcome to LashDiary! 🥰</h1>
-              <p style="margin:12px 0 0 0; font-size:18px; color:#FFFFFF; opacity:0.95;">We're so excited to have you, ${name}! 💋</p>
+              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">Welcome to LashDiary!</h1>
+              <p style="margin:12px 0 0 0; font-size:18px; color:#FFFFFF; opacity:0.95;">We're so excited to have you, ${name}!</p>
             </td>
           </tr>
 
@@ -127,7 +127,7 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
               <!-- CTA Button -->
               <div style="text-align:center; margin:32px 0;">
                 <a href="${BASE_URL}/booking" style="display:inline-block; padding:16px 40px; background:${brand}; color:#FFFFFF; text-decoration:none; border-radius:999px; font-weight:600; font-size:16px; box-shadow: 0 4px 12px rgba(124, 75, 49, 0.3); transition: all 0.3s ease;">
-                  Book Your Appointment Now 🎁
+                  Book Your Appointment Now
                 </a>
               </div>
 
@@ -183,10 +183,10 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
                 I'm here to help you look and feel your absolute best. If you have any questions, feel free to reach out – I'd love to chat!
               </p>
               <p style="margin:20px 0 0 0; font-size:16px; color:${textPrimary};">
-                🥰 Sending you lots of lash love! 💋
+                Sending you lots of lash love!
               </p>
               <p style="margin:8px 0 0 0; font-size:16px; font-weight:600; color:${brand};">
-                🤎 The LashDiary Team 🥰
+                🤎 The LashDiary Team
               </p>
 
             </td>
@@ -230,7 +230,7 @@ export async function sendWelcomeEmail(data: { email: string; name: string; prom
     const info = await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: email,
-      subject: 'Welcome to LashDiary! Your Discount Code is Here 🤎',
+      subject: 'Welcome! Your Exclusive Discount Code Awaits',
       html,
       text: `
 Welcome to LashDiary, ${name}!

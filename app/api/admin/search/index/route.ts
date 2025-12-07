@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // Search index for all admin panel content
 interface SearchItem {

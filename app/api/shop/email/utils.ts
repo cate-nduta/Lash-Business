@@ -21,7 +21,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 
 const EMAIL_STYLES = {
   background: '#FDF9F4',
@@ -268,7 +268,7 @@ export async function sendShopOrderConfirmationEmail(data: {
     await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: data.email,
-      subject: `Your Order is Confirmed 🤎`,
+      subject: `Thank You for Your Purchase! Order #${data.orderId} 🤎`,
       html: htmlContent,
       text: `Thank you for your purchase! Order ID: ${data.orderId}, Product: ${data.productName}, Total: ${data.amount.toLocaleString()} KES. ${data.deliveryOption === 'pickup' ? `Pickup Location: ${data.pickupLocation}. Available for pickup: ${data.pickupDays.join(', ')}.` : `Delivery Address: ${data.deliveryAddress || 'Not provided'}.`} You'll receive another email when your order is ready.`,
     })
@@ -298,7 +298,7 @@ export async function sendShopOrderReadyEmail(data: {
     await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: data.email,
-      subject: `Your Order is Ready for Pickup 🤎`,
+      subject: `Great News! Your Order is Ready for Collection 🤎`,
       html: htmlContent,
       text: `Your order for ${data.productName} is ready for pickup at ${data.pickupLocation}. Available on: ${data.pickupDays.join(', ')}. Order ID: ${data.orderId}`,
     })

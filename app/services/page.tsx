@@ -169,10 +169,6 @@ export default function Services() {
             Our Services
             <span className="absolute -top-2 -right-8 text-2xl opacity-50 hidden lg:inline-block">✨</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto px-2">
-            Discover our range of premium lash and brow treatments. Select a category to explore services crafted to
-            enhance your natural beauty. 💅
-          </p>
         </div>
 
         {catalog.categories.length === 0 ? (

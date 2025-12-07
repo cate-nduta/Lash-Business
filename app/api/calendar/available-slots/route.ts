@@ -168,10 +168,6 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
   const isMondayToThursday = dayOfWeek >= 1 && dayOfWeek <= 4 // Monday=1, Tuesday=2, Wednesday=3, Thursday=4
   const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
   
-  console.log(`[DEBUG generateTimeSlotsForDate] Date: ${dateStr}, Year: ${year}, Month: ${month}, Day: ${day}`)
-  console.log(`[DEBUG generateTimeSlotsForDate] DayOfWeek: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
-  console.log(`[DEBUG generateTimeSlotsForDate] isSunday: ${isSunday}, isSaturday: ${isSaturday}, isFriday: ${isFriday}, isMondayToThursday: ${isMondayToThursday}`)
-  
   // Load availability data from availability.json first to check if Saturday is enabled
   if (availabilityData === undefined) {
     availabilityData = await loadAvailabilityData()
@@ -192,7 +188,6 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
     defaultEnabled[dayKey as keyof typeof defaultEnabled]
 
   if (!dayEnabled) {
-    console.log(`[DEBUG generateTimeSlotsForDate] ${dayKey} disabled - returning empty slots`)
     return []
   }
 
@@ -203,7 +198,6 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
 
   // If Saturday is disabled, return empty slots
   if (isSaturday && !saturdayEnabled) {
-    console.log(`[DEBUG generateTimeSlotsForDate] Saturday detected and disabled - returning empty slots`)
     return []
   }
 
@@ -293,121 +287,37 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const dateParam = searchParams.get('date')
     const fullyBookedOnly = searchParams.get('fullyBookedOnly') === 'true'
+    
+    // If only fully booked dates are requested, return them IMMEDIATELY without any delay
+    if (fullyBookedOnly) {
+      const availabilityData = await loadAvailabilityData()
+      const bookingWindow = availabilityData?.bookingWindow
+      const minimumBookingDate = availabilityData?.minimumBookingDate
+      const fullyBookedSet = new Set<string>(
+        Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
+      )
+      
+      // Return immediately with short cache for performance
+      return NextResponse.json(
+        { 
+          fullyBookedDates: Array.from(fullyBookedSet), 
+          bookingWindow: bookingWindow ?? null, 
+          minimumBookingDate: minimumBookingDate ?? null 
+        },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10',
+            'Pragma': 'no-cache',
+          },
+        }
+      )
+    }
+    
     const availabilityData = await loadAvailabilityData()
     const localBookings = await loadLocalBookings()
     const bookingWindow = availabilityData?.bookingWindow
     const minimumBookingDate = availabilityData?.minimumBookingDate
     const { start: windowStartDate, end: windowEndDate } = deriveWindowRange(bookingWindow)
-    
-    // If only fully booked dates are requested, return them quickly
-    if (fullyBookedOnly) {
-      const fullyBookedSet = new Set<string>(
-        Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
-      )
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const defaultEnd = new Date(today)
-      defaultEnd.setDate(defaultEnd.getDate() + 30)
-      const rangeStart = windowStartDate && windowStartDate > today ? new Date(windowStartDate) : new Date(today)
-      const rangeEnd = windowEndDate ? new Date(windowEndDate) : defaultEnd
-
-      if (rangeEnd < rangeStart) {
-        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null, minimumBookingDate: minimumBookingDate ?? null })
-      }
-      
-      const calendar = getCalendarClient()
-      if (!calendar) {
-        return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), minimumBookingDate: minimumBookingDate ?? null })
-      }
-      
-      // Batch check dates (check multiple dates in one API call if possible)
-      const currentDate = new Date(rangeStart)
-      const datesToCheck: string[] = []
-      
-      while (currentDate <= rangeEnd) {
-        const dateStr = currentDate.toISOString().split('T')[0]
-        if (!isDateWithinWindow(dateStr, bookingWindow, minimumBookingDate)) {
-          currentDate.setDate(currentDate.getDate() + 1)
-          continue
-        }
-        const [year, month, day] = dateStr.split('-').map(Number)
-        const dayOfWeek = getDayOfWeek(year, month, day)
-        const isSaturday = dayOfWeek === 6
-        
-        const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
-
-        if (!isSaturday || saturdayEnabled) {
-          datesToCheck.push(dateStr)
-        }
-        currentDate.setDate(currentDate.getDate() + 1)
-      }
-      
-      // Check dates in batches to reduce API calls
-      const batchSize = 7 // Check a week at a time
-      for (let i = 0; i < datesToCheck.length; i += batchSize) {
-        const batch = datesToCheck.slice(i, i + batchSize)
-        const startDate = new Date(batch[0] + 'T00:00:00')
-        const endBatchDate = new Date(batch[batch.length - 1] + 'T23:59:59')
-        
-        try {
-          const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
-            timeMin: startDate.toISOString(),
-            timeMax: endBatchDate.toISOString(),
-            singleEvents: true,
-            orderBy: 'startTime',
-          })
-          
-          const events = response.data.items || []
-          const bookedSlotsByDate = new Map<string, Set<string>>()
-          
-          const addBookedSlot = (slotIso: string | null | undefined) => {
-            if (!slotIso) return
-            const eventDate = new Date(slotIso)
-            const dateKey = eventDate.toISOString().split('T')[0]
-            if (!bookedSlotsByDate.has(dateKey)) {
-              bookedSlotsByDate.set(dateKey, new Set())
-            }
-            const normalized = normalizeSlotForComparison(eventDate.toISOString())
-            bookedSlotsByDate.get(dateKey)!.add(normalized)
-          }
-
-          events.forEach((event) => {
-            if (event.start?.dateTime) {
-              addBookedSlot(event.start.dateTime)
-            }
-          })
-          
-          localBookings.forEach((booking) => {
-            if (booking?.timeSlot && booking.status && booking.status !== 'cancelled') {
-              const slotDate = booking.date
-                ? `${booking.date}T${booking.timeSlot.split('T')[1]}`
-                : booking.timeSlot
-              addBookedSlot(slotDate)
-            }
-          })
-          
-          // Check each date in batch
-          for (const dateStr of batch) {
-            const allSlots = await generateTimeSlotsForDate(dateStr, availabilityData)
-            const bookedSlots = bookedSlotsByDate.get(dateStr) || new Set()
-            
-            const availableSlots = allSlots.filter(slot => {
-              const normalizedSlot = normalizeSlotForComparison(slot)
-              return !bookedSlots.has(normalizedSlot)
-            })
-            
-            if (availableSlots.length === 0 && allSlots.length > 0) {
-              fullyBookedSet.add(dateStr)
-            }
-          }
-        } catch (error) {
-          console.warn(`Error checking batch starting at ${batch[0]}:`, error)
-        }
-      }
-      
-      return NextResponse.json({ fullyBookedDates: Array.from(fullyBookedSet), bookingWindow: bookingWindow ?? null })
-    }
     
     // If no date provided, return available dates instead
     if (!dateParam) {
@@ -484,6 +394,10 @@ export async function GET(request: NextRequest) {
         fullyBookedDates: Array.from(fullyBookedSet),
         bookingWindow: bookingWindow ?? null,
         minimumBookingDate: minimumBookingDate ?? null,
+      }, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60', // Cache for 30 seconds, serve stale for 1 minute
+        },
       })
     }
 
@@ -502,11 +416,8 @@ export async function GET(request: NextRequest) {
     // Parse the date string to get year, month, day
     const [year, month, day] = dateParam.split('-').map(Number)
     
-    console.log(`[DEBUG GET] Received date parameter: ${dateParam}, parsed as Year: ${year}, Month: ${month}, Day: ${day}`)
-    
     // Validate date components
     if (isNaN(year) || isNaN(month) || isNaN(day) || month < 1 || month > 12 || day < 1 || day > 31) {
-      console.log(`[DEBUG GET] Invalid date components`)
       return NextResponse.json(
         { error: 'Invalid date' },
         { status: 400 }
@@ -516,20 +427,16 @@ export async function GET(request: NextRequest) {
     // Check if it's Saturday and if Saturday is enabled
     const dayOfWeek = getDayOfWeek(year, month, day)
     const isSaturday = dayOfWeek === 6
-    console.log(`[DEBUG GET] Calculated day of week: ${dayOfWeek} (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)`)
     
     if (Array.isArray(availabilityData?.fullyBookedDates) && availabilityData!.fullyBookedDates.includes(dateParam)) {
-      console.log(`[DEBUG GET] Date ${dateParam} is manually marked as fully booked.`)
       return NextResponse.json({ slots: [] })
     }
 
     if (isSaturday) {
       const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
       if (!saturdayEnabled) {
-        console.log(`[DEBUG GET] Saturday detected and disabled - returning empty slots`)
         return NextResponse.json({ slots: [] })
       }
-      console.log(`[DEBUG GET] Saturday detected and enabled - generating slots`)
     }
 
     // Check if date is in the past (compare dates, not times)
@@ -543,11 +450,9 @@ export async function GET(request: NextRequest) {
 
     // Generate time slots for the selected date (pass date string, not Date object)
     const allSlots = await generateTimeSlotsForDate(dateParam, availabilityData)
-    console.log(`[DEBUG] Date: ${dateParam}, Generated ${allSlots.length} slots:`, allSlots)
     
     // If no slots generated, return early
     if (allSlots.length === 0) {
-      console.log(`[DEBUG] No slots generated for ${dateParam}. Day of week: ${getDayOfWeek(year, month, day)}`)
       return NextResponse.json({ slots: [] })
     }
     
@@ -571,7 +476,6 @@ export async function GET(request: NextRequest) {
         })
 
         const events = response.data.items || []
-        console.log(`[DEBUG] Found ${events.length} calendar events for ${dateParam}`)
 
         // Extract booked time slots
         events.forEach((event) => {
@@ -580,7 +484,6 @@ export async function GET(request: NextRequest) {
             // Normalize to exact time for comparison (including minutes)
             const normalized = normalizeSlotForComparison(eventStart.toISOString())
             bookedSlots.add(normalized)
-            console.log(`[DEBUG] Booked slot: ${event.start.dateTime} -> ${normalized}`)
           }
         })
       }
@@ -594,8 +497,6 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const todayStr = today.toDateString()
     const selectedDateStr = selectedDateLocal.toDateString()
-    console.log(`[DEBUG] Filtering: Today=${todayStr}, Selected=${selectedDateStr}, Now=${now.toISOString()}`)
-    console.log(`[DEBUG] All slots before filtering:`, allSlots)
     
     localBookings.forEach((booking) => {
       if (booking?.timeSlot && booking.status !== 'cancelled') {
@@ -605,33 +506,39 @@ export async function GET(request: NextRequest) {
         if (bookingDate === dateParam) {
           const normalized = normalizeSlotForComparison(booking.timeSlot)
           bookedSlots.add(normalized)
-          console.log(`[DEBUG] Local booking slot filtered: ${booking.timeSlot} -> ${normalized}`)
         }
       }
     })
+    
+    // Enforce 24-hour advance booking requirement
+    const MIN_ADVANCE_BOOKING_HOURS = 24
+    const minBookingTime = new Date(now.getTime() + MIN_ADVANCE_BOOKING_HOURS * 60 * 60 * 1000)
     
     const availableSlots = allSlots
       .filter(slot => {
         // Check if slot is booked (normalize for comparison)
         const normalizedSlot = normalizeSlotForComparison(slot)
         if (bookedSlots.has(normalizedSlot)) {
-          console.log(`[DEBUG] Slot ${slot} filtered out: booked (normalized: ${normalizedSlot})`)
+          return false
+        }
+        
+        const slotTime = new Date(slot)
+        
+        // Enforce 24-hour advance booking: filter out slots less than 24 hours away
+        if (slotTime.getTime() <= minBookingTime.getTime()) {
           return false
         }
         
         // Only check if slot is in the past if the selected date is today
         // For future dates, don't filter based on time
         if (selectedDateStr === todayStr) {
-          const slotTime = new Date(slot)
           // Compare in Nairobi timezone - convert both to Nairobi time for accurate comparison
           const slotTimeInNairobi = new Date(slot) // slot is already in Nairobi timezone (+03:00)
           if (slotTimeInNairobi <= now) {
-            console.log(`[DEBUG] Slot ${slot} filtered out: past time (slotTime=${slotTimeInNairobi.toISOString()}, now=${now.toISOString()})`)
             return false
           }
         }
         
-        console.log(`[DEBUG] Slot ${slot} is available (normalized: ${normalizedSlot})`)
         return true
       })
       .map(slot => {
@@ -663,9 +570,11 @@ export async function GET(request: NextRequest) {
         }
       })
 
-    console.log(`[DEBUG] Final result: ${availableSlots.length} available slots out of ${allSlots.length} total`)
-    console.log(`[DEBUG] Available slots array:`, JSON.stringify(availableSlots, null, 2))
-    return NextResponse.json({ slots: availableSlots, bookingWindow: bookingWindow ?? null })
+    return NextResponse.json({ slots: availableSlots, bookingWindow: bookingWindow ?? null }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30', // Cache for 10 seconds, serve stale for 30 seconds
+      },
+    })
   } catch (error) {
     console.error('Error fetching available slots:', error)
     return NextResponse.json(

@@ -44,19 +44,33 @@ export async function readDataFile<T>(filename: string, fallback: T | Record<str
 
 export async function writeDataFile<T>(filename: string, data: T): Promise<void> {
   if (useSupabase) {
-    const supabase = getSupabaseAdminClient()
-    const key = getDocumentKey(filename)
+    try {
+      const supabase = getSupabaseAdminClient()
+      const key = getDocumentKey(filename)
 
-    const { error } = await supabase
-      .from(DOCUMENTS_TABLE)
-      .upsert({ key, value: data, updated_at: new Date().toISOString() })
+      const { error } = await supabase
+        .from(DOCUMENTS_TABLE)
+        .upsert({ key, value: data, updated_at: new Date().toISOString() })
 
-    if (error) {
-      console.error(`Supabase write error for ${filename}:`, error)
-      throw error
+      if (error) {
+        console.error(`Supabase write error for ${filename}:`, error)
+        // Fall back to local file system if Supabase fails
+        console.warn(`Falling back to local file system for ${filename}`)
+        const filePath = path.join(dataDir, filename)
+        await fs.mkdir(dataDir, { recursive: true })
+        await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+        return
+      }
+
+      return
+    } catch (error) {
+      // If Supabase connection fails entirely, fall back to local file system
+      console.error(`Supabase connection error for ${filename}, falling back to local storage:`, error)
+      const filePath = path.join(dataDir, filename)
+      await fs.mkdir(dataDir, { recursive: true })
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+      return
     }
-
-    return
   }
 
   const filePath = path.join(dataDir, filename)

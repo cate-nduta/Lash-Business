@@ -65,6 +65,12 @@ interface HomepageData {
     description: string
     buttonText: string
   }
+  modelSignup?: {
+    enabled?: boolean
+    title?: string
+    description?: string
+    buttonText?: string
+  }
   showFridayBooking?: boolean
   fridayBookingMessage?: string
 }
@@ -96,23 +102,30 @@ export default function Home() {
   })
 
   useEffect(() => {
+    let isMounted = true
     const timestamp = Date.now()
     const fetchOptions: RequestInit = { 
-      cache: 'no-store' as RequestCache,
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      },
+      cache: 'default' as RequestCache, // Use default cache for better performance
+      // Add timeout to prevent hanging
+      signal: AbortSignal.timeout(8000) // 8 second timeout
     }
 
-    // Fetch all data in parallel for faster loading
-    Promise.all([
+    // Fetch all data in parallel for faster loading with error handling
+    Promise.allSettled([
       fetch(`/api/homepage?t=${timestamp}`, fetchOptions).then((res) => res.json()),
       fetch(`/api/testimonials?t=${timestamp}`, fetchOptions).then((res) => res.json()),
       fetch(`/api/availability?t=${timestamp}`, fetchOptions).then((res) => res.json()),
     ])
-      .then(([homepageData, testimonialsData, availabilityData]) => {
-        setHomepageData(homepageData)
+      .then((results) => {
+        if (!isMounted) return
+        
+        const homepageData = results[0].status === 'fulfilled' ? results[0].value : null
+        const testimonialsData = results[1].status === 'fulfilled' ? results[1].value : { testimonials: [] }
+        const availabilityData = results[2].status === 'fulfilled' ? results[2].value : null
+        
+        if (homepageData) {
+          setHomepageData(homepageData)
+        }
         setTestimonials(testimonialsData.testimonials || [])
         
         // Friday slots are activated if friday time slots exist and have at least one slot
@@ -122,10 +135,15 @@ export default function Home() {
         setLoading(false)
       })
       .catch((error) => {
+        if (!isMounted) return
         console.error('Error loading homepage data:', error)
         setLoading(false)
         setFridaySlotsActivated(false)
       })
+    
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const [heroRef, heroInView] = useInView({
@@ -916,6 +934,26 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      {/* Model Signup Section */}
+      {homepageData?.modelSignup?.enabled && (
+        <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-pink-50 via-white to-amber-50">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl md:text-4xl font-display text-brown-dark mb-4">
+              {homepageData.modelSignup.title || 'Model Casting Call'}
+            </h2>
+            <p className="text-lg text-brown/70 mb-8 max-w-2xl mx-auto">
+              {homepageData.modelSignup.description || 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.'}
+            </p>
+            <Link
+              href="/modelsignup"
+              className="inline-block bg-brown-dark hover:bg-brown text-white font-semibold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+            >
+              {homepageData.modelSignup.buttonText || 'Apply Now'}
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* CTA Section */}
       {(cta.title || cta.description || cta.buttonText) && (

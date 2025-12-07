@@ -1,60 +1,45 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
-export const runtime = 'nodejs'
-export const revalidate = 0
-export const dynamic = 'force-dynamic'
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const settings = await readDataFile<any>('settings.json', {})
-    const business = settings?.business ?? {}
-    const social = settings?.social ?? {}
+    let settings: any = {}
+    try {
+      settings = await readDataFile<any>('settings.json', {})
+    } catch (error) {
+      console.error('Error reading settings file:', error)
+      return NextResponse.json({
+        business: {
+          eyepatchImageUrl: '',
+          logoType: 'text',
+          logoUrl: '',
+          logoText: '',
+          logoColor: '#733D26',
+        },
+      })
+    }
 
-    const response = {
+    const business = settings?.business ?? {}
+
+    return NextResponse.json({
       business: {
-        name: business.name ?? '',
-        phone: business.phone ?? '',
-        email: business.email ?? '',
-        address: business.address ?? '',
-        description: business.description ?? '',
-        logoType: business.logoType === 'image' ? 'image' : 'text',
+        eyepatchImageUrl: business.eyepatchImageUrl ?? '',
+        logoType: business.logoType ?? 'text',
         logoUrl: business.logoUrl ?? '',
         logoText: business.logoText ?? '',
         logoColor: business.logoColor ?? '#733D26',
-        faviconUrl: business.faviconUrl ?? '',
-        faviconVersion: typeof business.faviconVersion === 'number' ? business.faviconVersion : Date.now(),
-      },
-      social,
-    }
-
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
       },
     })
-  } catch (error) {
-    console.error('Error loading public settings:', error)
-    return NextResponse.json(
-      {
-        business: {
-          name: '',
-          phone: '',
-          email: '',
-          address: '',
-          description: '',
-          logoType: 'text',
-          logoUrl: '',
-          logoText: 'LashDiary',
-          logoColor: '#733D26',
-          faviconUrl: '',
-          faviconVersion: Date.now(),
-        },
-        social: {},
+  } catch (error: any) {
+    console.error('Error fetching settings:', error)
+    return NextResponse.json({
+      business: {
+        eyepatchImageUrl: '',
+        logoType: 'text',
+        logoUrl: '',
+        logoText: '',
+        logoColor: '#733D26',
       },
-      { headers: { 'Cache-Control': 'no-store, max-age=0' } },
-    )
+    })
   }
 }
-
-

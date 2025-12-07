@@ -9,7 +9,7 @@ const ZOHO_SMTP_USER =
 const ZOHO_SMTP_PASS =
   process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
 const ZOHO_FROM_EMAIL = process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_FROM || ZOHO_SMTP_USER
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'LashDiary'
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 const FALLBACK_FROM_EMAIL = process.env.FROM_EMAIL || 'hello@example.com'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 

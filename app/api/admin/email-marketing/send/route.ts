@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { formatEmailSubject } from '@/lib/email-subject-utils'
 import {
   ABTestOptions,
@@ -21,12 +21,43 @@ import {
 } from '@/lib/email-campaign-utils'
 import { recordActivity } from '@/lib/activity-log'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev'
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke'
+const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+// Zoho transporter (primary email service)
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 interface SendRequestBody {
   subject: string
@@ -83,8 +114,11 @@ export async function POST(request: NextRequest) {
     const currentUser = await getAdminUser()
     const performedBy = currentUser?.username || 'owner'
 
-    if (!resend) {
-      return NextResponse.json({ error: 'Email service not configured' }, { status: 500 })
+    // Check if Zoho is configured
+    if (!zohoTransporter) {
+      return NextResponse.json({ 
+        error: 'Email service not configured. Please set up ZOHO_SMTP credentials (ZOHO_SMTP_USER and ZOHO_SMTP_PASS).' 
+      }, { status: 500 })
     }
 
     const body: SendRequestBody = await request.json()
@@ -242,41 +276,77 @@ export async function POST(request: NextRequest) {
 
       campaigns.push(record)
 
-      const promises = variantRecipients.map(async (recipient) => {
-        try {
-          const subscriber =
-            subscriberMap.get(recipient.email.toLowerCase()) ||
-            ({ email: recipient.email, name: recipient.name, totalBookings: 0 } as any)
+      // Send emails in batches to avoid overwhelming the email service
+      const BATCH_SIZE = 10
+      let sentCount = 0
+      let errorCount = 0
+      
+      for (let i = 0; i < variantRecipients.length; i += BATCH_SIZE) {
+        const batch = variantRecipients.slice(i, i + BATCH_SIZE)
+        const batchPromises = batch.map(async (recipient) => {
+          try {
+            const subscriber =
+              subscriberMap.get(recipient.email.toLowerCase()) ||
+              ({ email: recipient.email, name: recipient.name, totalBookings: 0 } as any)
 
-          const personalizedSubject = await personalizeSubject(campaignSubject, subscriber, business)
-          const personalized = await applyPersonalizationTokens(campaignContent, subscriber, business)
-          const tracked = processLinks(personalized, campaignId, recipient.email, BASE_URL)
-          const unsubscribeToken = await ensureUnsubscribeToken(recipient.email, recipient.name)
-          const emailHtml = await createEmailTemplate({
-            content: tracked,
-            campaignId,
-            recipientEmail: recipient.email,
-            unsubscribeToken,
-            baseUrl: BASE_URL,
-            business,
-          })
+            const personalizedSubject = await personalizeSubject(campaignSubject, subscriber, business)
+            const personalized = await applyPersonalizationTokens(campaignContent, subscriber, business)
+            const tracked = processLinks(personalized, campaignId, recipient.email, BASE_URL)
+            const unsubscribeToken = await ensureUnsubscribeToken(recipient.email, recipient.name)
+            const emailHtml = await createEmailTemplate({
+              content: tracked,
+              campaignId,
+              recipientEmail: recipient.email,
+              unsubscribeToken,
+              baseUrl: BASE_URL,
+              business,
+            })
 
-          const replyToEmail = business.email || OWNER_EMAIL
+            const replyToEmail = business.email || OWNER_EMAIL
+            const formattedSubject = formatEmailSubject(personalizedSubject)
+            const fromName = business.name || EMAIL_FROM_NAME
 
-          await resend!.emails.send({
-            from: `${business.name || 'LashDiary'} <${FROM_EMAIL}>`,
-            to: recipient.email,
-            replyTo: replyToEmail,
-            subject: formatEmailSubject(personalizedSubject),
-            html: emailHtml,
-            attachments: attachmentPayload,
-          })
-        } catch (err) {
-          console.error(`Error sending email to ${recipient.email}:`, err)
+            // Send email via Zoho SMTP
+            if (zohoTransporter) {
+              try {
+                await zohoTransporter.sendMail({
+                  from: `"${fromName}" <${FROM_EMAIL}>`,
+                  to: recipient.email,
+                  replyTo: replyToEmail,
+                  subject: formattedSubject,
+                  html: emailHtml,
+                  attachments: attachmentPayload ? attachmentPayload.map((att: any) => ({
+                    filename: att.filename,
+                    content: att.content,
+                    encoding: 'base64',
+                  })) : undefined,
+                })
+                console.log(`✅ Email sent via Zoho SMTP to ${recipient.email}`)
+                sentCount++
+              } catch (emailError: any) {
+                console.error(`Zoho SMTP error for ${recipient.email}:`, emailError)
+                throw emailError
+              }
+            } else {
+              throw new Error('Email service not configured')
+            }
+          } catch (err) {
+            console.error(`❌ Error sending email to ${recipient.email}:`, err)
+            errorCount++
+            // Continue sending to other recipients even if one fails
+          }
+        })
+
+        await Promise.all(batchPromises)
+        console.log(`📧 Batch ${Math.floor(i / BATCH_SIZE) + 1}: Processed ${batch.length} emails (${sentCount} sent, ${errorCount} errors)`)
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + BATCH_SIZE < variantRecipients.length) {
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
-      })
-
-      await Promise.all(promises)
+      }
+      
+      console.log(`✅ Campaign ${campaignId} complete: ${sentCount} sent, ${errorCount} errors out of ${variantRecipients.length} recipients`)
     }
 
     if (abTest?.enabled) {

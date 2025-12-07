@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { formatEmailSubject } from '@/lib/email-subject-utils'
 import {
   CampaignAttachment,
@@ -17,12 +17,41 @@ import {
   processLinks,
 } from '@/lib/email-campaign-utils'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev'
+const BUSINESS_NOTIFICATION_EMAIL =
+  process.env.BUSINESS_NOTIFICATION_EMAIL ||
+  process.env.OWNER_EMAIL ||
+  process.env.CALENDAR_EMAIL ||
+  'hello@lashdiary.co.ke'
+const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
+const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
+const ZOHO_SMTP_USER =
+  process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || process.env.ZOHO_USERNAME || ''
+const ZOHO_SMTP_PASS =
+  process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
+const ZOHO_FROM_EMAIL =
+  process.env.ZOHO_FROM_EMAIL ||
+  process.env.ZOHO_FROM ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '') ||
+  BUSINESS_NOTIFICATION_EMAIL
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  ZOHO_FROM_EMAIL ||
+  (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || 'hello@lashdiary.co.ke'
+const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+const zohoTransporter =
+  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
+    ? nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: ZOHO_SMTP_PORT,
+        secure: ZOHO_SMTP_PORT === 465,
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      })
+    : null
 
 interface ScheduledEmailEntry {
   id: string
@@ -89,8 +118,8 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
 
-    if (!resend) {
-      return NextResponse.json({ error: 'Email service not configured' }, { status: 500 })
+    if (!zohoTransporter) {
+      return NextResponse.json({ error: 'Email service not configured. Please set up ZOHO_SMTP credentials.' }, { status: 500 })
     }
 
     const scheduledEntries = await loadScheduledEmails()
@@ -155,8 +184,8 @@ export async function POST(request: NextRequest) {
 
           const replyToEmail = business.email || OWNER_EMAIL
 
-          await resend!.emails.send({
-            from: `${business.name || 'LashDiary'} <${FROM_EMAIL}>`,
+          await zohoTransporter.sendMail({
+            from: FROM_EMAIL,
             to: recipient.email,
             replyTo: replyToEmail,
             subject: formatEmailSubject(personalizedSubject),
