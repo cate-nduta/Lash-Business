@@ -422,6 +422,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
     
     // Fetch all initial data in parallel with individual error handling
+    // Load calendar dates in parallel too to avoid waterfall loading
     Promise.allSettled([
       fetch(`/api/discounts?t=${timestamp}`, defaultFetchOptions).then((res) => {
         if (!res.ok) throw new Error(`Failed to load discounts: ${res.status}`)
@@ -435,8 +436,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         if (!res.ok) return null
         return res.json()
       }),
-      // Also load blocked dates here as backup/update - CRITICAL: no cache
-      fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, availabilityFetchOptions).then((res) => {
+      // Load calendar dates in parallel - don't wait for other data
+      fetch(`/api/calendar/available-slots?t=${timestamp}`, availabilityFetchOptions).then((res) => {
         if (!res.ok) return null
         return res.json()
       }),
@@ -448,7 +449,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         const discountsData = results[0].status === 'fulfilled' ? results[0].value : null
         const contactData = results[1].status === 'fulfilled' ? results[1].value : null
         const availabilityData = results[2].status === 'fulfilled' ? results[2].value : null
-        const blockedDatesData = results[3].status === 'fulfilled' ? results[3].value : null
+        const calendarData = results[3].status === 'fulfilled' ? results[3].value : null
         // Process discounts
         if (discountsData) {
           const normalized = {
@@ -515,9 +516,43 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           })
         }
         
-        // Update blocked dates immediately from the parallel fetch
-        if (blockedDatesData?.fullyBookedDates) {
-          setFullyBookedDates(Array.isArray(blockedDatesData.fullyBookedDates) ? blockedDatesData.fullyBookedDates : [])
+        // Process calendar data immediately (loaded in parallel)
+        if (calendarData) {
+          const dates: AvailableDate[] = Array.isArray(calendarData?.dates) ? calendarData.dates : []
+          const dateStrings = dates.map((entry: AvailableDate) => entry.value)
+          
+          setAvailableDates(dates)
+          setAvailableDateStrings(dateStrings)
+          
+          // Update blocked dates
+          if (Array.isArray(calendarData?.fullyBookedDates)) {
+            setFullyBookedDates(calendarData.fullyBookedDates)
+          }
+          
+          // Store minimum booking date
+          if (calendarData?.minimumBookingDate) {
+            setAvailabilityData((prev) => ({
+              ...prev,
+              minimumBookingDate: calendarData.minimumBookingDate,
+            }))
+          }
+          
+          // Update booking window if provided
+          if (calendarData?.bookingWindow) {
+            setAvailabilityData((prev) => {
+              const previous = prev ?? { businessHours: {}, timeSlots: {}, bookingWindow: {} }
+              return {
+                ...previous,
+                bookingWindow: {
+                  current: { ...(calendarData.bookingWindow.current ?? previous.bookingWindow?.current ?? {}) },
+                  next: { ...(calendarData.bookingWindow.next ?? previous.bookingWindow?.next ?? {}) },
+                  bookingLink: calendarData.bookingWindow.bookingLink ?? previous.bookingWindow?.bookingLink ?? '',
+                  note: calendarData.bookingWindow.note ?? previous.bookingWindow?.note ?? '',
+                  bannerMessage: calendarData.bookingWindow.bannerMessage ?? previous.bookingWindow?.bannerMessage ?? '',
+                },
+              }
+            })
+          }
         }
         
         setDiscountsLoaded(true)
@@ -1325,9 +1360,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
   // Availability data is now loaded in parallel with discounts and contact (see useEffect above)
 
+  // Refresh calendar dates when booking window changes (dates already loaded in parallel above)
   useEffect(() => {
+    // Only refresh if booking window actually changed (not on initial load)
+    if (!discountsLoaded || !availabilityData?.bookingWindow?.current) return
+
     let cancelled = false
-    const loadAvailableDates = async () => {
+    const refreshAvailableDates = async () => {
       setLoadingDates(true)
       try {
         const timestamp = Date.now()
@@ -1339,45 +1378,24 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           }
         })
         if (!response.ok) {
-          throw new Error(`Failed to load available dates: ${response.status}`)
+          throw new Error(`Failed to refresh available dates: ${response.status}`)
         }
         const data = await response.json()
         if (cancelled) return
+        
         const dates: AvailableDate[] = Array.isArray(data?.dates) ? data.dates : []
         const dateStrings = dates.map((entry) => entry.value)
+        
         setAvailableDates(dates)
         setAvailableDateStrings(dateStrings)
-        // Always update blocked dates to ensure they're current
+        
+        // Update blocked dates
         if (Array.isArray(data?.fullyBookedDates)) {
           setFullyBookedDates(data.fullyBookedDates)
         }
-        // Store minimum booking date in availabilityData for CalendarPicker
-        if (data?.minimumBookingDate) {
-          setAvailabilityData((prev) => ({
-            ...prev,
-            minimumBookingDate: data.minimumBookingDate,
-          }))
-        }
-        if (data?.bookingWindow) {
-          setAvailabilityData((prev) => {
-            const previous = prev ?? { businessHours: {}, timeSlots: {}, bookingWindow: {} }
-            return {
-              ...previous,
-              bookingWindow: {
-                current: { ...(data.bookingWindow.current ?? previous.bookingWindow?.current ?? {}) },
-                next: { ...(data.bookingWindow.next ?? previous.bookingWindow?.next ?? {}) },
-                bookingLink: data.bookingWindow.bookingLink ?? previous.bookingWindow?.bookingLink ?? '',
-                note: data.bookingWindow.note ?? previous.bookingWindow?.note ?? '',
-                bannerMessage: data.bookingWindow.bannerMessage ?? previous.bookingWindow?.bannerMessage ?? '',
-              },
-            }
-          })
-        }
       } catch (error) {
         if (!cancelled) {
-          console.error('Error loading available dates:', error)
-          setAvailableDates([])
-          setAvailableDateStrings([])
+          console.error('Error refreshing available dates:', error)
         }
       } finally {
         if (!cancelled) {
@@ -1386,7 +1404,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }
     }
 
-    loadAvailableDates()
+    refreshAvailableDates()
 
     return () => {
       cancelled = true
@@ -2056,8 +2074,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[var(--color-background)] via-[color-mix(in srgb,var(--color-background) 88%,var(--color-surface) 12%)] to-[var(--color-surface)] py-8 sm:py-12 md:py-20">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-b from-[var(--color-background)] via-[color-mix(in srgb,var(--color-background) 88%,var(--color-surface) 12%)] to-[var(--color-surface)] py-6 sm:py-8 md:py-12 lg:py-20">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
         {/* Header */}
         <div
           ref={ref}
@@ -2139,7 +2157,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         </div>
 
         {/* Calendar Picker */}
-        <div className="mb-8 interactive-card hover-lift rounded-3xl bg-white/80 border border-brown-light/70 shadow-soft p-4 sm:p-6 animate-slide-in-up relative overflow-hidden">
+        <div className="mb-6 sm:mb-8 interactive-card hover-lift rounded-2xl sm:rounded-3xl bg-white/80 border border-brown-light/70 shadow-soft p-3 sm:p-4 md:p-6 animate-slide-in-up relative overflow-hidden">
           <div className="cartoon-sticker top-2 right-2 opacity-30 hidden sm:block">
             <div className="sticker-heart animate-float-sticker"></div>
           </div>
@@ -2171,38 +2189,35 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         </div>
 
         {/* Booking Form */}
-        <div className="bg-white/95 border-2 border-brown-light rounded-3xl shadow-soft interactive-card hover-lift p-4 sm:p-6 md:p-8 lg:p-10 animate-scale-in relative overflow-hidden">
+        <div className="bg-white/95 border-2 border-brown-light rounded-2xl sm:rounded-3xl shadow-soft interactive-card hover-lift p-4 sm:p-5 md:p-6 lg:p-8 xl:p-10 animate-scale-in relative overflow-hidden">
           <div className="cartoon-sticker top-3 left-3 opacity-20 hidden md:block">
             <div className="sticker-lash animate-float-sticker" style={{ animationDelay: '0.5s' }}></div>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6" noValidate>
             {/* Time Slot Field */}
-            {formData.date && (
-              <div>
-                <label
-                  htmlFor="timeSlot"
-                  className="block text-sm font-semibold text-brown-dark mb-2"
-                >
-                  Select Time *
-                </label>
-                {loadingSlots ? (
-                  <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
-                    Loading available time slots...
-                  </div>
-                ) : timeSlots.length === 0 ? (
+                  {formData.date && (
+                  <div>
+                    <label
+                      htmlFor="timeSlot"
+                      className="block text-sm sm:text-base font-semibold text-brown-dark mb-2.5"
+                    >
+                      Select Time *
+                    </label>
+                {timeSlots.length === 0 && !loadingSlots ? (
                   <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
                     No available time slots for this date. Please select another date.
                   </div>
                 ) : (
-                  <select
-                    id="timeSlot"
-                    name="timeSlot"
-                    required
-                    value={formData.timeSlot}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.02] relative"
+                <select
+                  id="timeSlot"
+                  name="timeSlot"
+                  required
+                  value={formData.timeSlot}
+                  onChange={handleChange}
+                  disabled={loadingSlots}
+                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.02] relative min-h-[48px] disabled:opacity-50 disabled:cursor-wait"
                   >
-                    <option value="">Select a time</option>
+                    <option value="">{loadingSlots ? 'Loading time slots...' : 'Select a time'}</option>
                     {timeSlots.map((slot) => (
                       <option key={slot.value} value={slot.value}>
                         {slot.label}
@@ -2214,14 +2229,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             )}
 
             {/* Personal Details Section - STEP 3 */}
-            <div className="mt-6 space-y-4 sm:space-y-6">
-              <h2 className="text-xl font-display text-brown-dark mb-4">Personal Details</h2>
+            <div className="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
+              <h2 className="text-lg sm:text-xl font-display text-brown-dark mb-4">Personal Details</h2>
 
             {/* Name Field */}
             <div>
               <label
                 htmlFor="name"
-                className="block text-sm font-semibold text-brown-dark mb-2"
+                className="block text-sm sm:text-base font-semibold text-brown-dark mb-2.5"
               >
                 Name *
               </label>
@@ -2233,8 +2248,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   required
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                  className="w-full px-4 py-3.5 sm:py-3 text-base sm:text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01] min-h-[48px]"
                   placeholder="Enter your name"
+                  autoComplete="name"
                 />
               </div>
             </div>
@@ -2243,7 +2259,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-semibold text-brown-dark mb-2"
+                className="block text-sm sm:text-base font-semibold text-brown-dark mb-2.5"
               >
                 Email Address *
               </label>
@@ -2255,8 +2271,10 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                  className="w-full px-4 py-3.5 sm:py-3 text-base sm:text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01] min-h-[48px]"
                   placeholder="your.email@example.com"
+                  autoComplete="email"
+                  inputMode="email"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none">💌</span>
               </div>
@@ -2266,7 +2284,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             <div>
               <label
                 htmlFor="phone"
-                className="block text-sm font-semibold text-brown-dark mb-2"
+                className="block text-sm sm:text-base font-semibold text-brown-dark mb-2.5"
               >
                 Phone Number *
               </label>
@@ -2276,7 +2294,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   name="phoneCountryCode"
                   value={phoneCountryCode}
                   onChange={(event) => setPhoneCountryCode(event.target.value)}
-                  className="w-full sm:w-48 px-3 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all"
+                  className="w-full sm:w-48 px-3 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation min-h-[48px]"
                 >
                   {PHONE_COUNTRY_CODES.map((option) => (
                     <option key={`${option.code}-${option.dialCode}`} value={option.dialCode}>
@@ -2294,9 +2312,10 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     const value = event.target.value.replace(/[^\d\s\-]/g, '')
                     setPhoneLocalNumber(value)
                   }}
-                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation"
+                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation min-h-[48px]"
                   placeholder="700 000 000"
                   inputMode="tel"
+                  autoComplete="tel"
                 />
               </div>
               <p className="mt-2 text-sm text-brown-dark/70">
@@ -2318,7 +2337,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   name="appointmentPreference"
                   value={formData.appointmentPreference}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01]"
+                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01] min-h-[48px]"
                 >
                   <option value="">Select your preference...</option>
                   <option value="quiet">Quiet Appointment - I prefer minimal conversation</option>
@@ -2345,7 +2364,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 rows={4}
                 value={formData.notes}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation resize-y"
+                className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation resize-y min-h-[120px]"
                 placeholder="Any special preferences, sensitivity notes, or other information you'd like us to know..."
               />
               <p className="mt-2 text-sm text-brown-dark/70">
@@ -2355,8 +2374,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             </div>
 
             {/* Service Calculation & Pricing Summary - STEP 4 */}
-            <div className="mt-6">
-              <h2 className="text-xl font-display text-brown-dark mb-4">Service Calculation</h2>
+            <div className="mt-6 sm:mt-8">
+              <h2 className="text-lg sm:text-xl font-display text-brown-dark mb-4">Service Calculation</h2>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-brown-dark">
                   Selected Services *
@@ -2389,22 +2408,22 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     return (
                       <div
                         key={item.serviceId}
-                        className="flex items-center justify-between p-4 border-2 border-brown-light rounded-lg bg-white"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-2 border-brown-light rounded-lg bg-white"
                       >
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-brown-dark">{item.name}</h4>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-brown-dark/70">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-brown-dark text-sm sm:text-base break-words">{item.name}</h4>
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-brown-dark/70">
                             <span>{formatCurrencyContext(price)}</span>
-                            <span>•</span>
+                            <span className="hidden sm:inline">•</span>
                             <span>{item.duration} min</span>
-                            <span>•</span>
-                            <span className="text-xs bg-brown-light/30 px-2 py-0.5 rounded">{item.categoryName}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="text-xs bg-brown-light/30 px-2 py-0.5 rounded whitespace-nowrap">{item.categoryName}</span>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeService(item.serviceId)}
-                          className="ml-4 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+                          className="self-start sm:self-auto px-4 py-2.5 sm:px-3 sm:py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium touch-manipulation min-h-[44px] sm:min-h-0"
                           aria-label={`Remove ${item.name}`}
                         >
                           Remove
@@ -2413,15 +2432,15 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     )
                   })}
                   <div className="mt-4 p-4 bg-brown-light/20 rounded-lg border border-brown-light">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold text-brown-dark">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
-                        <span className="font-semibold text-brown-dark">{formatCurrencyContext(getTotalPrice(currency))}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-brown-dark/70 pt-2 border-t border-brown-light/50">
-                        <span>Total Duration:</span>
-                        <span>{getTotalDuration()} minutes</span>
-                      </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm sm:text-base">
+                      <span className="font-semibold text-brown-dark break-words pr-2">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
+                      <span className="font-semibold text-brown-dark whitespace-nowrap">{formatCurrencyContext(getTotalPrice(currency))}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs sm:text-sm text-brown-dark/70 pt-2 border-t border-brown-light/50">
+                      <span>Total Duration:</span>
+                      <span className="whitespace-nowrap">{getTotalDuration()} minutes</span>
+                    </div>
                       {cartItems.length > 1 && (
                         <div className="text-xs text-brown-dark/60 italic pt-1">
                           💡 Deposit will be calculated as {depositPercentage}% of the total
@@ -2445,7 +2464,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     value={formData.lastFullSetDate}
                     onChange={handleChange}
                     max={lastFullSetDateMax}
-                    className="w-full px-4 py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all"
+                    className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation min-h-[48px]"
                   />
                   <p className="mt-2 text-xs text-brown-dark/80">
                     Fills are only available within {INFILL_MAX_DAYS} days of your last full set so we can maintain your lash health.
@@ -2482,7 +2501,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   >
                     Promo Code (Optional)
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
                     <input
                       type="text"
                       id="promoCode"
@@ -2505,13 +2524,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       }}
                       disabled={selectedServiceIsFill || appliedReturningDiscountPercent > 0}
                       placeholder="Enter promo code"
-                      className="flex-1 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60"
+                      className="flex-1 px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all placeholder:text-brown-light/60 touch-manipulation min-h-[48px]"
+                      autoComplete="off"
                     />
                     <button
                       type="button"
                       onClick={() => validateUnifiedCode(promoCode)}
                       disabled={selectedServiceIsFill || validatingPromo || !promoCode.trim() || appliedReturningDiscountPercent > 0}
-                      className="bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="bg-brown-dark text-white px-6 py-3.5 sm:py-3 rounded-lg hover:bg-brown transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[48px] sm:min-h-[48px] font-semibold text-base"
                     >
                       {validatingPromo ? 'Checking...' : 'Apply'}
                     </button>
@@ -2677,7 +2697,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   )}
 
                   {/* Returning client discount UI removed - discounts will be applied manually */}
-                  <div className="space-y-2 text-sm sm:text-base">
+                  <div className="space-y-2.5 text-xs sm:text-sm md:text-base">
                     {cartItems.length > 1 && (
                       <div className="mb-2 pb-2 border-b border-brown-light/50">
                         <div className="text-xs text-brown-dark/70 mb-1">Services Breakdown:</div>
@@ -2698,40 +2718,40 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                         </div>
                       </div>
                     )}
-                    <div className="flex justify-between items-center flex-wrap gap-1">
-                      <span className="text-brown-dark font-semibold">
+                    <div className="flex justify-between items-start sm:items-center flex-wrap gap-2">
+                      <span className="text-brown-dark font-semibold text-sm sm:text-base break-words pr-2">
                         {cartItems.length > 1 ? 'Total Service Price:' : 'Service Price:'}
                       </span>
-                      <span className="text-brown-dark font-bold">{formatCurrencyContext(pricing.originalPrice)}</span>
+                      <span className="text-brown-dark font-bold text-sm sm:text-base whitespace-nowrap">{formatCurrencyContext(pricing.originalPrice)}</span>
                     </div>
                     {pricing.discountType === 'first-time' && (
-                      <div className="flex justify-between items-center text-green-700">
-                        <span className="font-semibold">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>
-                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
+                      <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 text-green-700">
+                        <span className="font-semibold text-xs sm:text-sm break-words pr-2">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>
+                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
                     {/* Returning client discount display removed - discounts will be applied manually */}
                     {pricing.discountType === 'promo' && promoCodeData && (
-                      <div className="flex justify-between items-center text-blue-700">
-                        <span className="font-semibold">
+                      <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 text-blue-700">
+                        <span className="font-semibold text-xs sm:text-sm break-words pr-2">
                           Promo Code Discount ({promoCodeData.code}): 
                           {promoCodeData.discountType === 'percentage' 
                             ? ` ${promoCodeData.discountValue}%`
                             : ` ${formatCurrencyContext(promoCodeData.discountValue)}`
                           }
                         </span>
-                        <span className="font-bold">- {formatCurrencyContext(pricing.discount)}</span>
+                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricing.discount)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center pt-2 border-t border-brown-light/50">
-                      <span className="text-brown-dark font-semibold">Final Price:</span>
-                      <span className="text-brown-dark font-bold text-base sm:text-lg">{formatCurrencyContext(pricing.finalPrice)}</span>
+                    <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 pt-2 border-t border-brown-light/50">
+                      <span className="text-brown-dark font-semibold text-sm sm:text-base break-words pr-2">Final Price:</span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(pricing.finalPrice)}</span>
                     </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-brown-light/50">
-                      <span className="text-brown-dark font-semibold">
+                    <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 pt-2 border-t border-brown-light/50">
+                      <span className="text-brown-dark font-semibold text-xs sm:text-sm break-words pr-2">
                         Required Deposit ({pricing.depositPercentage}%{pricing.isFridayNight ? ' - Friday Night' : ''}):
                       </span>
-                      <span className="text-brown-dark font-bold text-base sm:text-lg">{formatCurrencyContext(depositAmount)}</span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(depositAmount)}</span>
                     </div>
                     {cartItems.length > 1 && (
                       <div className="text-xs text-brown-dark/60 italic pt-1">
@@ -2747,8 +2767,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             </div>
 
             {/* Checkout Section - STEP 5 */}
-            <div className="mt-6">
-              <h2 className="text-xl font-display text-brown-dark mb-4">Checkout</h2>
+            <div className="mt-6 sm:mt-8">
+              <h2 className="text-lg sm:text-xl font-display text-brown-dark mb-4">Checkout</h2>
             </div>
 
             {/* Status Message */}
@@ -2814,14 +2834,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </label>
               
               {/* Payment Notice */}
-              <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+              <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 sm:p-5">
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">💳</div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                  <div className="text-xl sm:text-2xl flex-shrink-0">💳</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-base font-semibold text-blue-900 mb-2">
                       Payment Information
                     </p>
-                    <p className="text-xs text-blue-800">
+                    <p className="text-xs sm:text-sm text-blue-800 leading-relaxed">
                       <strong>Card Payment:</strong> Full payment required to secure your booking. Accepts both KES and USD. You'll be redirected to a secure payment page.
                       <br />
                       <strong>M-Pesa Payment:</strong> Pay the deposit ({pricing?.depositPercentage || depositPercentage}%) now via M-Pesa. <strong>KES only.</strong> You can pay the remaining balance later.
@@ -2838,7 +2858,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
               <div className="space-y-3">
                 {/* Card Payment Option */}
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
                   style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
                   <input
                     type="radio"
@@ -2846,21 +2866,21 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     value="card"
                     checked={paymentMethod === 'card'}
                     onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
-                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark">
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
                       💳 Card Payment (Full Payment Required)
-                      <span className="ml-2 text-xs font-normal text-brown-dark/70">(KES & USD)</span>
+                      <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES & USD)</span>
                     </div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
                       Pay the full amount ({pricing ? formatCurrencyContext(pricing.finalPrice) : 'full price'}) securely via card. Accepts both KES and USD. You'll be redirected to a secure payment page.
                   </div>
                 </div>
                 </label>
 
                 {/* M-Pesa Payment Option */}
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
                   style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
                   <input
                     type="radio"
@@ -2869,15 +2889,15 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     checked={paymentMethod === 'mpesa'}
                     onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
                     disabled={currency === 'USD'}
-                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50"
+                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50 touch-manipulation"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark">
+                    <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
                       📱 M-Pesa STK Push (Deposit Payment)
-                      <span className="ml-2 text-xs font-normal text-brown-dark/70">(KES only)</span>
-                      {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-semibold">⚠️ Not available for USD</span>}
+                      <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES only)</span>
+                      {currency === 'USD' && <span className="block sm:inline sm:ml-2 text-xs text-amber-700 font-semibold mt-1 sm:mt-0">⚠️ Not available for USD</span>}
                     </div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
                       Pay the deposit ({pricing ? formatCurrencyContext(depositAmount) : 'deposit'}) now via M-Pesa. <strong>KES currency only.</strong> You can pay the remaining balance later.
                     </div>
                   </div>
@@ -2885,7 +2905,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
                 {/* Pay Later Option (only if deposit allowed) */}
                 {!requiresFullPayment && (
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-3 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[60px] sm:min-h-0"
+                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
                   style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
                   <input
                     type="radio"
@@ -2893,11 +2913,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     value="none"
                     checked={paymentMethod === 'none'}
                     onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
-                    className="h-5 w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0"
+                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm sm:text-base text-brown-dark">Pay Later</div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-1">
+                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
                       Complete your booking now. We'll contact you with payment instructions to secure your appointment.
                     </div>
                   </div>
@@ -2913,7 +2933,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 termsAcknowledgementError ? 'border-red-300 bg-red-50' : 'border-brown-light bg-pink-light/30'
               }`}
             >
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label className="flex items-start gap-3 cursor-pointer touch-manipulation">
                 <input
                   type="checkbox"
                   checked={termsAccepted}
@@ -2923,9 +2943,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       setTermsAcknowledgementError(false)
                     }
                   }}
-                  className="mt-1 h-5 w-5 rounded border-2 border-brown-light text-brown-dark focus:ring-brown-dark"
+                  className="mt-1 h-5 w-5 sm:h-6 sm:w-6 rounded border-2 border-brown-light text-brown-dark focus:ring-brown-dark flex-shrink-0 touch-manipulation"
                 />
-                <span className="text-sm text-brown-dark leading-relaxed">
+                <span className="text-sm sm:text-base text-brown-dark leading-relaxed">
                   I have read and agree to The Lash Diary{' '}
                   <a
                     href="/policies"
@@ -2970,7 +2990,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 (currency === 'USD' && paymentMethod === 'mpesa') ||
                 (requiresFullPayment && paymentMethod === 'none')
               }
-              className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group"
+              className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-4 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group min-h-[56px] sm:min-h-[52px]"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
                 {loading || mpesaStatus.loading ? (
@@ -3027,12 +3047,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
       {/* Success Modal */}
       {showSuccessModal && bookingDetails && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999] px-4 py-6 sm:p-8">
-          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl animate-fade-in-up overflow-hidden">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999] px-4 py-4 sm:py-6 sm:p-8 touch-manipulation">
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl animate-fade-in-up overflow-hidden max-h-[95vh] sm:max-h-[90vh] flex flex-col">
             {/* Close Button */}
             <button
               onClick={handleCloseSuccessModal}
-              className="absolute top-3 right-3 md:top-5 md:right-5 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brown-dark focus:ring-offset-2 rounded-full bg-white/80 backdrop-blur p-2"
+              className="absolute top-3 right-3 md:top-5 md:right-5 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-brown-dark focus:ring-offset-2 rounded-full bg-white/80 backdrop-blur p-2.5 sm:p-2 z-10 touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Close confirmation"
             >
               <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3040,7 +3060,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </svg>
             </button>
 
-            <div className="max-h-[85vh] overflow-y-auto p-6 sm:p-8 relative">
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 relative">
               <div className="cartoon-sticker top-8 right-8 opacity-30 hidden sm:block">
                 <div className="sticker-star animate-float-sticker"></div>
               </div>
@@ -3067,38 +3087,36 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               <div className="bg-brown-light/20 border border-brown-light rounded-xl p-4 sm:p-6 mb-6">
                 <h3 className="font-display text-brown-dark text-lg sm:text-xl font-semibold mb-4">Booking Details</h3>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm sm:text-base">
-                  <div className="flex justify-between sm:flex-col sm:items-start">
-                    <dt className="text-brown-dark/70 font-medium">Name</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails!.name}</dd>
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
+                    <dt className="text-brown-dark/70 font-medium text-xs sm:text-sm">Name</dt>
+                    <dd className="text-brown-dark font-semibold break-words text-right sm:text-left text-sm sm:text-base">{bookingDetails!.name}</dd>
                   </div>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
-                    <dt className="text-brown-dark/70 font-medium">Date</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails!.date}</dd>
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
+                    <dt className="text-brown-dark/70 font-medium text-xs sm:text-sm">Date</dt>
+                    <dd className="text-brown-dark font-semibold break-words text-right sm:text-left text-sm sm:text-base">{bookingDetails!.date}</dd>
                   </div>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
-                    <dt className="text-brown-dark/70 font-medium">Time</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails!.time} – {bookingDetails!.endTime}</dd>
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
+                    <dt className="text-brown-dark/70 font-medium text-xs sm:text-sm">Time</dt>
+                    <dd className="text-brown-dark font-semibold break-words text-right sm:text-left text-sm sm:text-base">{bookingDetails!.time} – {bookingDetails!.endTime}</dd>
                   </div>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
-                    <dt className="text-brown-dark/70 font-medium">Service</dt>
-                    <dd className="text-brown-dark font-semibold">{bookingDetails!.service}</dd>
-                  </div>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
+                    <dt className="text-brown-dark/70 font-medium text-xs sm:text-sm">Service</dt>
+                    <dd className="text-brown-dark font-semibold break-words text-right sm:text-left text-sm sm:text-base">{bookingDetails!.service}</dd>
                   </div>
                   {bookingDetails!.isFullPayment ? (
-                    <div className="flex justify-between sm:flex-col sm:items-start">
+                    <div className="flex justify-between sm:flex-col sm:items-start gap-2">
                       <dt className="text-brown-dark/70 font-medium">Full Payment</dt>
-                      <dd className="text-brown-dark font-bold">{bookingDetails!.finalPrice}</dd>
+                      <dd className="text-brown-dark font-bold break-words text-right sm:text-left">{bookingDetails!.finalPrice}</dd>
                     </div>
                   ) : (
                     <>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
                     <dt className="text-brown-dark/70 font-medium">Deposit Required</dt>
-                    <dd className="text-brown-dark font-bold">{bookingDetails!.deposit}</dd>
+                    <dd className="text-brown-dark font-bold break-words text-right sm:text-left">{bookingDetails!.deposit}</dd>
                   </div>
-                  <div className="flex justify-between sm:flex-col sm:items-start">
+                  <div className="flex justify-between sm:flex-col sm:items-start gap-2">
                     <dt className="text-brown-dark/70 font-medium">Final Price</dt>
-                    <dd className="text-brown-dark font-bold">{bookingDetails!.finalPrice}</dd>
+                    <dd className="text-brown-dark font-bold break-words text-right sm:text-left">{bookingDetails!.finalPrice}</dd>
                   </div>
                     </>
                   )}
@@ -3106,7 +3124,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </div>
 
               {/* Payment Instructions */}
-              <div className="bg-brown-light/15 border-l-4 border-brown-dark p-4 rounded-lg mb-4 text-sm sm:text-base">
+              <div className="bg-brown-light/15 border-l-4 border-brown-dark p-4 sm:p-5 rounded-lg mb-4 text-xs sm:text-sm md:text-base">
                 <p className="text-brown-dark font-semibold mb-2">
                   {bookingDetails!.isFullPayment ? 'Payment Status:' : 'Payment Instructions:'}
                 </p>

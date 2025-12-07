@@ -56,6 +56,14 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Ensure profile exists
+    if (!clientData.profile) {
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      )
+    }
+
     // Update allowed fields
     if (body.birthday !== undefined) {
       clientData.profile.birthday = body.birthday || undefined

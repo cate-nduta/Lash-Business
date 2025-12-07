@@ -330,9 +330,9 @@ export async function GET(request: NextRequest) {
       )
       const today = new Date()
       today.setHours(0, 0, 0, 0)
-      // Reduce initial range to 14 days for faster loading (can be expanded later)
+      // Generate dates for the next 90 days to cover multiple months
       const defaultEnd = new Date(today)
-      defaultEnd.setDate(defaultEnd.getDate() + 14)
+      defaultEnd.setDate(defaultEnd.getDate() + 90)
       const windowStart = windowStartDate && windowStartDate > today ? new Date(windowStartDate) : new Date(today)
       const endDate = windowEndDate ? new Date(windowEndDate) : defaultEnd
       if (endDate < windowStart) {
@@ -341,6 +341,12 @@ export async function GET(request: NextRequest) {
         fullyBookedDates: Array.from(fullyBookedSet),
         bookingWindow: bookingWindow ?? null,
         minimumBookingDate: minimumBookingDate ?? null,
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
       })
       }
       // Clone start for iteration
@@ -373,9 +379,8 @@ export async function GET(request: NextRequest) {
         }
 
         const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
-        const dayEnabled =
-          availabilityData?.businessHours?.[dayKey]?.enabled ??
-          (dayKey === 'saturday' ? false : true)
+        // ONLY use admin panel data - no hard-coded defaults
+        const dayEnabled = availabilityData?.businessHours?.[dayKey]?.enabled === true
 
         if (dayEnabled && !fullyBookedSet.has(dateStr)) {
           const dateLabel = currentDate.toLocaleDateString('en-US', {
@@ -408,12 +413,28 @@ export async function GET(request: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
       return NextResponse.json(
         { error: 'Invalid date format. Expected YYYY-MM-DD' },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       )
     }
 
     if (!isDateWithinWindow(dateParam, bookingWindow, minimumBookingDate)) {
-      return NextResponse.json({ slots: [] })
+      return NextResponse.json(
+        { slots: [] },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      )
     }
 
     // Parse the date string to get year, month, day
@@ -423,7 +444,14 @@ export async function GET(request: NextRequest) {
     if (isNaN(year) || isNaN(month) || isNaN(day) || month < 1 || month > 12 || day < 1 || day > 31) {
       return NextResponse.json(
         { error: 'Invalid date' },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       )
     }
 
@@ -432,13 +460,31 @@ export async function GET(request: NextRequest) {
     const isSaturday = dayOfWeek === 6
     
     if (Array.isArray(availabilityData?.fullyBookedDates) && availabilityData!.fullyBookedDates.includes(dateParam)) {
-      return NextResponse.json({ slots: [] })
+      return NextResponse.json(
+        { slots: [] },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      )
     }
 
     if (isSaturday) {
       const saturdayEnabled = availabilityData?.businessHours?.saturday?.enabled === true
       if (!saturdayEnabled) {
-        return NextResponse.json({ slots: [] })
+        return NextResponse.json(
+          { slots: [] },
+          {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            },
+          }
+        )
       }
     }
 
@@ -448,7 +494,16 @@ export async function GET(request: NextRequest) {
     const selectedDateLocal = new Date(dateParam + 'T00:00:00')
     selectedDateLocal.setHours(0, 0, 0, 0)
     if (selectedDateLocal < today) {
-      return NextResponse.json({ slots: [] })
+      return NextResponse.json(
+        { slots: [] },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      )
     }
 
     // Generate time slots for the selected date (pass date string, not Date object)
@@ -456,7 +511,16 @@ export async function GET(request: NextRequest) {
     
     // If no slots generated, return early
     if (allSlots.length === 0) {
-      return NextResponse.json({ slots: [] })
+      return NextResponse.json(
+        { slots: [] },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      )
     }
     
     // Try to fetch booked slots from Google Calendar (with fallback if API fails)
@@ -584,7 +648,14 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching available slots:', error)
     return NextResponse.json(
       { error: 'Failed to fetch available slots', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     )
   }
 }

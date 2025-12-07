@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       try {
         const clientDataFile = `client-${existingUser.id}.json`
         const clientData = await readDataFile<ClientData>(clientDataFile, undefined)
-        if (clientData) {
+        if (clientData && clientData.profile) {
           clientData.profile.birthday = existingUser.birthday
           await writeDataFile(clientDataFile, clientData)
         }

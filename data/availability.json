@@ -46,9 +46,22 @@
     }
   },
   "timeSlots": {
-    "weekdays": [],
-    "sunday": [],
-    "saturday": []
+    "weekdays": [
+      { "hour": 9, "minute": 30, "label": "9:30 AM" },
+      { "hour": 12, "minute": 0, "label": "12:00 PM" },
+      { "hour": 14, "minute": 30, "label": "2:30 PM" },
+      { "hour": 16, "minute": 30, "label": "4:30 PM" }
+    ],
+    "sunday": [
+      { "hour": 12, "minute": 30, "label": "12:30 PM" },
+      { "hour": 15, "minute": 0, "label": "3:00 PM" }
+    ],
+    "saturday": [
+      { "hour": 9, "minute": 30, "label": "9:30 AM" },
+      { "hour": 12, "minute": 0, "label": "12:00 PM" },
+      { "hour": 14, "minute": 30, "label": "2:30 PM" },
+      { "hour": 16, "minute": 30, "label": "4:30 PM" }
+    ]
   },
   "fullyBookedDates": []
 }

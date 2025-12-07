@@ -15,22 +15,69 @@ export default function Navbar() {
   const cartItemCount = getTotalItems()
 
   useEffect(() => {
+    let isMounted = true
+    let controller: AbortController | null = null
+    let timeoutId: NodeJS.Timeout | null = null
+    
     // Check if user is authenticated on mount - with timeout to prevent hanging
     const checkAuth = async () => {
+      // Cancel any previous request
+      if (controller) {
+        try {
+          controller.abort()
+        } catch (e) {
+          // Ignore abort errors during cleanup
+        }
+      }
+      
+      controller = new AbortController()
+      const currentController = controller
+      
+      timeoutId = setTimeout(() => {
+        if (currentController && !currentController.signal.aborted) {
+          try {
+            currentController.abort()
+          } catch (e) {
+            // Ignore abort errors
+          }
+        }
+      }, 5000) // 5 second timeout
+      
       try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
-        
         const res = await fetch('/api/client/auth/me', {
-          signal: controller.signal,
+          signal: currentController.signal,
           cache: 'no-store',
+          credentials: 'include',
         })
         
-        clearTimeout(timeoutId)
-        setIsAuthenticated(res.ok)
-      } catch (error) {
-        // Silently handle errors (network issues, timeouts, etc.)
-        setIsAuthenticated(false)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+        
+        if (isMounted && !currentController.signal.aborted) {
+          setIsAuthenticated(res.ok)
+        }
+      } catch (error: any) {
+        // Silently handle errors (network issues, timeouts, aborts, etc.)
+        // AbortError is expected when request is cancelled or times out
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          // This is expected during cleanup or timeout, just set to false if mounted
+          if (isMounted && !currentController.signal.aborted) {
+            setIsAuthenticated(false)
+          }
+        } else if (error?.name !== 'AbortError') {
+          // Other errors (network, etc.) - but not abort errors
+          if (isMounted) {
+            setIsAuthenticated(false)
+          }
+        }
+        // If it's an AbortError and signal is aborted, just ignore it silently
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
       }
     }
     
@@ -51,6 +98,22 @@ export default function Navbar() {
     window.addEventListener('focus', handleFocus)
     
     return () => {
+      isMounted = false
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      if (controller) {
+        try {
+          // Only abort if not already aborted
+          if (!controller.signal.aborted) {
+            controller.abort()
+          }
+        } catch (e) {
+          // Silently ignore any abort errors during cleanup
+        }
+        controller = null
+      }
       window.removeEventListener('focus', handleFocus)
     }
   }, [])

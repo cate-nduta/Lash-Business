@@ -27,6 +27,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Ensure profile exists
+    if (!clientData.profile) {
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      )
+    }
+
     // Calculate recommended refill date (3 weeks from last appointment)
     let recommendedRefillDate: string | undefined
     if (clientData.lastAppointmentDate) {

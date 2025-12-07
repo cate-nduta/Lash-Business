@@ -92,10 +92,21 @@ export default function AdminModels() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Status updated successfully' })
+        const data = await response.json()
+        if (status === 'rejected' && data.emailSent) {
+          setMessage({ type: 'success', text: 'Status updated and rejection email sent successfully!' })
+        } else if (status === 'rejected' && !data.emailSent) {
+          setMessage({ 
+            type: 'error', 
+            text: `Status updated, but failed to send rejection email. ${data.emailError || 'Please check email configuration.'}` 
+          })
+        } else {
+          setMessage({ type: 'success', text: 'Status updated successfully' })
+        }
         loadApplications()
       } else {
-        setMessage({ type: 'error', text: 'Failed to update status' })
+        const errorData = await response.json().catch(() => ({}))
+        setMessage({ type: 'error', text: errorData.error || 'Failed to update status' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'An error occurred' })
