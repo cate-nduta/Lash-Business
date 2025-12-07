@@ -561,11 +561,21 @@ export default function Home() {
             <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14">
               Why Choose LashDiary?
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8 lg:gap-10">
+            <div className={`grid grid-cols-1 ${
+              features.length === 3 
+                ? 'md:grid-cols-3' 
+                : features.length === 4 
+                  ? 'sm:grid-cols-2 xl:grid-cols-4' 
+                  : 'sm:grid-cols-2'
+            } gap-8 lg:gap-10`}>
               {features.map((feature, index) => (
               <div
                 key={index}
-                className="card-interactive hover-lift group relative p-8 rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-xl border border-[var(--color-primary)]/20 animate-slide-in-up hover-glow-fun"
+                className={`card-interactive hover-lift group relative rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 88%,var(--color-background) 12%)] shadow-xl border border-[var(--color-primary)]/20 animate-slide-in-up hover-glow-fun ${
+                  features.length === 3 
+                    ? 'p-8 lg:p-10' 
+                    : 'p-8'
+                }`}
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
                 <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
@@ -576,7 +586,7 @@ export default function Home() {
                 </div>
                 <div className="relative z-10">
                   <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg shadow-[var(--color-primary)]/30 mb-5 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 hover-bounce">
-                    <span className="text-lg font-semibold">0{index + 1}</span>
+                    <span className="text-lg font-semibold">{String(index + 1).padStart(2, '0')}</span>
                   </div>
                   <h3 className="text-2xl font-display text-[var(--color-text)] mb-3 group-hover:text-[var(--color-primary)] transition-colors duration-300">
                     {feature.title}

@@ -43,7 +43,6 @@ export default function TestimonialsAll() {
     return parsed.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric',
     })
   }
 
@@ -122,7 +121,7 @@ export default function TestimonialsAll() {
                   <div className="border-t border-brown-light pt-4">
                     <p className="font-semibold text-brown-dark">{testimonial.name}</p>
                     <p className="text-sm text-gray-500">
-                      {formatDate(testimonial.createdAt) || 'Awaiting publish date'}
+                      {formatDate(testimonial.createdAt)}
                     </p>
                   </div>
                 </div>

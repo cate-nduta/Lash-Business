@@ -107,7 +107,7 @@ const createEmailContent = ({
             <tr>
               <td style="text-align:center;padding-bottom:24px;">
                 <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#F3E6DC;color:#7C4B31;font-size:28px;font-weight:600;">LD</div>
-                <h1 style="margin:16px 0 8px 0;font-size:28px;font-family:'Helvetica Neue',Arial,sans-serif;color:#3E2A20;">We hope you loved your lash glow-up ✨</h1>
+                <h1 style="margin:16px 0 8px 0;font-size:28px;font-family:'Helvetica Neue',Arial,sans-serif;color:#3E2A20;">We hope you loved your lash glow-up</h1>
                 <p style="margin:0;font-size:16px;color:#6B4A3B;">Hi ${safeName}, we'd love to hear how your appointment went.</p>
               </td>
             </tr>
@@ -195,8 +195,8 @@ export async function sendTestimonialRequestEmail(
   })
 
   const fromEmail = ZOHO_FROM_EMAIL || FALLBACK_FROM_EMAIL
-  const fromAddress = `${EMAIL_FROM_NAME} <${fromEmail}>`
-  const subject = 'We’d love your LashDiary testimonial ✨'
+  const fromAddress = `"${EMAIL_FROM_NAME}" <${fromEmail}>`
+  const subject = `We'd love your LashDiary testimonial 🤎`
 
   if (zohoTransporter) {
     try {

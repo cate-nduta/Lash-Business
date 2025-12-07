@@ -9,6 +9,10 @@ import {
   ValidationError,
 } from '@/lib/input-validation'
 
+// CRITICAL: No caching for email endpoints - always use fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
 
 export async function POST(request: NextRequest) {

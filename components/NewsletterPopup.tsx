@@ -8,7 +8,7 @@ export default function NewsletterPopup() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [discountPercentage, setDiscountPercentage] = useState(10) // Default to 10%
+  const [discountPercentage, setDiscountPercentage] = useState(5) // Default to 5%
 
   useEffect(() => {
     // Load discount percentage from public API
@@ -28,8 +28,8 @@ export default function NewsletterPopup() {
         }
       })
       .catch(() => {
-        // If error, keep default 10%
-        console.warn('Could not load discount percentage, using default 10%')
+        // If error, keep default 5%
+        console.warn('Could not load discount percentage, using default 5%')
       })
   }, [])
 
@@ -131,11 +131,8 @@ export default function NewsletterPopup() {
           </div>
           
           <div className="relative z-10">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm mb-6 animate-bounce-gentle">
-              <span className="text-4xl">✨</span>
-            </div>
             <h2 className="text-3xl sm:text-4xl font-display font-bold text-white mb-3">
-              Welcome, Beautiful!
+              Welcome to The LashDiary Community
             </h2>
             <p className="text-lg sm:text-xl text-white/95 mb-2">
               Get <span className="font-bold text-white">{discountPercentage}% OFF</span> your first lash appointment
@@ -200,7 +197,6 @@ export default function NewsletterPopup() {
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   Claim My {discountPercentage}% Off!
-                  <span>🎁</span>
                 </span>
               )}
             </button>

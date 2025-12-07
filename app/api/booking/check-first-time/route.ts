@@ -41,7 +41,14 @@ export async function GET(request: NextRequest) {
     if (!email) {
       return NextResponse.json(
         { error: 'Email is required' },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       )
     }
 
@@ -67,6 +74,12 @@ export async function GET(request: NextRequest) {
           isFirstTime: false,
           email,
           reason: 'Has previously unsubscribed from newsletter'
+        }, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
         })
       }
     } catch (error) {
@@ -121,6 +134,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       isFirstTime,
       email 
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     })
   } catch (error) {
     console.error('Error checking first-time client status:', error)
@@ -128,6 +147,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       isFirstTime: true,
       error: 'Could not verify client status, applying first-time discount'
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     })
   }
 }

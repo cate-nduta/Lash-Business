@@ -90,11 +90,11 @@ function createProductEmailTemplate(data: {
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 24px 0; font-size:16px; color:#3E2A20; line-height:1.6;">
-                🥰 Hey there! 💋
+                Hey there!
               </p>
               
               <p style="margin:0 0 24px 0; font-size:16px; color:#3E2A20; line-height:1.6;">
-                🌈 We've got a little secret… and it's too good to keep to ourselves. 🥰
+                We've got a little secret… and it's too good to keep to ourselves.
               </p>
 
               <div style="background-color:#FDF9F4; border-left:4px solid #7C4B31; padding:20px; margin:24px 0; border-radius:8px;">
@@ -120,7 +120,7 @@ function createProductEmailTemplate(data: {
               ${benefits.length > 0 ? `
               <div style="margin:32px 0;">
                 <h3 style="margin:0 0 16px 0; font-size:18px; font-weight:600; color:#3E2A20;">
-                  🌈 Why you'll love it: 🥰
+                  Why you'll love it:
                 </h3>
                 <ul style="margin:0; padding-left:24px; color:#3E2A20; font-size:15px; line-height:1.8;">
                   ${benefits.map(benefit => `<li style="margin-bottom:12px;">${benefit}</li>`).join('')}
@@ -129,18 +129,18 @@ function createProductEmailTemplate(data: {
               ` : ''}
 
               <p style="margin:24px 0; font-size:15px; color:#6B4A3B; line-height:1.6;">
-                💋 Don't sleep on this—our new arrivals have a way of flying off the shelf (or out of the DMs). 🌈
+                Don't sleep on this—our new arrivals have a way of flying off the shelf (or out of the DMs).
               </p>
 
               <!-- CTA Button -->
               <div style="text-align:center; margin:32px 0;">
                 <a href="${shopLink}" style="display:inline-block; padding:16px 40px; background-color:#7C4B31; color:#FFFFFF; text-decoration:none; border-radius:999px; font-weight:600; font-size:16px; letter-spacing:0.02em;">
-                  🥰 Grab yours now 💋
+                  Grab yours now
                 </a>
               </div>
 
               <p style="margin:24px 0 0 0; font-size:14px; color:#6B4A3B; line-height:1.6; font-style:italic;">
-                🥰 P.S. Go on, treat yourself. You deserve it. 💋
+                P.S. Go on, treat yourself. You deserve it.
               </p>
             </td>
           </tr>
@@ -149,7 +149,7 @@ function createProductEmailTemplate(data: {
           <tr>
             <td style="padding:24px 32px; background-color:#F3E6DC; text-align:center; border-top:1px solid #E8D5C4;">
               <p style="margin:0 0 8px 0; font-size:13px; color:#6B4A3B;">
-                🤎 The LashDiary Team 🥰
+                🤎 The LashDiary Team
               </p>
               <p style="margin:0; font-size:12px; color:#6B4A3B;">
                 <a href="${unsubscribeLink}" style="color:#6B4A3B; text-decoration:underline;">Unsubscribe</a>
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
       })
 
       return zohoTransporter.sendMail({
-        from: `"${businessSettings.name || 'LashDiary'}" <${FROM_EMAIL}>`,
+        from: `"${businessSettings.name || 'The LashDiary'}" <${FROM_EMAIL}>`,
         to: recipient.email,
         subject: subject.includes('🤎') ? subject : `${subject} 🤎`,
         html: emailContent,

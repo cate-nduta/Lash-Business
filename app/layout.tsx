@@ -124,7 +124,7 @@ export default async function RootLayout({
     console.error('Error loading settings for structured data:', error)
   }
 
-  const businessName = settings?.business?.name || 'LashDiary'
+  const businessName = settings?.business?.name || 'The LashDiary'
   const businessEmail = settings?.business?.email || 'hello@lashdiary.co.ke'
   const businessPhone = settings?.business?.phone || ''
   const businessAddress = settings?.business?.address || 'Nairobi, Kenya'

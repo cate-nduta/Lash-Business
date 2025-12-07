@@ -1,4 +1,8 @@
 import nodemailer from 'nodemailer'
+import { readDataFile } from '@/lib/data-utils'
+
+// CRITICAL: Email templates always read fresh data - no caching
+// This ensures emails always show current homepage features, settings, etc.
 
 function normalizeBaseUrl(): string {
   const raw =
@@ -59,9 +63,55 @@ const zohoTransporter =
       })
     : null
 
-function createWelcomeEmailTemplate(data: { name: string; promoCode: string; unsubscribeToken: string; discountPercentage: number }) {
+async function createWelcomeEmailTemplate(data: { name: string; promoCode: string; unsubscribeToken: string; discountPercentage: number }) {
   const { name, promoCode, unsubscribeToken, discountPercentage } = data
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
+  
+  // Load homepage features dynamically
+  let homepageFeatures: Array<{ title: string; description: string }> = []
+  try {
+    const homepageData = await readDataFile<any>('homepage.json', {})
+    homepageFeatures = Array.isArray(homepageData?.features) ? homepageData.features : []
+  } catch (error) {
+    console.warn('Could not load homepage features for email, using defaults:', error)
+  }
+  
+  // Fallback to default features if none found
+  if (homepageFeatures.length === 0) {
+    homepageFeatures = [
+      {
+        title: 'Retention That Actually Retains',
+        description: 'Your lashes should last as long as you want them to. With meticulous prep, precise isolation, and high-quality adhesive, I ensure your set stays full, flawless, and low-maintenance. Less fallout, less stress.'
+      },
+      {
+        title: 'Tsuboki Facial Massage to Complement Your Look',
+        description: 'Every lash session includes a Tsuboki-inspired facial massage that relaxes, refreshes, and gives your eyes a subtle lift. It\'s the perfect little boost to complement your lashes and leave your face glowing.'
+      },
+      {
+        title: 'Precision Lash Mapping for Your Unique Face',
+        description: 'No one-size-fits-all here. Using your face shape and eye anatomy, I create a personalized lash map so you\'ll know exactly what style suits you best. It\'s clarity, customization, and confidence in every set.'
+      },
+      {
+        title: 'A Calm, Intentional Studio Space',
+        description: 'This isn\'t a noisy salon. My space is quiet, clean, and aesthetic. Designed for comfort and relaxation. Breathe, unwind, and maybe even sneak in the best mini-break of your day.'
+      }
+    ]
+  }
+  
+  // Generate features HTML
+  const featuresHTML = homepageFeatures.map((feature, index) => {
+    const isLast = index === homepageFeatures.length - 1
+    return `
+                <div style="margin-bottom:${isLast ? '0' : '20px'}; padding-bottom:${isLast ? '0' : '20px'}; border-bottom:${isLast ? 'none' : `1px solid ${accent}`};">
+                  <p style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:${brand};">
+                    ${String(index + 1).padStart(2, '0')} · ${feature.title}
+                  </p>
+                  <p style="margin:0; font-size:15px; line-height:1.7; color:${textSecondary};">
+                    ${feature.description}
+                  </p>
+                </div>
+    `.trim()
+  }).join('\n')
 
   return `
 <!DOCTYPE html>
@@ -101,14 +151,14 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
               <!-- Promo Code Box -->
               <div style="background: linear-gradient(135deg, ${accent} 0%, #F9EDE3 100%); border:2px dashed ${brand}; border-radius:20px; padding:32px 24px; text-align:center; margin:32px 0;">
                 <p style="margin:0 0 12px 0; font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:${textSecondary};">
-                  Your Exclusive Discount
+                  ✨ Your Exclusive Discount
                 </p>
                 <div style="margin:16px 0;">
                   <p style="margin:0 0 8px 0; font-size:20px; font-weight:600; color:${textPrimary};">
                     Get ${discountPercentage}% OFF
                   </p>
                   <p style="margin:0; font-size:16px; color:${textSecondary};">
-                    Your First Lash Appointment
+                    👁️ Your First Lash Appointment
                   </p>
                 </div>
                 <div style="background:${card}; border-radius:12px; padding:20px; margin:20px 0; border:2px solid ${brand};">
@@ -122,12 +172,15 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
                 <p style="margin:16px 0 0 0; font-size:13px; color:${textSecondary}; line-height:1.6;">
                   Valid for first-time clients only. One use per customer.
                 </p>
+                <p style="margin:12px 0 0 0; font-size:13px; color:${brand}; font-weight:600; line-height:1.6;">
+                  ⏰ This code will be effective for 40 days after you join The LashDiary.
+                </p>
               </div>
 
               <!-- CTA Button -->
               <div style="text-align:center; margin:32px 0;">
                 <a href="${BASE_URL}/booking" style="display:inline-block; padding:16px 40px; background:${brand}; color:#FFFFFF; text-decoration:none; border-radius:999px; font-weight:600; font-size:16px; box-shadow: 0 4px 12px rgba(124, 75, 49, 0.3); transition: all 0.3s ease;">
-                  Book Your Appointment Now
+                  📅 Book Your Appointment Now
                 </a>
               </div>
 
@@ -137,45 +190,7 @@ function createWelcomeEmailTemplate(data: { name: string; promoCode: string; uns
                   What Makes LashDiary Special
                 </p>
                 
-                <!-- Feature 01 -->
-                <div style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid ${accent};">
-                  <p style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:${brand};">
-                    01 · Retention That Actually Retains
-                  </p>
-                  <p style="margin:0; font-size:15px; line-height:1.7; color:${textSecondary};">
-                    Your lashes should last as long as you want them to. With meticulous prep, precise isolation, and high-quality adhesive, I ensure your set stays full, flawless, and low-maintenance. Less fallout, less stress.
-                  </p>
-                </div>
-
-                <!-- Feature 02 -->
-                <div style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid ${accent};">
-                  <p style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:${brand};">
-                    02 · Tsuboki Facial Massage to Complement Your Look
-                  </p>
-                  <p style="margin:0; font-size:15px; line-height:1.7; color:${textSecondary};">
-                    Every lash session includes a Tsuboki-inspired facial massage that relaxes, refreshes, and gives your eyes a subtle lift. It's the perfect little boost to complement your lashes and leave your face glowing.
-                  </p>
-                </div>
-
-                <!-- Feature 03 -->
-                <div style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid ${accent};">
-                  <p style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:${brand};">
-                    03 · Precision Lash Mapping for Your Unique Face
-                  </p>
-                  <p style="margin:0; font-size:15px; line-height:1.7; color:${textSecondary};">
-                    No one-size-fits-all here. Using your face shape and eye anatomy, I create a personalized lash map so you'll know exactly what style suits you best. It's clarity, customization, and confidence in every set.
-                  </p>
-                </div>
-
-                <!-- Feature 04 -->
-                <div style="margin-bottom:0;">
-                  <p style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:${brand};">
-                    04 · A Calm, Intentional Studio Space
-                  </p>
-                  <p style="margin:0; font-size:15px; line-height:1.7; color:${textSecondary};">
-                    This isn't a noisy salon. My space is quiet, clean, and aesthetic. Designed for comfort and relaxation. Breathe, unwind, and maybe even sneak in the best mini-break of your day.
-                  </p>
-                </div>
+                ${featuresHTML}
               </div>
 
               <!-- Closing Message -->
@@ -224,7 +239,43 @@ export async function sendWelcomeEmail(data: { email: string; name: string; prom
     return
   }
 
-  const html = createWelcomeEmailTemplate({ name, promoCode, unsubscribeToken, discountPercentage })
+  // Load homepage features for plain text email
+  let homepageFeatures: Array<{ title: string; description: string }> = []
+  try {
+    const homepageData = await readDataFile<any>('homepage.json', {})
+    homepageFeatures = Array.isArray(homepageData?.features) ? homepageData.features : []
+  } catch (error) {
+    console.warn('Could not load homepage features for email, using defaults:', error)
+  }
+  
+  // Fallback to default features if none found
+  if (homepageFeatures.length === 0) {
+    homepageFeatures = [
+      {
+        title: 'Retention That Actually Retains',
+        description: 'Your lashes should last as long as you want them to. With meticulous prep, precise isolation, and high-quality adhesive, I ensure your set stays full, flawless, and low-maintenance. Less fallout, less stress.'
+      },
+      {
+        title: 'Tsuboki Facial Massage to Complement Your Look',
+        description: 'Every lash session includes a Tsuboki-inspired facial massage that relaxes, refreshes, and gives your eyes a subtle lift. It\'s the perfect little boost to complement your lashes and leave your face glowing.'
+      },
+      {
+        title: 'Precision Lash Mapping for Your Unique Face',
+        description: 'No one-size-fits-all here. Using your face shape and eye anatomy, I create a personalized lash map so you\'ll know exactly what style suits you best. It\'s clarity, customization, and confidence in every set.'
+      },
+      {
+        title: 'A Calm, Intentional Studio Space',
+        description: 'This isn\'t a noisy salon. My space is quiet, clean, and aesthetic. Designed for comfort and relaxation. Breathe, unwind, and maybe even sneak in the best mini-break of your day.'
+      }
+    ]
+  }
+
+  const html = await createWelcomeEmailTemplate({ name, promoCode, unsubscribeToken, discountPercentage })
+  
+  // Generate plain text features section
+  const featuresText = homepageFeatures.map((feature, index) => 
+    `${String(index + 1).padStart(2, '0')} · ${feature.title}\n${feature.description}`
+  ).join('\n\n')
 
   try {
     const info = await zohoTransporter.sendMail({
@@ -243,14 +294,13 @@ Get ${discountPercentage}% OFF your first lash appointment!
 Use Code: ${promoCode}
 
 Valid for first-time clients only. One use per customer.
+⏰ This code will be effective for 40 days after you join The LashDiary.
 
 Book your appointment now: ${BASE_URL}/booking
 
-What to expect:
-- Premium quality lashes tailored to your style
-- Expert artistry from certified lash technicians
-- A relaxing, luxurious experience
-- Exclusive offers and updates delivered to your inbox
+What Makes LashDiary Special:
+
+${featuresText}
 
 We're here to help you look and feel your absolute best. If you have any questions, feel free to reach out – we'd love to chat!
 

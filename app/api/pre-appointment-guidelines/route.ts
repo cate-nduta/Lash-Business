@@ -28,10 +28,23 @@ export async function GET(request: NextRequest) {
       'pre-appointment-guidelines.json',
       DEFAULT_GUIDELINES
     )
-    return NextResponse.json(guidelines)
+    return NextResponse.json(guidelines, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   } catch (error) {
     console.error('Error loading pre-appointment guidelines:', error)
-    return NextResponse.json(DEFAULT_GUIDELINES, { status: 200 })
+    return NextResponse.json(DEFAULT_GUIDELINES, { 
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   }
 }
 

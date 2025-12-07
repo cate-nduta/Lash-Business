@@ -28,6 +28,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 const TEST_EMAIL = process.env.CALENDAR_EMAIL || BUSINESS_NOTIFICATION_EMAIL
 const UNSUBSCRIBE_SECRET = process.env.EMAIL_UNSUBSCRIBE_SECRET || 'lashdiary-secret'
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
       const replyToEmail = business.email || OWNER_EMAIL
 
       await zohoTransporter.sendMail({
-        from: FROM_EMAIL,
+        from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
         to: targetEmail,
         replyTo: replyToEmail,
         subject: formatEmailSubject(personalizedSubject),

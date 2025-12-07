@@ -106,10 +106,10 @@ function buildAnnouncementEmail({
 
   const html = `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; background: #FDF9F4; color: #3E2A20;">
-      <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31;">🌈 ${introMonth} Bookings Are Now Open! 🥰</h2>
-      <p>🥰 Hey ${friendlyName}, 💋</p>
-      <p>🌈 It's that time again — a brand new month of beauty! Our appointment slots are officially open, and you can now secure your spot for your favourite lash or brow service. 🥰</p>
-      <p>💋 Our calendar fills up fast, so if you already have your preferred dates in mind, go ahead and grab them early before they're gone. 🌈</p>
+      <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31;">${introMonth} Bookings Are Now Open!</h2>
+      <p>Hey ${friendlyName},</p>
+      <p>It's that time again — a brand new month of beauty! Our appointment slots are officially open, and you can now secure your spot for your favourite lash or brow service.</p>
+      <p>Our calendar fills up fast, so if you already have your preferred dates in mind, go ahead and grab them early before they're gone.</p>
       <div style="margin: 24px 0; padding: 20px; background: #FFFFFF; border: 1px solid #E4D3C4; border-radius: 12px;">
         <p style="margin: 0 0 12px;"><strong>Booking period:</strong><br/>
           ${openLabel ? `Open from <strong>${openLabel}</strong><br/>` : ''}
@@ -124,15 +124,15 @@ function buildAnnouncementEmail({
           Book ${introMonth}
         </a>
       </p>
-      <p>🥰 Can't wait to see you soon and get those lashes/brows looking flawless for the new month! 💋</p>
-      <p style="margin-top:24px;">🤎 With love,<br/>The LashDiary Team 🥰</p>
+      <p>Can't wait to see you soon and get those lashes/brows looking flawless for the new month!</p>
+      <p style="margin-top:24px;">🤎 With love,<br/>The LashDiary Team</p>
       <hr style="margin:32px 0;border:none;border-top:1px solid #EADFD6;" />
       <p style="font-size:14px;color:#7C4B31;">Need support? Reply to this email or reach us at <a href="mailto:${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}" style="color:#7C4B31;">${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}</a>.</p>
     </div>
   `.replace(/\n\s+/g, '\n')
 
   const text = [
-    `🌈 ${introMonth} Bookings Are Now Open! 🤎`,
+    `${introMonth} Bookings Are Now Open! 🤎`,
     '',
     `Hey ${friendlyName},`,
     '',

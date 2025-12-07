@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       (promoCode.description?.toLowerCase().includes('welcome discount') || 
        promoCode.description?.toLowerCase().includes('newsletter subscribers'))
 
-    // SECURITY: If this is a welcome discount, check if email has already used one
+    // SECURITY: If this is a welcome discount, check if email has already used one AND check 40-day validity
     if (isWelcomeDiscount && email) {
       const normalizedEmail = email.toLowerCase().trim()
       const welcomeDiscountData = await readDataFile<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
@@ -56,6 +56,36 @@ export async function POST(request: NextRequest) {
           valid: false,
           error: 'You have already used your welcome discount. Each email address can only use the welcome discount once.',
           code: 'WELCOME_DISCOUNT_ALREADY_USED',
+        }, { status: 400 })
+      }
+      
+      // Check if they received the code and if it's still within 40 days
+      if (!existingRecipient || !existingRecipient.receivedAt) {
+        return NextResponse.json({
+          valid: false,
+          error: 'This welcome discount code is only available to new newsletter subscribers. Please sign up via the popup on our homepage to receive your discount code.',
+          code: 'WELCOME_DISCOUNT_NOT_RECEIVED',
+        }, { status: 400 })
+      }
+      
+      // Validate 40-day window from when they received the code
+      const receivedDate = new Date(existingRecipient.receivedAt)
+      if (isNaN(receivedDate.getTime())) {
+        return NextResponse.json({
+          valid: false,
+          error: 'Invalid welcome discount record. Please contact support.',
+          code: 'WELCOME_DISCOUNT_INVALID',
+        }, { status: 400 })
+      }
+      
+      const today = new Date()
+      const daysSinceReceived = Math.floor((today.getTime() - receivedDate.getTime()) / (1000 * 60 * 60 * 24))
+      
+      if (daysSinceReceived > 40) {
+        return NextResponse.json({
+          valid: false,
+          error: 'Your welcome discount code has expired. The code is valid for 40 days from when you joined The LashDiary community. Please book soon to take advantage of future discounts!',
+          code: 'WELCOME_DISCOUNT_EXPIRED',
         }, { status: 400 })
       }
     }

@@ -50,7 +50,7 @@ function buildReminderEmail({
 
     <div style="margin: 32px 0; text-align: left;">
       <a href="${bookingLink}" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#7C4B31;color:#FFFFFF;text-decoration:none;border-radius:999px;font-weight:600;font-size:16px;font-family: 'DM Serif Text', Georgia, serif;">
-        💌 Book Your Spot
+        Book Your Spot
       </a>
     </div>
 

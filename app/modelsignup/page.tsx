@@ -134,6 +134,8 @@ export default function ModelSignupPage() {
         return
       }
 
+      // Success - stop loading and show success modal
+      setLoading(false)
       setShowSuccessModal(true)
     } catch (err: any) {
       setError('An error occurred. Please try again.')
@@ -184,7 +186,7 @@ export default function ModelSignupPage() {
                 Your information has been sent successfully. We've received your application and will review it carefully.
               </p>
               <p className="text-brown/80 mb-4">
-                <strong>What happens next?</strong> When a slot becomes available that matches your availability, you will receive an email notification, WhatsApp text, or a call to confirm your booking with the location and basic rules.
+                <strong>What happens next?</strong> When a slot becomes available that matches your availability, you will receive an email notification, WhatsApp text, or a call to confirm your booking with the location and pre appointment guidelines.
               </p>
               <p className="text-brown/80 mb-4 text-sm">
                 Please note that submitting an application does not guarantee an appointment. Models will be selected based on availability and how many spots we have open for each model round.

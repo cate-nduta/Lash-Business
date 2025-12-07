@@ -4,6 +4,10 @@ import { hashPassword } from '@/lib/password-utils'
 import { sanitizeEmail } from '@/lib/input-validation'
 import type { ClientUsersData } from '@/types/client'
 
+// CRITICAL: No caching for password reset - always use fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -29,6 +33,8 @@ export async function POST(request: NextRequest) {
 
     // Find user with valid reset token
     let userFound = false
+    let userEmail = ''
+    
     for (const user of usersData.users) {
       if (!user.resetTokens || !Array.isArray(user.resetTokens)) {
         continue
@@ -44,6 +50,7 @@ export async function POST(request: NextRequest) {
 
         // Update password
         user.passwordHash = hashPassword(password)
+        userEmail = user.email
 
         // Clean up old used tokens (older than 24 hours)
         user.resetTokens = user.resetTokens.filter((t) => {
@@ -60,11 +67,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!userFound) {
+      console.error('❌ Password reset failed: Invalid or expired token')
+      console.error('Token used:', token)
       return NextResponse.json(
-        { error: 'Invalid or expired reset token' },
+        { error: 'Invalid or expired reset token. Please request a new password reset link.' },
         { status: 400 }
       )
     }
+    
+    console.log('✅ Password reset successful for user:', userEmail)
 
     await writeDataFile('users.json', usersData)
 

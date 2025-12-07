@@ -328,7 +328,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       try {
         const timestamp = Date.now()
         const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}&t=${timestamp}`, {
-          cache: 'default',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          }
         })
         if (!response.ok) {
           throw new Error(`Failed to check first-time client: ${response.status}`)
@@ -381,7 +385,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       try {
         const timestamp = Date.now()
         const response = await fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, { 
-          cache: 'default' 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          }
         })
         if (response.ok) {
           const data = await response.json()
@@ -394,32 +402,41 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     loadBlockedDates()
   }, [])
 
-  // Load initial data in parallel for faster page load with optimized caching and error handling
+  // Load initial data in parallel - NO CACHING for availability to ensure real-time updates
   useEffect(() => {
     let isMounted = true
     const timestamp = Date.now()
-    const fetchOptions = { 
-      cache: 'default' as RequestCache,
-      // Add timeout to prevent hanging requests
+    // NO CACHE for availability-related calls - must be fresh every time
+    const availabilityFetchOptions: RequestInit = { 
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
       signal: AbortSignal.timeout(10000) // 10 second timeout
-    } as RequestInit
+    }
+    // Other data can use default cache (discounts, contact don't change as frequently)
+    const defaultFetchOptions: RequestInit = { 
+      cache: 'no-store', // Changed to no-store for consistency
+      signal: AbortSignal.timeout(10000)
+    }
     
     // Fetch all initial data in parallel with individual error handling
     Promise.allSettled([
-      fetch(`/api/discounts?t=${timestamp}`, fetchOptions).then((res) => {
+      fetch(`/api/discounts?t=${timestamp}`, defaultFetchOptions).then((res) => {
         if (!res.ok) throw new Error(`Failed to load discounts: ${res.status}`)
         return res.json()
       }),
-      fetch(`/api/contact?t=${timestamp}`, fetchOptions).then((res) => {
+      fetch(`/api/contact?t=${timestamp}`, defaultFetchOptions).then((res) => {
         if (!res.ok) return null
         return res.json()
       }),
-      fetch(`/api/availability?t=${timestamp}`, fetchOptions).then((res) => {
+      fetch(`/api/availability?t=${timestamp}`, availabilityFetchOptions).then((res) => {
         if (!res.ok) return null
         return res.json()
       }),
-      // Also load blocked dates here as backup/update
-      fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, fetchOptions).then((res) => {
+      // Also load blocked dates here as backup/update - CRITICAL: no cache
+      fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, availabilityFetchOptions).then((res) => {
         if (!res.ok) return null
         return res.json()
       }),
@@ -604,13 +621,17 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       })
     : null
 
-  // Load services and pre-appointment guidelines in parallel with caching and timeout
+  // Load services and pre-appointment guidelines in parallel - no cache for real-time updates
   useEffect(() => {
     let isMounted = true
     const timestamp = Date.now()
-    // Use default cache for better performance with timeout
+    // NO CACHE - ensure fresh data on every page load
     const fetchOptions: RequestInit = { 
-      cache: 'default' as RequestCache,
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
       signal: AbortSignal.timeout(8000), // 8 second timeout
     }
     
@@ -619,7 +640,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         if (!res.ok) throw new Error('Failed to load services')
         return res.json()
       }),
-      fetch('/api/pre-appointment-guidelines', fetchOptions).then((res) => {
+      fetch(`/api/pre-appointment-guidelines?t=${timestamp}`, fetchOptions).then((res) => {
         if (!res.ok) return null
         return res.json()
       }),
@@ -1310,7 +1331,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       setLoadingDates(true)
       try {
         const timestamp = Date.now()
-        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'default' })
+        const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          }
+        })
         if (!response.ok) {
           throw new Error(`Failed to load available dates: ${response.status}`)
         }
@@ -1394,7 +1421,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     try {
       const timestamp = Date.now()
       const response = await fetch(`/api/calendar/available-slots?date=${date}&t=${timestamp}`, {
-        cache: 'default',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        }
       })
       const data = await response.json()
       if (data.slots) {

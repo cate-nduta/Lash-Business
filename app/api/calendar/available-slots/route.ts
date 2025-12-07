@@ -297,7 +297,7 @@ export async function GET(request: NextRequest) {
         Array.isArray(availabilityData?.fullyBookedDates) ? availabilityData!.fullyBookedDates : [],
       )
       
-      // Return immediately with short cache for performance
+      // Return immediately with no cache to ensure fresh data on production
       return NextResponse.json(
         { 
           fullyBookedDates: Array.from(fullyBookedSet), 
@@ -306,8 +306,9 @@ export async function GET(request: NextRequest) {
         },
         {
           headers: {
-            'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
             'Pragma': 'no-cache',
+            'Expires': '0',
           },
         }
       )
@@ -396,7 +397,9 @@ export async function GET(request: NextRequest) {
         minimumBookingDate: minimumBookingDate ?? null,
       }, {
         headers: {
-          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60', // Cache for 30 seconds, serve stale for 1 minute
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
       })
     }
@@ -572,7 +575,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ slots: availableSlots, bookingWindow: bookingWindow ?? null }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30', // Cache for 10 seconds, serve stale for 30 seconds
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {

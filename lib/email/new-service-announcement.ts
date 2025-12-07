@@ -103,18 +103,18 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background-color:${card}; border-radius:16px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
           <tr>
             <td style="padding:40px 32px; background:linear-gradient(135deg, ${brand} 0%, ${accent} 100%); text-align:center;">
-              <h1 style="margin:0; font-size:28px; color:#FFFFFF; font-weight:600;">🌈 New Service Available! 🥰</h1>
-              <p style="margin:12px 0 0 0; font-size:16px; color:#FFFFFF; opacity:0.95;">💋 We're excited to share something special with you 🌈</p>
+              <h1 style="margin:0; font-size:28px; color:#FFFFFF; font-weight:600;">New Service Available!</h1>
+              <p style="margin:12px 0 0 0; font-size:16px; color:#FFFFFF; opacity:0.95;">We're excited to share something special with you</p>
             </td>
           </tr>
 
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 20px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🥰 Hi ${name}! 💋
+                Hi ${name}!
               </p>
               <p style="margin:0 0 24px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🌈 We're thrilled to announce our newest service: <strong style="color:${brand};">${service.name}</strong>! 🥰
+                We're thrilled to announce our newest service: <strong style="color:${brand};">${service.name}</strong>!
               </p>
 
               <div style="border:2px solid ${accent}; border-radius:14px; padding:24px; background:${background}; margin-bottom:24px;">
@@ -142,7 +142,7 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
               </div>
 
               <p style="margin:24px 0 0 0; font-size:14px; line-height:1.6; color:${textSecondary};">
-                🥰 Ready to book? Visit our services page to see all available options and schedule your appointment. We can't wait to see you! 💋
+                Ready to book? Visit our services page to see all available options and schedule your appointment. We can't wait to see you!
               </p>
             </td>
           </tr>

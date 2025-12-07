@@ -22,6 +22,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
 const zohoTransporter =
@@ -76,9 +77,9 @@ async function sendReferralEmail(referrerEmail: string, referrerName: string, co
   const safeName = referrerName || 'Beautiful'
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; color: #2F1A16; background-color: #FFF8FB;">
-      <h2 style="margin-top: 0; color: #733D26;">🥰 LashDiary Referral - Share with a Friend 💋</h2>
+      <h2 style="margin-top: 0; color: #733D26;">LashDiary Referral - Share with a Friend</h2>
       <p>Hi ${safeName},</p>
-      <p>🥰 Thank you for being a loyal LashDiary client! Here's your personal referral code: 💋</p>
+      <p>Thank you for being a loyal LashDiary client! Here's your personal referral code:</p>
       <div style="margin: 16px 0; padding: 16px; background: #F3F0FF; border-radius: 12px; border: 2px dashed #7A6CFF; text-align: center;">
         <p style="margin: 0; font-size: 14px; color: #5143C5;">Share this code with a friend:</p>
         <p style="margin: 6px 0 0 0; font-size: 28px; font-weight: bold; letter-spacing: 2px;">${code}</p>
@@ -88,9 +89,9 @@ async function sendReferralEmail(referrerEmail: string, referrerName: string, co
         <li>Once they book, <strong>you</strong> unlock <strong>10% off</strong> your next appointment using the <em>same code</em>.</li>
         <li>The code works for one friend at a time. After it's used, feel free to request a fresh referral code.</li>
       </ul>
-      <p style="margin-top: 24px;">🥰 Ready to share the love? Simply forward this email or copy-and-paste your code into a message. 💋</p>
-      <p>🌈 We appreciate you for helping the LashDiary family grow! 🥰</p>
-      <p style="margin-top: 32px;">🤎 With love,<br/>The LashDiary Team 🥰</p>
+      <p style="margin-top: 24px;">Ready to share the love? Simply forward this email or copy-and-paste your code into a message.</p>
+      <p>We appreciate you for helping the LashDiary family grow!</p>
+      <p style="margin-top: 32px;">🤎 With love,<br/>The LashDiary Team</p>
       <p style="font-size: 12px; color: #7a7a7a; margin-top: 24px;">
         Book anytime at <a href="${BASE_URL}/booking" style="color: #7A6CFF; text-decoration: none;">${BASE_URL.replace(/^https?:\/\//, '')}</a>
       </p>
@@ -98,7 +99,7 @@ async function sendReferralEmail(referrerEmail: string, referrerName: string, co
   `
 
   await zohoTransporter.sendMail({
-    from: FROM_EMAIL,
+    from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
     to: referrerEmail,
     subject: 'Your Referral Code is Ready 🤎',
     html,
@@ -114,21 +115,21 @@ async function sendFriendInviteEmail(friendEmail: string, code: string, referrer
   const safeName = referrerName || 'a LashDiary client'
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; color: #2F1A16; background-color: #FFF8FB;">
-      <h2 style="margin-top: 0; color: #733D26;">🥰 ${safeName} sent you a LashDiary referral 💋</h2>
+      <h2 style="margin-top: 0; color: #733D26;">${safeName} sent you a LashDiary referral</h2>
       <p>Hello!</p>
-      <p>🥰 ${safeName} thought you'd love LashDiary. Use their personal referral code: 💋</p>
+      <p>${safeName} thought you'd love LashDiary. Use their personal referral code:</p>
       <div style="margin: 16px 0; padding: 16px; background: #F3F0FF; border-radius: 12px; border: 2px dashed #7A6CFF; text-align: center;">
         <p style="margin: 0; font-size: 14px; color: #5143C5;">Referral code:</p>
         <p style="margin: 6px 0 0 0; font-size: 28px; font-weight: bold; letter-spacing: 2px;">${code}</p>
       </div>
       <p style="margin: 0 0 16px 0;">Use it when booking your first appointment to enjoy <strong>10% off</strong>.</p>
       <p style="margin: 0 0 16px 0;">Book now at <a href="${BASE_URL}/booking" style="color: #7A6CFF;">${BASE_URL.replace(/^https?:\/\//, '')}/booking</a>.</p>
-      <p style="margin-top: 24px;">🥰 Can't wait to pamper you! 💋<br/>🤎 The LashDiary Team 🥰</p>
+      <p style="margin-top: 24px;">Can't wait to pamper you!<br/>🤎 The LashDiary Team</p>
     </div>
   `
 
   await zohoTransporter.sendMail({
-    from: FROM_EMAIL,
+    from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
     to: friendEmail,
     subject: `You Received a Referral Code 🤎`,
     html,

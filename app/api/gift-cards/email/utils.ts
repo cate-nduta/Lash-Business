@@ -73,15 +73,15 @@ function createGiftCardPurchaseEmailTemplate(card: GiftCard) {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${cardBg}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${cardBg};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">🌈 Gift Card Purchase</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Your Gift Card is Ready! 🥰</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Gift Card Purchase</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Your Gift Card is Ready!</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:8px 32px 24px 32px;">
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                🥰 Thank you, ${friendlyName}! Your gift card has been created and is ready to use. 💋
+                Thank you, ${friendlyName}! Your gift card has been created and is ready to use.
               </p>
 
               <div style="border-radius:14px; padding:20px 24px; background:${background}; border:2px solid ${brand}; margin-bottom:24px; text-align:center;">
@@ -139,8 +139,8 @@ function createGiftCardPurchaseEmailTemplate(card: GiftCard) {
 
           <tr>
             <td style="padding:22px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:13px; color:${textSecondary};">🥰 We can't wait to see you! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:13px; color:${textSecondary};">We can't wait to see you!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -170,7 +170,7 @@ function createGiftCardRecipientSurpriseEmailTemplate(card: GiftCard) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎁 Surprise! You Have a Gift Card!</title>
+  <title>Surprise! You Have a Gift Card!</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Serif+Text&display=swap" rel="stylesheet">
@@ -182,15 +182,15 @@ function createGiftCardRecipientSurpriseEmailTemplate(card: GiftCard) {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${cardBg}; border-radius:18px; border:2px solid ${brand}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.12);">
           <tr>
             <td style="padding:32px 32px 16px 32px; text-align:center; background:linear-gradient(135deg, ${brand} 0%, ${brand}dd 100%);">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:4px; font-size:12px; color:#FFFFFF;">🎁 SURPRISE! 🎁</p>
-              <h1 style="margin:16px 0 0 0; font-size:40px; color:#FFFFFF; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:700; line-height:1.2; letter-spacing:0.5px;">You Have a Gift Card! 🥰</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:4px; font-size:12px; color:#FFFFFF;">SURPRISE!</p>
+              <h1 style="margin:16px 0 0 0; font-size:40px; color:#FFFFFF; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:700; line-height:1.2; letter-spacing:0.5px;">You Have a Gift Card!</h1>
             </td>
           </tr>
 
           <tr>
             <td style="padding:28px 32px 24px 32px;">
               <p style="margin:0 0 20px 0; font-size:18px; line-height:1.7; color:${textPrimary}; text-align:center;">
-                🎉 <strong>${recipientName}</strong>, someone special thinks you deserve beautiful lashes! 🎉
+                <strong>${recipientName}</strong>, someone special thinks you deserve beautiful lashes!
               </p>
 
               ${card.recipient?.message ? `
@@ -221,12 +221,12 @@ function createGiftCardRecipientSurpriseEmailTemplate(card: GiftCard) {
               </div>
 
               <div style="border-radius:14px; padding:20px 24px; background:${cardBg}; border:1px solid ${accent}; margin-bottom:24px;">
-                <h2 style="margin:0 0 16px 0; font-size:20px; color:${brand}; text-align:center;">✨ How to Use Your Gift Card ✨</h2>
+                <h2 style="margin:0 0 16px 0; font-size:20px; color:${brand}; text-align:center;">How to Use Your Gift Card</h2>
                 <ol style="margin:0; padding-left:24px; color:${textPrimary}; font-size:15px; line-height:2;">
                   <li style="margin-bottom:10px;">Click the button below to book your appointment</li>
                   <li style="margin-bottom:10px;">Select your preferred date and time</li>
                   <li style="margin-bottom:10px;">Your gift card will be automatically applied</li>
-                  <li style="margin-bottom:10px;">Enjoy your beautiful lashes! 🥰</li>
+                  <li style="margin-bottom:10px;">Enjoy your beautiful lashes!</li>
                 </ol>
               </div>
 
@@ -257,8 +257,8 @@ function createGiftCardRecipientSurpriseEmailTemplate(card: GiftCard) {
 
           <tr>
             <td style="padding:24px 32px; background:${background}; text-align:center;">
-              <p style="margin:0; font-size:14px; color:${textSecondary};">🥰 We can't wait to make you feel beautiful! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:15px; color:${brand}; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:14px; color:${textSecondary};">We can't wait to make you feel beautiful!</p>
+              <p style="margin:4px 0 0 0; font-size:15px; color:${brand}; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -317,7 +317,7 @@ export async function sendGiftCardPurchaseEmail(card: GiftCard) {
           const recipientMailOptions = {
             from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
             to: recipientEmail,
-            subject: '🎁 Someone Special Sent You a Gift! 🤎',
+            subject: 'Someone Special Sent You a Gift! 🤎',
             html: recipientHtmlContent,
           }
 

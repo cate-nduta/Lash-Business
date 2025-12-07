@@ -88,6 +88,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS
@@ -134,7 +135,7 @@ function createBirthdayEmailTemplate(name: string, discountCode: string, expiryD
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background-color: #FFFFFF; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
           <tr>
             <td style="padding:40px 32px; text-align:center; background: linear-gradient(135deg, #F3E6DC 0%, #FFFFFF 100%); border-radius:12px 12px 0 0;">
-              <h1 style="margin:0 0 12px 0; font-size:32px; color:#3E2A20; font-weight:bold;">🎉 Happy Birthday, ${name}! 🎉</h1>
+              <h1 style="margin:0 0 12px 0; font-size:32px; color:#3E2A20; font-weight:bold;">Happy Birthday, ${name}!</h1>
               <p style="margin:0; font-size:18px; color:#6B4A3B;">We're celebrating you today!</p>
             </td>
           </tr>
@@ -168,8 +169,8 @@ function createBirthdayEmailTemplate(name: string, discountCode: string, expiryD
           
           <tr>
             <td style="padding:24px 32px; background-color:#FDF9F4; text-align:center; border-radius:0 0 12px 12px;">
-              <p style="margin:0; font-size:13px; color:#6B4A3B;">🥰 We hope your day is as beautiful as you are! 💋</p>
-              <p style="margin:4px 0 0 0; font-size:14px; color:#7C4B31; font-weight:600;">🤎 The LashDiary Team 🥰</p>
+              <p style="margin:0; font-size:13px; color:#6B4A3B;">We hope your day is as beautiful as you are!</p>
+              <p style="margin:4px 0 0 0; font-size:14px; color:#7C4B31; font-weight:600;">🤎 The LashDiary Team</p>
             </td>
           </tr>
         </table>
@@ -257,9 +258,9 @@ export async function POST(request: NextRequest) {
         const emailHtml = createBirthdayEmailTemplate(user.name, discountCode, expiryDateStr)
         
         await zohoTransporter.sendMail({
-          from: FROM_EMAIL,
+          from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
           to: user.email,
-          subject: `🎉 Happy Birthday! Your Special 12% Discount Awaits!`,
+          subject: `Happy Birthday! Your Special 12% Discount Awaits! 🤎`,
           html: emailHtml,
         })
 

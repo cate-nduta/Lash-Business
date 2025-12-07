@@ -1,5 +1,67 @@
+/**
+ * Scheduled Email Processing Cron Job
+ * 
+ * This endpoint automatically processes scheduled email campaigns that are due to be sent.
+ * It checks for scheduled emails and sends them when their send time arrives.
+ * 
+ * SETUP FOR AUTOMATIC EXECUTION:
+ * 
+ * Since most hosting platforms don't have built-in cron jobs, you'll need to use
+ * an external cron service. Here are the best options:
+ * 
+ * OPTION 1: cron-job.org (Free & Recommended)
+ * 1. Go to https://cron-job.org and create a free account
+ * 2. Click "Create cronjob"
+ * 3. Configure:
+ *    - Title: "LashDiary Scheduled Emails"
+ *    - Address: https://yourdomain.com/api/cron/process-scheduled-emails
+ *    - Schedule: Every 15 minutes (use cron: "*\/15 * * * *")
+ *    - Request method: GET or POST (both work)
+ *    - Optional: Add Authorization header if you set CRON_SECRET:
+ *      Header name: Authorization
+ *      Header value: Bearer YOUR_CRON_SECRET
+ * 4. Click "Create cronjob"
+ * 
+ * OPTION 2: EasyCron (Free tier available)
+ * 1. Go to https://www.easycron.com and sign up
+ * 2. Create a new cron job:
+ *    - URL: https://yourdomain.com/api/cron/process-scheduled-emails
+ *    - Schedule: every 15 minutes (cron: "*\/15 * * * *")
+ *    - Method: GET or POST
+ * 3. Save and activate
+ * 
+ * OPTION 3: UptimeRobot (Free - monitors + cron)
+ * 1. Go to https://uptimerobot.com and sign up
+ * 2. Add a new monitor:
+ *    - Monitor Type: HTTP(s)
+ *    - URL: https://yourdomain.com/api/cron/process-scheduled-emails
+ *    - Monitoring Interval: 15 minutes
+ * 
+ * SECURITY (Optional but Recommended):
+ * Add to your environment variables:
+ * CRON_SECRET=your-random-secret-string-here
+ * 
+ * Then configure your cron service to send:
+ * Authorization: Bearer your-random-secret-string-here
+ * 
+ * MANUAL TESTING:
+ * Visit: https://yourdomain.com/api/cron/process-scheduled-emails
+ * Or use curl:
+ * curl https://yourdomain.com/api/cron/process-scheduled-emails
+ * 
+ * With authentication:
+ * curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://yourdomain.com/api/cron/process-scheduled-emails
+ * 
+ * The system automatically:
+ * - Checks for scheduled emails that are due to be sent
+ * - Sends them to all recipients
+ * - Tracks sent emails in campaigns
+ * - Removes processed emails from the scheduled queue
+ */
+
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdminAuth } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import nodemailer from 'nodemailer'
 import { formatEmailSubject } from '@/lib/email-subject-utils'
@@ -115,12 +177,30 @@ async function saveScheduledEmails(entries: ScheduledEmailEntry[]) {
   await writeDataFile('scheduled-emails.json', { scheduled: entries })
 }
 
+export async function GET(request: NextRequest) {
+  return POST(request)
+}
+
 export async function POST(request: NextRequest) {
   try {
-    await requireAdminAuth()
+    // Optional: Add a secret token check for security
+    const authHeader = request.headers.get('authorization')
+    const cronSecret = process.env.CRON_SECRET
+    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    console.log('[Scheduled Email Cron] Starting scheduled email processing...')
 
     if (!zohoTransporter) {
-      return NextResponse.json({ error: 'Email service not configured. Please set up ZOHO_SMTP credentials.' }, { status: 500 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Email service not configured. Please set up ZOHO_SMTP credentials.',
+          message: 'Scheduled email processing requires email service configuration.',
+        },
+        { status: 500 }
+      )
     }
 
     const scheduledEntries = await loadScheduledEmails()
@@ -132,8 +212,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (dueEntries.length === 0) {
-      return NextResponse.json({ processed: 0, message: 'No scheduled emails ready to send.' })
+      return NextResponse.json({
+        success: true,
+        processed: 0,
+        message: 'No scheduled emails ready to send.',
+        timestamp: now.toISOString(),
+      })
     }
+
+    console.log(`[Scheduled Email Cron] Found ${dueEntries.length} scheduled email(s) ready to send`)
 
     const remainingEntries = scheduledEntries.filter((entry) => !dueEntries.includes(entry))
     const business = await getBusinessSettings()
@@ -151,6 +238,9 @@ export async function POST(request: NextRequest) {
         .map((record) => record.email.toLowerCase())
     )
 
+    let totalSent = 0
+    let totalErrors = 0
+
     for (const entry of dueEntries) {
       let recipients = entry.recipients
       if (entry.excludeUnsubscribed) {
@@ -158,11 +248,15 @@ export async function POST(request: NextRequest) {
       }
 
       if (recipients.length === 0) {
+        console.log(`[Scheduled Email Cron] Skipping entry ${entry.id} - no valid recipients`)
         continue
       }
 
       const campaignId = entry.id
       const attachmentPayload = buildAttachmentPayload(entry.attachments)
+
+      let sentCount = 0
+      let errorCount = 0
 
       const promises = recipients.map(async (recipient) => {
         try {
@@ -193,12 +287,19 @@ export async function POST(request: NextRequest) {
             html: emailHtml,
             attachments: attachmentPayload,
           })
-        } catch (error) {
-          console.error(`Error sending scheduled email to ${recipient.email}:`, error)
+
+          sentCount++
+          console.log(`[Scheduled Email Cron] ✅ Sent scheduled email to ${recipient.email}`)
+        } catch (error: any) {
+          errorCount++
+          console.error(`[Scheduled Email Cron] ❌ Error sending scheduled email to ${recipient.email}:`, error)
         }
       })
 
       await Promise.all(promises)
+
+      totalSent += sentCount
+      totalErrors += errorCount
 
       campaigns.push({
         id: campaignId,
@@ -215,17 +316,36 @@ export async function POST(request: NextRequest) {
         scheduleStatus: 'sent',
         scheduleSendAt: entry.schedule.sendAt,
       })
+
+      console.log(`[Scheduled Email Cron] ✅ Processed entry ${entry.id}: ${sentCount} sent, ${errorCount} errors`)
     }
 
     await writeDataFile('email-campaigns.json', { campaigns })
     await saveScheduledEmails(remainingEntries)
 
-    return NextResponse.json({ processed: dueEntries.length })
-  } catch (error: any) {
-    if (error?.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const result = {
+      success: true,
+      timestamp: now.toISOString(),
+      processed: dueEntries.length,
+      totalSent,
+      totalErrors,
+      message: `Processed ${dueEntries.length} scheduled email(s). ${totalSent} email(s) sent, ${totalErrors} error(s).`,
     }
-    console.error('Error processing scheduled emails:', error)
-    return NextResponse.json({ error: 'Failed to process scheduled emails' }, { status: 500 })
+
+    console.log(`[Scheduled Email Cron] ✅ Completed: ${dueEntries.length} processed, ${totalSent} sent, ${totalErrors} errors`)
+
+    return NextResponse.json(result)
+  } catch (error: any) {
+    console.error('[Scheduled Email Cron] ❌ Fatal error:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to process scheduled emails',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    )
   }
 }
+

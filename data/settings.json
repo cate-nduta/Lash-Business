@@ -1,6 +1,6 @@
 {
   "business": {
-    "name": "LashDiary",
+    "name": "The LashDiary",
     "phone": "+254797473696",
     "email": "hello@lashdiary.co.ke",
     "address": "Pramukh Towers, 4th Floor, Westlands Road, Westlands, Nairobi, Kenya",
@@ -19,6 +19,6 @@
     "twitter": ""
   },
   "newsletter": {
-    "discountPercentage": 10
+    "discountPercentage": 5
   }
 }

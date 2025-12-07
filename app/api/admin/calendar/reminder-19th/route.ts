@@ -37,10 +37,10 @@ function buildReminderEmail({
     
     <div style="background: #FFFFFF; border-left: 4px solid #7C4B31; padding: 16px 20px; margin: 24px 0; border-radius: 8px;">
       <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
-        💝 <strong>Real talk:</strong>
+        <strong>Real talk:</strong>
       </p>
       <p style="margin: 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
-        Self-care isn't selfish. It's necessary. And when your lashes are on point, that confidence boost? Chef's kiss. ✨
+        Self-care isn't selfish. It's necessary. And when your lashes are on point, that confidence boost? Chef's kiss.
       </p>
     </div>
 
@@ -49,12 +49,12 @@ function buildReminderEmail({
     </p>
 
     <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">
-      💌 Ready to treat yourself? Book whenever you're ready. And if you just want to chat or have questions, I'm always here. That's what besties do. 🤎
+      Ready to treat yourself? Book whenever you're ready. And if you just want to chat or have questions, I'm always here. That's what besties do.
     </p>
 
     <div style="margin: 32px 0; text-align: left;">
       <a href="${bookingLink}" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#7C4B31;color:#FFFFFF;text-decoration:none;border-radius:999px;font-weight:600;font-size:16px;font-family: 'DM Serif Text', Georgia, serif;">
-        💌 Book Your Spot
+        Book Your Spot
       </a>
     </div>
 
@@ -76,12 +76,12 @@ function buildReminderEmail({
     '',
     `Sometimes we get so caught up in everything that we forget to do something nice for ourselves. But here's the thing: you work hard, you show up, and you deserve to feel amazing.`,
     '',
-    `💝 Real talk:`,
-    `Self-care isn't selfish. It's necessary. And when your lashes are on point, that confidence boost? Chef's kiss. ✨`,
+    `Real talk:`,
+    `Self-care isn't selfish. It's necessary. And when your lashes are on point, that confidence boost? Chef's kiss.`,
     '',
     `If you've been putting off booking or thinking "maybe next month," let me tell you: you don't have to wait. You deserve to feel fabulous right now. Your future self will thank you.`,
     '',
-    `💌 Ready to treat yourself? Book whenever you're ready. And if you just want to chat or have questions, I'm always here. That's what besties do. 🤎`,
+    `Ready to treat yourself? Book whenever you're ready. And if you just want to chat or have questions, I'm always here. That's what besties do.`,
     '',
     `Book Your Spot: ${bookingLink}`,
     '',

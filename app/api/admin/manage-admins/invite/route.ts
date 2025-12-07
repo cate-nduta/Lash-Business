@@ -58,6 +58,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS
@@ -159,7 +160,7 @@ async function sendInviteEmail(invite: AdminInvite, token: string, request: Next
 
   try {
     const response = await zohoTransporter.sendMail({
-      from: FROM_EMAIL,
+      from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: invite.email,
       replyTo: process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL,
       subject,

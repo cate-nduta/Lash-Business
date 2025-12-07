@@ -715,6 +715,26 @@ export default function AdminEmailMarketing() {
     window.URL.revokeObjectURL(url)
   }
 
+  const handleDeleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/email-marketing/campaigns?id=${campaignId}`, {
+        method: 'DELETE',
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete campaign')
+      }
+      setMessage({ type: 'success', text: 'Campaign deleted successfully!' })
+      loadAllData()
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to delete campaign' })
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-baby-pink-light flex items-center justify-center">
@@ -1252,15 +1272,22 @@ export default function AdminEmailMarketing() {
                     .map((campaign) => (
                       <div key={campaign.id} className="border-2 border-brown-light rounded-lg p-6 bg-white">
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex-1">
                             <p className="text-lg text-brown-dark font-semibold">{campaign.subject}</p>
                             <p className="text-xs text-brown">{campaign.sentAt ? `Sent: ${new Date(campaign.sentAt).toLocaleString()}` : 'Scheduled'}</p>
                           </div>
-                          <div className="text-right text-xs text-brown">
+                          <div className="text-right text-xs text-brown mr-4">
                             <p><span className="font-semibold text-brown-dark">Sent:</span> {campaign.totalRecipients}</p>
                             <p><span className="font-semibold text-brown-dark">Opens:</span> {campaign.opened}</p>
                             <p><span className="font-semibold text-brown-dark">Clicks:</span> {campaign.clicked}</p>
                           </div>
+                          <button
+                            onClick={() => handleDeleteCampaign(campaign.id)}
+                            className="px-3 py-2 text-xs border-2 border-red-600 text-red-700 rounded-lg hover:text-red-800 hover:border-red-700 hover:bg-red-50 transition-colors font-semibold"
+                            title="Delete campaign"
+                          >
+                            Delete
+                          </button>
                         </div>
                         <div className="mt-4 border border-brown-light rounded-lg p-4 text-xs text-brown whitespace-pre-wrap bg-white">
                           {campaign.content.substring(0, 200)}{campaign.content.length > 200 ? '...' : ''}

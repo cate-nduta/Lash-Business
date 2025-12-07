@@ -36,13 +36,13 @@ function buildReminderEmail({
     
     <div style="background: #FFFFFF; border-left: 4px solid #7C4B31; padding: 16px 20px; margin: 24px 0; border-radius: 8px;">
       <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
-        💡 <strong>Pro tip:</strong>
+        <strong>Pro tip:</strong>
       </p>
       <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
         Your lashes love a little TLC between appointments. Gently brush them in the morning, avoid oil-based products near your eyes, and try not to sleep face-down (I know, easier said than done 😅).
       </p>
       <p style="margin: 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
-        Small habits = longer-lasting lashes. You're welcome! ✨
+        Small habits = longer-lasting lashes. You're welcome!
       </p>
     </div>
 
@@ -51,12 +51,12 @@ function buildReminderEmail({
     </p>
 
     <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">
-      💬 Got questions? Hit me up on Instagram—I love chatting about all things lash-related. Or book whenever you're ready. No rush, just vibes. 🤎
+      Got questions? Hit me up on Instagram—I love chatting about all things lash-related. Or book whenever you're ready. No rush, just vibes.
     </p>
 
     <div style="margin: 32px 0; text-align: left;">
       <a href="${bookingLink}" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#7C4B31;color:#FFFFFF;text-decoration:none;border-radius:999px;font-weight:600;font-size:16px;font-family: 'DM Serif Text', Georgia, serif;">
-        💌 Book Your Spot
+        Book Your Spot
       </a>
     </div>
 
@@ -76,13 +76,13 @@ function buildReminderEmail({
     '',
     `Hope you're having an amazing week! I wanted to share a little something with you—because that's what friends do, right? 🤎`,
     '',
-    `💡 Pro tip:`,
+    `Pro tip:`,
     `Your lashes love a little TLC between appointments. Gently brush them in the morning, avoid oil-based products near your eyes, and try not to sleep face-down (I know, easier said than done 😅).`,
-    `Small habits = longer-lasting lashes. You're welcome! ✨`,
+    `Small habits = longer-lasting lashes. You're welcome!`,
     '',
     `Speaking of lashes… if you're due for a refresh or want to try something new (maybe that wispy look you've been eyeing?), we're here for you. Life's too short for boring lashes, bestie!`,
     '',
-    `💬 Got questions? Hit me up on Instagram—I love chatting about all things lash-related. Or book whenever you're ready. No rush, just vibes. 🤎`,
+    `Got questions? Hit me up on Instagram—I love chatting about all things lash-related. Or book whenever you're ready. No rush, just vibes.`,
     '',
     `Book Your Spot: ${bookingLink}`,
     '',

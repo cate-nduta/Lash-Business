@@ -216,7 +216,7 @@ export async function applyPersonalizationTokens(
     '{name}': subscriber.name || 'Beautiful Soul',
     '{email}': subscriber.email,
     '{phone}': resolvedBusiness.phone || '',
-    '{businessName}': resolvedBusiness.name || 'LashDiary',
+    '{businessName}': resolvedBusiness.name || 'The LashDiary',
     '{lastVisit}': subscriber.lastBookingDate
       ? new Date(subscriber.lastBookingDate).toLocaleDateString('en-US', {
           year: 'numeric',

@@ -32,12 +32,12 @@ function buildReminderEmail({
   <div style="font-family: 'DM Serif Text', Georgia, serif; padding: 32px; background: #FDF9F4; color: #3E2A20; max-width: 600px; margin: 0 auto; text-align: left;">
     <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31; font-size: 28px; text-align: left; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 600; line-height: 1.3; letter-spacing: 0.5px;">Lash check-in: are we still on for fabulous?</h2>
     <p style="font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; margin: 0 0 16px 0; text-align: left;">Hey ${friendlyName},</p>
-    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">How's your week going? Been conquering the world, or just trying to survive your inbox? Either way… your lashes are waiting to remind you who's boss. 💁‍♀️</p>
+    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">How's your week going? Been conquering the world, or just trying to survive your inbox? Either way… your lashes are waiting to remind you who's boss.</p>
     <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">If you're feeling a little "meh" or just wanna chat, slide into our DMs on Instagram—let's catch up. Nothing beats a little beauty banter to lift your mood.</p>
     
     <div style="background: #FFFFFF; border-left: 4px solid #7C4B31; padding: 16px 20px; margin: 24px 0; border-radius: 8px;">
       <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
-        ✨ <strong>Psst… while we're talking lashes:</strong>
+        <strong>Psst… while we're talking lashes:</strong>
       </p>
       <p style="margin: 0; font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; color: #3E2A20;">
         A quick infill now means you stay effortlessly flawless. No gaps. No awkward lashes. Just pure, confident YOU.
@@ -45,17 +45,17 @@ function buildReminderEmail({
     </div>
 
     <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">
-      📅 Ready to book? Let's make your lashes the MVP of the week.
+      Ready to book? Let's make your lashes the MVP of the week.
     </p>
 
     <div style="margin: 32px 0; text-align: left;">
       <a href="${bookingLink}" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#7C4B31;color:#FFFFFF;text-decoration:none;border-radius:999px;font-weight:600;font-size:16px;font-family: 'DM Serif Text', Georgia, serif;">
-        💌 Book Your Spot
+        Book Your Spot
       </a>
     </div>
 
     <p style="font-size: 15px; line-height: 1.6; margin-top: 32px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">Stay fabulous,</p>
-    <p style="font-size: 15px; line-height: 1.6; margin: 4px 0 0 0; font-family: 'DM Serif Text', Georgia, serif; text-align: left; color: #7C4B31; font-weight: 600;">The LashDiary Team 💄</p>
+    <p style="font-size: 15px; line-height: 1.6; margin: 4px 0 0 0; font-family: 'DM Serif Text', Georgia, serif; text-align: left; color: #7C4B31; font-weight: 600;">🤎 The LashDiary Team</p>
     <hr style="margin:32px 0;border:none;border-top:1px solid #EADFD6;" />
     <p style="font-size:14px;color:#7C4B31;font-family: 'DM Serif Text', Georgia, serif; text-align: left;">Need support? Reply to this email or reach us at <a href="mailto:${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}" style="color:#7C4B31;text-decoration:none;">${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}</a>.</p>
   </div>
@@ -68,19 +68,19 @@ function buildReminderEmail({
     '',
     `Hey ${friendlyName},`,
     '',
-    `How's your week going? Been conquering the world, or just trying to survive your inbox? Either way… your lashes are waiting to remind you who's boss. 💁‍♀️`,
+    `How's your week going? Been conquering the world, or just trying to survive your inbox? Either way… your lashes are waiting to remind you who's boss.`,
     '',
     `If you're feeling a little "meh" or just wanna chat, slide into our DMs on Instagram—let's catch up. Nothing beats a little beauty banter to lift your mood.`,
     '',
-    `✨ Psst… while we're talking lashes:`,
+    `Psst… while we're talking lashes:`,
     `A quick infill now means you stay effortlessly flawless. No gaps. No awkward lashes. Just pure, confident YOU.`,
     '',
-    `📅 Ready to book? Let's make your lashes the MVP of the week.`,
+    `Ready to book? Let's make your lashes the MVP of the week.`,
     '',
     `Book Your Spot: ${bookingLink}`,
     '',
     'Stay fabulous,',
-    'The LashDiary Team 💄',
+    '🤎 The LashDiary Team',
   ].join('\n')
 
   return { html, text }

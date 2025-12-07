@@ -23,6 +23,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS
@@ -241,7 +242,7 @@ export async function POST(request: NextRequest) {
     if (zohoTransporter) {
       try {
         const info = await zohoTransporter.sendMail({
-          from: FROM_EMAIL,
+          from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
           to: application.email,
           subject: 'You\'ve Been Selected as a LashDiary Model!',
           html: emailHtml,

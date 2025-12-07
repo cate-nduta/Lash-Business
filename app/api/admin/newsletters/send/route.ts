@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
         }
 
         await zohoTransporter!.sendMail({
-          from: `${business.name || 'LashDiary'} <${FROM_EMAIL}>`,
+          from: `"${business.name || 'The LashDiary'}" <${FROM_EMAIL}>`,
           to: recipient.email,
           replyTo: replyToEmail,
           subject: formatEmailSubject(subject),

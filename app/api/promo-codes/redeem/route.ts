@@ -24,6 +24,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
 const zohoTransporter =
@@ -55,21 +56,21 @@ async function sendRewardReadyEmail(referrerEmail: string, code: string) {
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; color: #2F1A16; background-color: #FFF8FB;">
-      <h2 style="margin-top: 0; color: #733D26;">🥰 Your friend just redeemed your LashDiary code! 💋</h2>
-      <p>🥰 Your referral code <strong>${code}</strong> has been used by a friend. 💋</p>
-      <p>🌈 That means your 10% loyalty reward is ready for your next appointment. Use the same code when booking to enjoy your discount. 🥰</p>
+      <h2 style="margin-top: 0; color: #733D26;">Your friend just redeemed your LashDiary code!</h2>
+      <p>Your referral code <strong>${code}</strong> has been used by a friend.</p>
+      <p>That means your 10% loyalty reward is ready for your next appointment. Use the same code when booking to enjoy your discount.</p>
       <div style="margin: 16px 0; padding: 16px; background: #F3F0FF; border-radius: 12px; border: 2px dashed #7A6CFF; text-align: center;">
         <p style="margin: 0; font-size: 14px; color: #5143C5;">Your referral code:</p>
         <p style="margin: 6px 0 0 0; font-size: 26px; font-weight: bold; letter-spacing: 2px;">${code}</p>
       </div>
       <p>Book whenever you're ready:</p>
       <p><a href="${BASE_URL}/booking" style="color: #7A6CFF;">${BASE_URL.replace(/^https?:\/\//, '')}</a></p>
-      <p>🥰 Thank you for sharing the LashDiary glow! 💋</p>
+      <p>Thank you for sharing the LashDiary glow!</p>
     </div>
   `
 
   await zohoTransporter.sendMail({
-    from: FROM_EMAIL,
+    from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
     to: referrerEmail,
     subject: 'Your Referral Reward is Ready 🤎',
     html,
@@ -99,19 +100,19 @@ async function sendSalonReferralEmail({
 
   const html = `
     <div style="font-family: Arial, sans-serif; padding: 24px; background: #FFFDF8; color: #2F1A16;">
-      <h2 style="margin-top: 0; color: #733D26;">🥰 One of your referrals just booked! 💋</h2>
+      <h2 style="margin-top: 0; color: #733D26;">One of your referrals just booked!</h2>
       <p>Hi ${salonName || 'Beauty Partner'},</p>
-      <p>🥰 <strong>${clientName || 'A client'}</strong> booked <em>${service || 'a LashDiary service'}</em> using your personal salon referral code. 💋</p>
-      <p>🌈 You've earned <strong>KSH ${commissionAmount.toLocaleString()}</strong> (${commissionPercent}% of the service price). 🥰</p>
+      <p><strong>${clientName || 'A client'}</strong> booked <em>${service || 'a LashDiary service'}</em> using your personal salon referral code.</p>
+      <p>You've earned <strong>KSH ${commissionAmount.toLocaleString()}</strong> (${commissionPercent}% of the service price).</p>
       <p style="margin: 16px 0; padding: 14px; background: #FDF3D7; border-left: 4px solid #F7B500; border-radius: 6px;">${usageSummary}</p>
       <p>We’ll reach out when commissions are paid. Contact us anytime if you have questions.</p>
-      <p style="margin-top: 24px;">🤎 With gratitude,<br />The LashDiary Team 🥰</p>
+      <p style="margin-top: 24px;">🤎 With gratitude,<br />The LashDiary Team</p>
       <p style="font-size: 12px; color: #7a7a7a; margin-top: 24px;">Track all referrals at <a href="${bookingLink}" style="color: #7A6CFF;">${bookingLink.replace(/^https?:\/\//, '')}</a></p>
     </div>
   `
 
   await zohoTransporter.sendMail({
-    from: FROM_EMAIL,
+    from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
     to: salonEmail,
     subject: 'Commission Earned from Your Referral 🤎',
     html,

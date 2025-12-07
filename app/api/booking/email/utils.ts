@@ -1,5 +1,8 @@
 import { readDataFile } from '@/lib/data-utils'
 import { normalizeServiceCatalog } from '@/lib/services-utils'
+
+// CRITICAL: Email templates always read fresh data - no caching
+// This ensures emails always show current service info, prices, etc.
 import {
   getZohoTransporter,
   isZohoConfigured,
@@ -57,21 +60,11 @@ const servicePrices: { [key: string]: number } = {
   'Lash Lift': 4500,
 }
 
-// Cache for service durations to avoid reading file on every call
-let serviceDurationCache: { [key: string]: number } | null = null
-let serviceDurationCacheTime: number = 0
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes cache
-
-// Load service durations from services.json
+// Load service durations from services.json - NO CACHE for emails to ensure fresh data
+// Always read fresh data to prevent stale information in emails
 async function loadServiceDurations(): Promise<{ [key: string]: number }> {
-  const now = Date.now()
-  
-  // Return cached data if still valid
-  if (serviceDurationCache && (now - serviceDurationCacheTime) < CACHE_TTL) {
-    return serviceDurationCache
-  }
-  
   try {
+    // Always read fresh data - no caching for emails
     const raw = await readDataFile('services.json', {})
     const { catalog } = normalizeServiceCatalog(raw)
     
@@ -115,10 +108,6 @@ async function loadServiceDurations(): Promise<{ [key: string]: number }> {
         }
       })
     })
-    
-    // Update cache
-    serviceDurationCache = durations
-    serviceDurationCacheTime = now
     
     return durations
   } catch (error) {
@@ -338,8 +327,8 @@ function createCustomerEmailTemplate(bookingData: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment confirmed</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}!</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">✅ Appointment confirmed</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}! 👁️</h1>
             </td>
           </tr>
 
@@ -350,18 +339,18 @@ function createCustomerEmailTemplate(bookingData: {
               </p>
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
-                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Appointment details</h2>
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">📋 Appointment details</h2>
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">Date</td>
+                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">📅 Date</td>
                     <td style="padding:6px 0; color:${textPrimary};">${formattedDate}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textSecondary};">⏰ Time</td>
                     <td style="padding:6px 0; color:${textPrimary};">${formattedTime}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
+                    <td style="padding:6px 0; color:${textSecondary};">👁️ Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   ${durationText ? `
@@ -371,23 +360,23 @@ function createCustomerEmailTemplate(bookingData: {
                   </tr>
                   ` : ''}
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Service Fee</td>
+                    <td style="padding:6px 0; color:${textSecondary};">💰 Service Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
                   </tr>
                   ${walkInFee && walkInFee.trim().length > 0 ? `
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Walk-In Fee</td>
+                    <td style="padding:6px 0; color:${textSecondary};">💰 Walk-In Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">+${walkInFee}</td>
                   </tr>
                   ` : ''}
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Deposit</td>
+                    <td style="padding:6px 0; color:${textSecondary};">💳 Deposit</td>
                     <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">
                       ${walkInFee && walkInFee.trim().length > 0 ? 'KSH 0 (Pay full amount after appointment)' : deposit}
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Studio</td>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">📍 Studio</td>
                     <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
                   </tr>
                 </table>
@@ -414,7 +403,7 @@ function createCustomerEmailTemplate(bookingData: {
               </div>
               ` : ''}
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
-                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Before you arrive</h2>
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">💡 Before you arrive</h2>
                 <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.7;">
                   <li>Please arrive on time — late arrivals may shorten your session.</li>
                   <li>Your deposit is strictly for securing your appointment and cannot be refunded under any circumstance.</li>
@@ -535,8 +524,8 @@ function createReminderEmailTemplate(bookingData: {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
-              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">Appointment reminder</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}!</h1>
+              <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">⏰ Appointment reminder</p>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}! 👁️</h1>
             </td>
           </tr>
 
@@ -547,18 +536,18 @@ function createReminderEmailTemplate(bookingData: {
               </p>
 
               <div style="border:1px solid ${accent}; border-radius:14px; padding:20px 24px; background:${background}; margin-bottom:24px;">
-                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">Your appointment details</h2>
+                <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand};">📋 Your appointment details</h2>
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.6;">
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">Date</td>
+                    <td style="padding:6px 0; color:${textSecondary}; width:120px;">📅 Date</td>
                     <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedDate}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Time</td>
+                    <td style="padding:6px 0; color:${textSecondary};">⏰ Time</td>
                     <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedTime}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
+                    <td style="padding:6px 0; color:${textSecondary};">👁️ Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   ${durationText ? `
@@ -568,22 +557,22 @@ function createReminderEmailTemplate(bookingData: {
                   </tr>
                   ` : ''}
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Fee</td>
+                    <td style="padding:6px 0; color:${textSecondary};">💰 Fee</td>
                     <td style="padding:6px 0; color:${textPrimary};">${servicePrice}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">Deposit</td>
+                    <td style="padding:6px 0; color:${textSecondary};">💳 Deposit</td>
                     <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${deposit}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">Studio</td>
+                    <td style="padding:6px 0; color:${textSecondary}; vertical-align:top;">📍 Studio</td>
                     <td style="padding:6px 0; color:${textPrimary};">${appointmentLocation}</td>
                   </tr>
                 </table>
               </div>
 
               <div style="border-radius:14px; padding:18px 20px; background:${card}; border:1px solid ${accent}; margin-bottom:24px;">
-                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">Before you arrive</h2>
+                <h2 style="margin:0 0 12px 0; font-size:17px; color:${brand};">💡 Before you arrive</h2>
                 <ul style="margin:0; padding-left:18px; color:${textPrimary}; font-size:14px; line-height:1.8;">
                   <li style="margin-bottom:8px;">Arrive with clean, makeup-free lashes</li>
                   <li style="margin-bottom:8px;">Avoid caffeine 2 hours before your appointment</li>

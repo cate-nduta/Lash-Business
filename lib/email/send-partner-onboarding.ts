@@ -48,7 +48,7 @@ export async function sendPartnerOnboardingEmail({
   text: string
 }): Promise<PartnerEmailResult> {
   const fromEmail = ZOHO_FROM_EMAIL || FALLBACK_FROM_EMAIL
-  const fromAddress = `${EMAIL_FROM_NAME} <${fromEmail}>`
+  const fromAddress = `"${EMAIL_FROM_NAME}" <${fromEmail}>`
 
   if (zohoTransporter) {
     try {

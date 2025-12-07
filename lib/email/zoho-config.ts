@@ -65,7 +65,7 @@ export function getZohoTransporter(): ReturnType<typeof nodemailer.createTranspo
     return zohoTransporter
   }
 
-  // Create new transporter
+  // Create new transporter with optimized settings for immediate sending
   try {
     zohoTransporter = nodemailer.createTransport({
       host: ZOHO_SMTP_HOST,
@@ -75,10 +75,15 @@ export function getZohoTransporter(): ReturnType<typeof nodemailer.createTranspo
         user: ZOHO_SMTP_USER,
         pass: ZOHO_SMTP_PASS,
       },
-      // Add connection timeout and retry options
-      connectionTimeout: 10000, // 10 seconds
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
+      // Optimized timeouts for immediate email sending (no delays)
+      connectionTimeout: 5000, // 5 seconds - faster connection
+      greetingTimeout: 5000, // 5 seconds - faster greeting
+      socketTimeout: 10000, // 10 seconds - reasonable socket timeout
+      // Disable pooling to avoid connection reuse delays
+      pool: false,
+      // Send immediately without queuing
+      maxConnections: 1,
+      maxMessages: 1,
     })
 
     // Verify connection on creation (optional, can be removed if causing issues)
@@ -175,6 +180,7 @@ export async function sendEmailViaZoho(options: {
   try {
     const fromAddress = options.from || `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`
     
+    // Send email immediately - no queuing or batching
     const result = await transporter.sendMail({
       from: fromAddress,
       to: options.to,
@@ -182,6 +188,10 @@ export async function sendEmailViaZoho(options: {
       html: options.html,
       text: options.text,
       replyTo: options.replyTo || BUSINESS_NOTIFICATION_EMAIL,
+      // Priority: high for password resets
+      priority: 'high',
+      // Send immediately
+      date: new Date(),
     })
 
     const accepted = Array.isArray(result.accepted) ? result.accepted : []

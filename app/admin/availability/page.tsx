@@ -299,10 +299,13 @@ export default function AdminAvailability() {
             ? prev.bookingWindow.bannerEnabled
             : null,
       }
+      // Always set the field value, even if empty, to preserve the structure
       if (value && value.trim().length > 0) {
-        windowState[section][field] = value
+        windowState[section] = { ...windowState[section], [field]: value }
       } else {
-        delete windowState[section][field]
+        // Remove the field but keep the section object
+        const { [field]: _, ...rest } = windowState[section]
+        windowState[section] = rest as BookingWindowSection
       }
       return {
         ...prev,

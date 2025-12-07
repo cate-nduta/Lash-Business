@@ -3,30 +3,21 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sanitizeEmail } from '@/lib/input-validation'
 import { randomBytes } from 'crypto'
 import type { ClientUsersData } from '@/types/client'
-import nodemailer from 'nodemailer'
+import {
+  getZohoTransporter,
+  isZohoConfigured,
+  sendEmailViaZoho,
+  BUSINESS_NOTIFICATION_EMAIL,
+  FROM_EMAIL,
+  EMAIL_FROM_NAME,
+} from '@/lib/email/zoho-config'
 
-const ZOHO_SMTP_HOST = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com'
-const ZOHO_SMTP_PORT = Number(process.env.ZOHO_SMTP_PORT || 465)
-const ZOHO_SMTP_USER = process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERNAME || ''
-const ZOHO_SMTP_PASS = process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || ''
-const ZOHO_FROM_EMAIL = process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_FROM || ZOHO_SMTP_USER || 'hello@lashdiary.co.ke'
-const FROM_EMAIL = process.env.FROM_EMAIL || ZOHO_FROM_EMAIL || 'hello@lashdiary.co.ke'
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
+// CRITICAL: No caching for password reset - always use fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'https://lashdiary.co.ke'
-const OWNER_EMAIL = process.env.OWNER_EMAIL || 'hello@lashdiary.co.ke'
-
-const zohoTransporter =
-  ZOHO_SMTP_USER && ZOHO_SMTP_PASS
-    ? nodemailer.createTransport({
-        host: ZOHO_SMTP_HOST,
-        port: ZOHO_SMTP_PORT,
-        secure: ZOHO_SMTP_PORT === 465,
-        auth: {
-          user: ZOHO_SMTP_USER,
-          pass: ZOHO_SMTP_PASS,
-        },
-      })
-    : null
+const OWNER_EMAIL = BUSINESS_NOTIFICATION_EMAIL
 
 function createPasswordResetEmailTemplate(data: { name: string; resetLink: string }) {
   const { name, resetLink } = data
@@ -160,38 +151,83 @@ export async function POST(request: NextRequest) {
 
     await writeDataFile('users.json', usersData)
 
-    // Send reset email
+    // Send reset email IMMEDIATELY - no delays
     const resetLink = `${BASE_URL}/account/reset-password?token=${resetToken}`
     
-    if (!zohoTransporter) {
-      console.warn('Email transporter not configured. Password reset link:', resetLink)
-      // Still return success to prevent email enumeration
+    if (!isZohoConfigured()) {
+      console.error('❌ EMAIL TRANSPORTER NOT CONFIGURED - Password reset email cannot be sent!')
+      console.error('Password reset link that should have been sent:', resetLink)
+      console.error('User email:', email)
+      // Still return success to prevent email enumeration, but log the error
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, a password reset link has been sent.',
       })
     }
 
-    try {
-      const htmlContent = createPasswordResetEmailTemplate({
-        name: user.name || 'User',
-        resetLink,
-      })
+    // Prepare email content immediately (synchronous)
+    const htmlContent = createPasswordResetEmailTemplate({
+      name: user.name || 'User',
+      resetLink,
+    })
 
-      const mailOptions = {
-        from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
+    const textContent = `
+Reset Your LashDiary Password
+
+Hi ${user.name || 'there'}!
+
+We received a request to reset your password. Click the link below to create a new password:
+
+${resetLink}
+
+This link expires in 1 hour. If you didn't request a password reset, please ignore this email and your password will remain unchanged.
+
+Questions? Contact us at ${OWNER_EMAIL}
+
+Thank you for being part of LashDiary!
+🤎 The LashDiary Team
+    `.trim()
+
+    // Send email IMMEDIATELY - await ensures it's sent before responding
+    let emailSent = false
+    try {
+      const startTime = Date.now()
+      const emailResult = await sendEmailViaZoho({
         to: email,
         subject: 'Reset Your LashDiary Password',
         html: htmlContent,
-      }
+        text: textContent,
+      })
+      const sendTime = Date.now() - startTime
 
-      await zohoTransporter.sendMail(mailOptions)
-      console.log('Password reset email sent successfully to:', email)
+      if (emailResult.success) {
+        emailSent = true
+        console.log(`✅ Password reset email sent successfully to: ${email} (took ${sendTime}ms)`)
+        console.log('✅ Email message ID:', emailResult.messageId)
+        console.log('✅ Reset link:', resetLink)
+        console.log('✅ Accepted recipients:', emailResult.accepted)
+      } else {
+        console.error('❌ ERROR SENDING PASSWORD RESET EMAIL:', emailResult.error)
+        console.error('❌ Reset link that failed to send:', resetLink)
+        console.error('❌ User email:', email)
+        console.error('❌ Rejected recipients:', emailResult.rejected)
+        // Still return success to prevent email enumeration, but log the error
+      }
     } catch (emailError: any) {
-      console.error('Error sending password reset email:', emailError)
-      // Still return success to prevent email enumeration
+      console.error('❌ EXCEPTION SENDING PASSWORD RESET EMAIL:', emailError)
+      console.error('❌ Error details:', {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response,
+        stack: emailError.stack,
+      })
+      console.error('❌ Reset link that failed to send:', resetLink)
+      console.error('❌ User email:', email)
+      // Still return success to prevent email enumeration, but log the error
     }
 
+    // Response is sent AFTER email is attempted (awaited above)
     return NextResponse.json({
       success: true,
       message: 'If an account exists with this email, a password reset link has been sent.',

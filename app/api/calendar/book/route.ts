@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { google } from 'googleapis'
 import nodemailer from 'nodemailer'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { sendEmailNotification } from '../../booking/email/utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
@@ -41,6 +44,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
+const EMAIL_FROM_NAME = 'The LashDiary'
 const OWNER_NOTIFICATION_EMAIL = BUSINESS_NOTIFICATION_EMAIL
 
 const zohoTransporter =
@@ -213,7 +217,7 @@ async function sendFullyBookedEmail(dateStr: string) {
   try {
     const formattedDate = formatFriendlyDate(dateStr)
     await zohoTransporter.sendMail({
-      from: FROM_EMAIL,
+      from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: OWNER_NOTIFICATION_EMAIL,
       subject: `Fully Booked Date Alert 🤎`,
       html: `

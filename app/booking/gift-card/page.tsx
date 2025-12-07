@@ -175,7 +175,13 @@ export default function GiftCardBooking() {
 
     try {
       // Get service catalog to find a default service
-      const servicesResponse = await fetch('/api/services')
+      const servicesResponse = await fetch('/api/services', { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        }
+      })
       const servicesData = await servicesResponse.json()
       
       // Use the first available service or a default

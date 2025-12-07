@@ -17,12 +17,21 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(catalog, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache for 5 minutes, serve stale for 10 minutes
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {
     console.error('Error loading services:', error)
-    return NextResponse.json({ services: [] }, { status: 500 })
+    return NextResponse.json({ services: [] }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   }
 }
 

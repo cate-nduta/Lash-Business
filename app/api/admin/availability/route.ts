@@ -24,6 +24,17 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
     const availability = await request.json()
+    
+    // Ensure bookingWindow structure is preserved even if current/next are empty
+    if (availability.bookingWindow) {
+      if (!availability.bookingWindow.current || Object.keys(availability.bookingWindow.current).length === 0) {
+        availability.bookingWindow.current = {}
+      }
+      if (!availability.bookingWindow.next || Object.keys(availability.bookingWindow.next).length === 0) {
+        availability.bookingWindow.next = {}
+      }
+    }
+    
     await writeDataFile('availability.json', availability)
     revalidatePath('/api/availability')
     revalidatePath('/api/calendar/available-slots')

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import nodemailer from 'nodemailer'
 
+const EMAIL_FROM_NAME = 'The LashDiary'
+
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
   process.env.OWNER_EMAIL ||
@@ -217,91 +219,19 @@ export async function POST(request: NextRequest) {
 </html>
     `
 
-    // Send email to business
+    // Send email to business (admin notification only)
+    // Note: No email is sent to the applicant at this stage
+    // They will only receive an email when the admin accepts them via the admin panel
     if (zohoTransporter) {
       try {
         await zohoTransporter.sendMail({
-          from: FROM_EMAIL,
+          from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
           to: BUSINESS_NOTIFICATION_EMAIL,
           subject: `New Model Application from ${firstName}${lastName ? ` ${lastName}` : ''}`,
           html: emailHtml,
         })
       } catch (emailError) {
         console.error('Error sending email:', emailError)
-        // Continue even if email fails
-      }
-    }
-
-    // Send confirmation email to applicant
-    const confirmationHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Model Application Received - LashDiary</title>
-</head>
-<body style="margin:0; padding:0; background:#FDF9F4; font-family: 'DM Serif Text', Georgia, serif; color:#7C4B31;">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#FDF9F4; padding:32px 16px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:#FFFFFF; border-radius:18px; border:1px solid #E8D5C4; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
-          <tr>
-            <td style="padding:28px 32px 12px 32px; text-align:center; background:#FFFFFF;">
-              <h1 style="margin:0; font-size:32px; color:#7C4B31; font-family:'Playfair Display', Georgia, serif; font-weight:600;">Thank You for Applying!</h1>
-            </td>
-          </tr>
-
-          <tr>
-            <td style="padding:24px 32px;">
-              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
-                Hi ${firstName},
-              </p>
-              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
-                Thank you for your interest in becoming a LashDiary model! We've received your application and will review it carefully.
-              </p>
-              <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
-                If selected, you will receive an email, call, or WhatsApp message to confirm your booking with available dates and next steps. Please note that submitting an application does not guarantee an appointment.
-              </p>
-              
-              <div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;">
-                <p style="margin:0 0 12px 0; font-size:15px; font-weight:600; color:#7C4B31;">Important Information:</p>
-                <p style="margin:0 0 8px 0; font-size:14px; line-height:1.6; color:#7C4B31;">
-                  <strong>Location:</strong> ${location}
-                </p>
-                <p style="margin:12px 0 0 0; font-size:14px; font-weight:600; color:#7C4B31;">Basic Rules for Your Appointment:</p>
-                <ul style="margin:8px 0 0 0; padding-left:20px; font-size:14px; line-height:1.8; color:#7C4B31;">
-                  <li>No mascara on the day of your appointment</li>
-                  <li>Come with clean lashes and no makeup</li>
-                  <li>No oils, serums, or creams near the eye area</li>
-                  <li>Please arrive on time</li>
-                </ul>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-    `
-
-    if (zohoTransporter) {
-      try {
-        await zohoTransporter.sendMail({
-          from: FROM_EMAIL,
-          to: email,
-          subject: 'Model Application Received - LashDiary',
-          html: confirmationHtml,
-          headers: {
-            'X-Priority': '1',
-            'X-MSMail-Priority': 'High',
-            'Importance': 'high',
-          },
-        })
-      } catch (emailError) {
-        console.error('Error sending confirmation email:', emailError)
         // Continue even if email fails
       }
     }

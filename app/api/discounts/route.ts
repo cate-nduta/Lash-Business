@@ -8,12 +8,21 @@ export async function GET(request: NextRequest) {
     const discounts = await readDataFile('discounts.json', {})
     return NextResponse.json(discounts, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // Cache for 1 minute, serve stale for 2 minutes
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {
     console.error('Error loading discounts:', error)
-    return NextResponse.json({ discounts: [] }, { status: 500 })
+    return NextResponse.json({ discounts: [] }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   }
 }
 

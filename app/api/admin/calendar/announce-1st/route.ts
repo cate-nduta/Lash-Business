@@ -39,10 +39,10 @@ function buildAnnouncementEmail({
 </head>
 <body style="margin: 0; padding: 0; background: #FDF9F4;">
   <div style="font-family: 'DM Serif Text', Georgia, serif; padding: 32px; background: #FDF9F4; color: #3E2A20; max-width: 600px; margin: 0 auto; text-align: left;">
-    <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31; font-size: 28px; text-align: left; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 600; line-height: 1.3; letter-spacing: 0.5px;">🥰 You know the drill. Book that Lash Appointment 💋</h2>
-    <p style="font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; margin: 0 0 16px 0; text-align: left;">🥰 Hi ${friendlyName}, 💋</p>
-    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">🌈 ${monthLabel} appointments are officially open. 🥰</p>
-    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">💋 If you already know your schedule, this is the time to secure your spot. The usual prime times go quickly — weekends, evenings, and the first week of the month tend to disappear fast. 🌈</p>
+    <h2 style="margin-top: 0; margin-bottom: 20px; color: #7C4B31; font-size: 28px; text-align: left; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; font-weight: 600; line-height: 1.3; letter-spacing: 0.5px;">You know the drill. Book that Lash Appointment</h2>
+    <p style="font-size: 15px; line-height: 1.6; font-family: 'DM Serif Text', Georgia, serif; margin: 0 0 16px 0; text-align: left;">Hi ${friendlyName},</p>
+    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">${monthLabel} appointments are officially open.</p>
+    <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">If you already know your schedule, this is the time to secure your spot. The usual prime times go quickly — weekends, evenings, and the first week of the month tend to disappear fast.</p>
     
     <div style="margin: 24px 0; padding: 20px; background: #FFFFFF; border: 1px solid #E4D3C4; border-radius: 12px;">
       <p style="margin: 0 0 12px; font-weight: 600; color: #7C4B31; font-family: 'DM Serif Text', Georgia, serif;"><strong>Quick details:</strong></p>
@@ -59,7 +59,7 @@ function buildAnnouncementEmail({
       </a>
     </div>
 
-    <p style="font-size: 15px; line-height: 1.6; margin-top: 32px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">🥰 See you soon! 💋<br/>🤎 The LashDiary Team 🥰</p>
+    <p style="font-size: 15px; line-height: 1.6; margin-top: 32px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">See you soon!<br/>🤎 The LashDiary Team</p>
     <hr style="margin:32px 0;border:none;border-top:1px solid #EADFD6;" />
     <p style="font-size:14px;color:#7C4B31;font-family: 'DM Serif Text', Georgia, serif; text-align: left;">Need support? Reply to this email or reach us at <a href="mailto:${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}" style="color:#7C4B31;text-decoration:none;">${process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'}</a>.</p>
   </div>
