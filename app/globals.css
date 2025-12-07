@@ -221,7 +221,7 @@
   }
 
   /* Ensure buttons keep high-contrast text across themes */
-  button,
+  button:not(.mobile-menu-toggle):not([aria-label="Toggle menu"]),
   .button,
   .btn,
   [role='button'],
@@ -1114,6 +1114,130 @@
     user-select: text;
   }
 
+  /* Mobile menu button - override global button styles with maximum specificity - works across ALL themes */
+  nav button.md\:hidden,
+  nav button.mobile-menu-toggle,
+  button.md\:hidden.mobile-menu-toggle,
+  nav.bg-white button.md\:hidden,
+  button[aria-label="Toggle menu"],
+  nav button[aria-label="Toggle menu"] {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #733D26 !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    min-height: auto !important;
+    min-width: auto !important;
+    /* Override any theme variables */
+    --color-primary: #733D26 !important;
+  }
+
+  nav button.md\:hidden:hover,
+  nav button.mobile-menu-toggle:hover,
+  button.md\:hidden.mobile-menu-toggle:hover,
+  nav.bg-white button.md\:hidden:hover,
+  button[aria-label="Toggle menu"]:hover,
+  nav button[aria-label="Toggle menu"]:hover {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    transform: none !important;
+    box-shadow: none !important;
+    color: #733D26 !important;
+  }
+
+  nav button.md\:hidden:active,
+  nav button.mobile-menu-toggle:active,
+  button.md\:hidden.mobile-menu-toggle:active,
+  nav.bg-white button.md\:hidden:active,
+  button[aria-label="Toggle menu"]:active,
+  nav button[aria-label="Toggle menu"]:active {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    transform: none !important;
+    color: #733D26 !important;
+  }
+
+  nav button.md\:hidden:focus,
+  nav button.mobile-menu-toggle:focus,
+  button.md\:hidden.mobile-menu-toggle:focus,
+  nav.bg-white button.md\:hidden:focus,
+  button[aria-label="Toggle menu"]:focus,
+  nav button[aria-label="Toggle menu"]:focus {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #733D26 !important;
+  }
+
 }
 /* stylelint-enable */
+
+/* CRITICAL: Mobile menu button - MUST be last to override all themes */
+button[data-mobile-menu="true"],
+button[aria-label="Toggle menu"],
+nav button[aria-label="Toggle menu"],
+button.mobile-menu-toggle,
+nav button.mobile-menu-toggle,
+button.md\:hidden.mobile-menu-toggle,
+nav button.md\:hidden,
+nav.bg-white button.md\:hidden,
+nav.shadow-soft button.md\:hidden {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #733D26 !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  min-height: auto !important;
+  min-width: auto !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+button[data-mobile-menu="true"]:hover,
+button[aria-label="Toggle menu"]:hover,
+nav button[aria-label="Toggle menu"]:hover,
+button.mobile-menu-toggle:hover,
+nav button.mobile-menu-toggle:hover,
+button.md\:hidden.mobile-menu-toggle:hover,
+nav button.md\:hidden:hover,
+nav.bg-white button.md\:hidden:hover {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  transform: none !important;
+  box-shadow: none !important;
+  color: #733D26 !important;
+}
+
+button[data-mobile-menu="true"]:active,
+button[aria-label="Toggle menu"]:active,
+nav button[aria-label="Toggle menu"]:active,
+button.mobile-menu-toggle:active,
+nav button.mobile-menu-toggle:active,
+button.md\:hidden.mobile-menu-toggle:active,
+nav button.md\:hidden:active,
+nav.bg-white button.md\:hidden:active {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  transform: none !important;
+  color: #733D26 !important;
+}
+
+button[data-mobile-menu="true"]:focus,
+button[aria-label="Toggle menu"]:focus,
+nav button[aria-label="Toggle menu"]:focus,
+button.mobile-menu-toggle:focus,
+nav button.mobile-menu-toggle:focus,
+button.md\:hidden.mobile-menu-toggle:focus,
+nav button.md\:hidden:focus,
+nav.bg-white button.md\:hidden:focus {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #733D26 !important;
+  outline: none !important;
+}
 

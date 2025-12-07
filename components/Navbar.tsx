@@ -178,9 +178,20 @@ export default function Navbar() {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-brown-dark focus:outline-none"
+            className="md:hidden mobile-menu-toggle text-brown-dark focus:outline-none"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
+            data-mobile-menu="true"
+            style={{
+              backgroundColor: '#ffffff',
+              background: '#ffffff',
+              border: 'none',
+              padding: '0',
+              margin: '0',
+              boxShadow: 'none',
+              minHeight: 'auto',
+              minWidth: 'auto',
+            }}
           >
             <svg
               className="h-6 w-6"
