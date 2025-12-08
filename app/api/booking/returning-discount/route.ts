@@ -1,29 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
-import { google } from 'googleapis'
+import { getCalendarClient } from '@/lib/google-calendar-client'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 
-// Initialize Google Calendar API
-function getCalendarClient() {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    return null
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      project_id: process.env.GOOGLE_PROJECT_ID,
-    },
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-  })
-
-  return google.calendar({ version: 'v3', auth })
-}
+// getCalendarClient is now imported from lib/google-calendar-client
 
 const parseClientDate = (value: string | null) => {
   if (!value) return null
@@ -69,7 +53,7 @@ export async function GET(request: NextRequest) {
     let lastAppointmentDate: string | null = null
 
     // Check Google Calendar for the last appointment date
-    const calendar = getCalendarClient()
+    const calendar = await getCalendarClient()
     if (calendar) {
       try {
         // Search for past events with this email

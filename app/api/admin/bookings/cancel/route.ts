@@ -3,36 +3,13 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
-import { google } from 'googleapis'
+import { getCalendarClientWithWrite } from '@/lib/google-calendar-client'
 import { recordActivity } from '@/lib/activity-log'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 
-function getCalendarClient() {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    return null
-  }
-
-  try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\n/g, '\n'),
-        project_id: process.env.GOOGLE_PROJECT_ID,
-      },
-      scopes: [
-        'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/calendar.events',
-      ],
-    })
-
-    return google.calendar({ version: 'v3', auth })
-  } catch (error) {
-    console.error('Unable to initialize Google Calendar client:', error)
-    return null
-  }
-}
+// getCalendarClientWithWrite is now imported from lib/google-calendar-client
 
 export async function POST(request: NextRequest) {
   try {
@@ -89,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     let calendarEventRemoved = false
     if (booking.calendarEventId) {
-      const calendar = getCalendarClient()
+      const calendar = await getCalendarClientWithWrite()
 
       if (calendar) {
         try {

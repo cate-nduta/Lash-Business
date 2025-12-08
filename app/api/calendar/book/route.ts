@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
-import { google } from 'googleapis'
 import nodemailer from 'nodemailer'
+import { getCalendarClientWithWrite } from '@/lib/google-calendar-client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -180,27 +180,7 @@ async function createOrUpdateClientAccount(data: {
   return { isNewUser }
 }
 
-// Initialize Google Calendar API with write access
-function getCalendarClient() {
-  // Check if credentials are available
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    throw new Error('Google Calendar API credentials are not configured. Please set up your .env.local file with GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_PROJECT_ID.')
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      project_id: process.env.GOOGLE_PROJECT_ID,
-    },
-    scopes: [
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/calendar.events',
-    ],
-  })
-
-  return google.calendar({ version: 'v3', auth })
-}
+// getCalendarClientWithWrite is now imported from lib/google-calendar-client
 
 function formatFriendlyDate(dateStr: string) {
   const date = new Date(`${dateStr}T12:00:00`)
@@ -376,7 +356,10 @@ export async function POST(request: NextRequest) {
     let calendar
     let calendarConfigured = true
     try {
-      calendar = getCalendarClient()
+      calendar = await getCalendarClientWithWrite()
+      if (!calendar) {
+        throw new Error('Google Calendar API credentials are not configured.')
+      }
     } catch (authError: any) {
       calendarConfigured = false
       // Continue without calendar - we'll send email notification instead

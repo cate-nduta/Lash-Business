@@ -1,28 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
-import { google } from 'googleapis'
+import { getCalendarClient } from '@/lib/google-calendar-client'
 import { readDataFile } from '@/lib/data-utils'
 
 export const dynamic = 'force-dynamic'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 
-function getCalendarClient() {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    return null
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      project_id: process.env.GOOGLE_PROJECT_ID,
-    },
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-  })
-
-  return google.calendar({ version: 'v3', auth })
-}
+// getCalendarClient is now imported from lib/google-calendar-client
 
 interface Client {
   email: string
@@ -35,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
 
-    const calendar = getCalendarClient()
+    const calendar = await getCalendarClient()
     if (!calendar) {
       return NextResponse.json({ error: 'Google Calendar not configured' }, { status: 400 })
     }
@@ -103,7 +88,7 @@ export async function GET(request: NextRequest) {
         for (const attendee of event.attendees) {
           if (attendee.email && !attendee.email.includes('@gmail.com') && !attendee.email.includes('@calendar.google.com')) {
             email = attendee.email.toLowerCase().trim()
-            name = attendee.displayName || name || email.split('@')[0]
+            name = attendee.displayName || name || (email ? email.split('@')[0] : '')
           }
         }
       }

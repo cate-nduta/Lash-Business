@@ -4,12 +4,18 @@
 
 [functions]
   node_bundler = "esbuild"
+  # Optimize function bundling - let Next.js plugin handle it
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+  [plugins.inputs]
+    # Optimize Next.js plugin settings
+    enableImageOptimization = true
 
 [build.environment]
   NODE_VERSION = "18"
+  # Optimize build performance
+  NPM_FLAGS = "--prefer-offline --no-audit"
 
 # Birthday email cron job - runs daily at 9:00 AM UTC
 # Make sure to set CRON_SECRET environment variable in Netlify dashboard

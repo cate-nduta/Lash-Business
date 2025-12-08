@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { getCalendarClient } from '@/lib/google-calendar-client'
 import { readDataFile } from '@/lib/data-utils'
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
@@ -15,23 +15,7 @@ interface UnsubscribeRecord {
   originallyUnsubscribedAt?: string // Track when they first unsubscribed (permanent)
 }
 
-// Initialize Google Calendar API
-function getCalendarClient() {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    return null
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      project_id: process.env.GOOGLE_PROJECT_ID,
-    },
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-  })
-
-  return google.calendar({ version: 'v3', auth })
-}
+// getCalendarClient is now imported from lib/google-calendar-client
 
 export async function GET(request: NextRequest) {
   try {
@@ -88,7 +72,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if this email has made a booking before
-    const calendar = getCalendarClient()
+    const calendar = await getCalendarClient()
     let isFirstTime = true
 
     if (calendar) {
@@ -118,7 +102,7 @@ export async function GET(request: NextRequest) {
           if (
             description.toLowerCase().includes(email.toLowerCase()) ||
             summary.toLowerCase().includes(email.toLowerCase()) ||
-            attendees.some(attendee => attendee.email?.toLowerCase() === email.toLowerCase())
+            attendees.some((attendee: { email?: string | null }) => attendee.email?.toLowerCase() === email.toLowerCase())
           ) {
             isFirstTime = false
             break

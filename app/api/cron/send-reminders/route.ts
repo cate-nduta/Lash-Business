@@ -57,7 +57,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { getCalendarClient } from '@/lib/google-calendar-client'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailNotification } from '@/app/api/booking/email/utils'
 
@@ -77,23 +77,7 @@ interface ReminderTracking {
   reminders: ReminderRecord[]
 }
 
-// Initialize Google Calendar API
-function getCalendarClient() {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_PROJECT_ID) {
-    return null
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      project_id: process.env.GOOGLE_PROJECT_ID,
-    },
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-  })
-
-  return google.calendar({ version: 'v3', auth })
-}
+// getCalendarClient is now imported from lib/google-calendar-client
 
 // Parse booking information from event description
 function parseBookingInfo(event: any): {
@@ -152,7 +136,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const calendar = getCalendarClient()
+    const calendar = await getCalendarClient()
     if (!calendar) {
       return NextResponse.json({
         success: false,

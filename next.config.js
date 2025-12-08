@@ -48,7 +48,40 @@ const nextConfig = {
       { file: /node_modules/ },
     ]
     
-    // Optimize bundle size
+    // Optimize server bundle size for Netlify
+    if (isServer && !dev) {
+      // Ensure server-only dependencies are properly tree-shaken
+      config.optimization = {
+        ...config.optimization,
+        usedExports: true,
+        sideEffects: false,
+      }
+      
+      // Split server chunks to reduce individual function size
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          default: false,
+          // Separate heavy dependencies into their own chunk
+          googleapis: {
+            name: 'googleapis',
+            test: /[\\/]node_modules[\\/]googleapis[\\/]/,
+            chunks: 'all',
+            priority: 30,
+            reuseExistingChunk: true,
+          },
+          nodemailer: {
+            name: 'nodemailer',
+            test: /[\\/]node_modules[\\/]nodemailer[\\/]/,
+            chunks: 'all',
+            priority: 30,
+            reuseExistingChunk: true,
+          },
+        },
+      }
+    }
+    
+    // Optimize bundle size for client
     if (!dev && !isServer) {
       config.optimization = {
         ...config.optimization,
@@ -85,6 +118,12 @@ const nextConfig = {
   // Experimental features for better performance
   experimental: {
     optimizeCss: true,
+  },
+  // ESLint configuration
+  eslint: {
+    // Disable ESLint during builds to avoid deprecated options error
+    // You can run `npm run lint` separately to check for linting issues
+    ignoreDuringBuilds: true,
   },
 }
 
