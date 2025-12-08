@@ -72,54 +72,109 @@ export default function Services() {
     threshold: 0.1,
   })
 
+  // Load services and homepage data in parallel for faster loading
   useEffect(() => {
-    fetch('/api/services', { cache: 'no-store' })
-      .then((response) => {
+    let isMounted = true
+    
+    // Create abort controllers for both requests
+    const servicesController = new AbortController()
+    const homepageController = new AbortController()
+    
+    // Set timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      if (!isMounted) return
+      servicesController.abort()
+      homepageController.abort()
+      setLoading(false)
+    }, 10000) // 10 second timeout
+    
+    // Load both API calls in parallel
+    Promise.allSettled([
+      fetch('/api/services', { 
+        cache: 'no-store',
+        signal: servicesController.signal,
+        headers: {
+          'Cache-Control': 'no-cache',
+        }
+      }).then((response) => {
         if (!response.ok) {
           throw new Error('Failed to load services')
         }
         return response.json()
-      })
-      .then((data: ServiceCatalog) => {
-        setCatalog(data)
-        if (data.categories.length > 0) {
-          setActiveCategoryId(data.categories[0].id)
+      }),
+      fetch('/api/homepage', { 
+        cache: 'no-store',
+        signal: homepageController.signal,
+        headers: {
+          'Cache-Control': 'no-cache',
         }
-      })
-      .catch((error) => {
-        console.error('Error loading services:', error)
-      })
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    fetch('/api/homepage', { cache: 'no-store' })
-      .then((response) => {
+      }).then((response) => {
         if (!response.ok) {
-          throw new Error('Failed to load homepage data')
+          return null // Homepage data is optional, don't throw error
         }
         return response.json()
       })
-      .then((data) => {
-        const massage = data?.tsubokiMassage
-        if (massage && massage.enabled !== false) {
-          setMassageInfo({
-            enabled: true,
-            badge: massage.badge ?? 'Complimentary Ritual',
-            title: massage.title ?? 'Japanese Facial Massage',
-            subtitle: massage.subtitle ?? '',
-            description: massage.description ?? '',
-            benefits: Array.isArray(massage.benefits) ? massage.benefits : [],
-            whyItMatters: massage.whyItMatters ?? '',
-          })
+    ])
+      .then((results) => {
+        if (!isMounted) return
+        
+        clearTimeout(timeoutId)
+        
+        // Process services data (required)
+        const servicesResult = results[0]
+        if (servicesResult.status === 'fulfilled') {
+          const data: ServiceCatalog = servicesResult.value
+          setCatalog(data)
+          if (data.categories.length > 0) {
+            setActiveCategoryId(data.categories[0].id)
+          }
         } else {
+          console.error('Error loading services:', servicesResult.reason)
+        }
+        
+        // Process homepage/massage data (optional)
+        const homepageResult = results[1]
+        if (homepageResult.status === 'fulfilled' && homepageResult.value) {
+          const data = homepageResult.value
+          const massage = data?.tsubokiMassage
+          if (massage && massage.enabled !== false) {
+            setMassageInfo({
+              enabled: true,
+              badge: massage.badge ?? 'Complimentary Ritual',
+              title: massage.title ?? 'Japanese Facial Massage',
+              subtitle: massage.subtitle ?? '',
+              description: massage.description ?? '',
+              benefits: Array.isArray(massage.benefits) ? massage.benefits : [],
+              whyItMatters: massage.whyItMatters ?? '',
+            })
+          } else {
+            setMassageInfo(null)
+          }
+        } else {
+          // Homepage data failed or not available - that's okay, just set to null
           setMassageInfo(null)
         }
       })
       .catch((error) => {
-        console.error('Error loading massage info:', error)
-        setMassageInfo(null)
+        if (!isMounted) return
+        clearTimeout(timeoutId)
+        // Only log if it's not an abort error
+        if (error?.name !== 'AbortError') {
+          console.error('Error loading data:', error)
+        }
       })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false)
+        }
+      })
+    
+    return () => {
+      isMounted = false
+      clearTimeout(timeoutId)
+      servicesController.abort()
+      homepageController.abort()
+    }
   }, [])
 
   const activeCategory = useMemo(() => {

@@ -9,7 +9,17 @@ const ZOHO_SMTP_USER = process.env.ZOHO_SMTP_USER || process.env.ZOHO_SMTP_USERN
 const ZOHO_SMTP_PASS = process.env.ZOHO_SMTP_PASS || process.env.ZOHO_SMTP_PASSWORD || process.env.ZOHO_APP_PASSWORD || ''
 const ZOHO_FROM_EMAIL = process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_FROM || (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : '')
 const FROM_EMAIL = process.env.FROM_EMAIL || ZOHO_FROM_EMAIL || 'hello@lashdiary.co.ke'
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+const BASE_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+})()
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS

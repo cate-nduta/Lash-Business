@@ -44,7 +44,7 @@ ZOHO_SMTP_PASS=your-app-password-here
 ZOHO_SMTP_HOST=smtp.zoho.com
 ZOHO_SMTP_PORT=465
 ZOHO_FROM_EMAIL=your-email@zoho.com
-EMAIL_FROM_NAME=LashDiary
+EMAIL_FROM_NAME=The LashDiary
 BUSINESS_NOTIFICATION_EMAIL=hello@lashdiary.co.ke
 ```
 

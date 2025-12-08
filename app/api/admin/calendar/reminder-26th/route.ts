@@ -79,7 +79,17 @@ export async function POST(request: NextRequest) {
 
     const bookingLink = typeof body?.bookingLink === 'string' && body.bookingLink.trim().length > 0
       ? body.bookingLink.trim()
-      : `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/booking`
+      : (() => {
+          const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+          if (typeof raw === 'string' && raw.trim().length > 0) {
+            const trimmed = raw.trim().replace(/\/+$/, '')
+            if (/^https?:\/\//i.test(trimmed)) {
+              return `${trimmed}/booking`
+            }
+            return `https://${trimmed}/booking`
+          }
+          return 'https://lashdiary.co.ke/booking'
+        })()
 
     const subject = typeof body?.subject === 'string' && body.subject.trim().length > 0
       ? `${body.subject.trim()} 🤎`

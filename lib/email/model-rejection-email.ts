@@ -28,7 +28,17 @@ const FROM_EMAIL =
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const EMAIL_FROM_NAME = 'The LashDiary'
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'
+const BASE_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+})()
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS
@@ -55,8 +65,9 @@ function escapeHtml(text: string): string {
 }
 
 // Create rejection email HTML template
-function createRejectionEmailTemplate(firstName: string): string {
+function createRejectionEmailTemplate(firstName: string, personalNote?: string): string {
   const safeFirstName = escapeHtml(firstName || 'there')
+  const safePersonalNote = personalNote ? escapeHtml(personalNote) : ''
 
   return `
 <!DOCTYPE html>
@@ -89,6 +100,8 @@ function createRejectionEmailTemplate(firstName: string): string {
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
                 I had limited availability for model slots this round, and all available spots have been filled. Because of the high number of applications, I wasn't able to include everyone this time.
               </p>
+              
+              ${safePersonalNote ? '<div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;"><p style="margin:0; font-size:15px; line-height:1.6; color:#7C4B31; white-space:pre-wrap;">' + safePersonalNote.replace(/\n/g, '<br>') + '</p></div>' : ''}
               
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
                 I'll be opening more opportunities in the future, and you're welcome to apply again when the next round is announced.
@@ -145,6 +158,7 @@ function createRejectionEmailTemplate(firstName: string): string {
 export async function sendModelRejectionEmail(data: {
   email: string
   firstName: string
+  personalNote?: string
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   if (!zohoTransporter) {
     return {
@@ -154,7 +168,7 @@ export async function sendModelRejectionEmail(data: {
   }
 
   try {
-    const emailHtml = createRejectionEmailTemplate(data.firstName)
+    const emailHtml = createRejectionEmailTemplate(data.firstName, data.personalNote)
     
     const info = await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,

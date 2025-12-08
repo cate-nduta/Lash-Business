@@ -112,26 +112,38 @@ function CalendarPicker({
     }
   }, [viewMonth])
 
-  // Navigate months
+  // Navigate months - optimized to prevent unnecessary re-renders
   const goToPreviousMonth = () => {
-    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+    const newMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1)
+    // Only update if different to prevent unnecessary re-renders
+    if (newMonth.getTime() !== viewMonth.getTime()) {
+      setViewMonth(newMonth)
+    }
   }
 
   const goToNextMonth = () => {
-    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+    const newMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1)
+    // Only update if different to prevent unnecessary re-renders
+    if (newMonth.getTime() !== viewMonth.getTime()) {
+      setViewMonth(newMonth)
+    }
   }
+
+  // Memoize date sets for O(1) lookup performance instead of O(n) array includes
+  const availableDatesSet = useMemo(() => new Set(availableDates || []), [availableDates])
+  const fullyBookedSet = useMemo(() => new Set(fullyBookedDates || []), [fullyBookedDates])
 
   // Check if a date is available for booking
   // ONLY use API response from admin panel - NO hard-coded fallbacks
   const isDateAvailable = (dateStr: string): boolean => {
     // Check if fully booked first
-    if (fullyBookedDates?.includes(dateStr)) {
+    if (fullyBookedSet.has(dateStr)) {
       return false
     }
 
     // ONLY use API dates from admin panel - no fallback, no client-side generation
-    if (availableDates && availableDates.length > 0) {
-      return availableDates.includes(dateStr)
+    if (availableDatesSet.size > 0) {
+      return availableDatesSet.has(dateStr)
     }
 
     // If API hasn't loaded yet or returned no dates, date is not available
@@ -192,10 +204,18 @@ function CalendarPicker({
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-  if (loading) {
+  // Show a subtle loading state without blocking the calendar
+  const isLoading = loading && (!availableDates || availableDates.length === 0)
+  
+  if (isLoading) {
     return (
-      <div className="bg-[var(--color-surface)] rounded-3xl shadow-soft p-6 border border-[var(--color-text)]/10">
-        <div className="text-center text-gray-500">Loading calendar...</div>
+      <div className="bg-[var(--color-surface)] rounded-2xl shadow-soft p-3 sm:p-4 md:p-5 border border-[var(--color-text)]/10">
+        <div className="flex items-center justify-center py-8">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-sm text-[var(--color-text)]/70">Loading available dates...</div>
+          </div>
+        </div>
       </div>
     )
   }

@@ -121,3 +121,4 @@ If you encounter any issues:
 3. Verify all environment variables are set correctly
 4. Make sure Google Calendar API credentials are configured
 
+

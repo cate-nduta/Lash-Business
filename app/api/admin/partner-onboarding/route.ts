@@ -31,7 +31,17 @@ const partnerIntroCopy: Record<PartnerType, string> = {
 
 const studioContactEmail = process.env.CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+const BASE_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+})()
 
 type TemplateContext = Record<string, string | number>
 

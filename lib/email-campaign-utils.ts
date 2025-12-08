@@ -83,14 +83,14 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     return settings?.business || {
       phone: '',
       email: 'hello@lashdiary.co.ke',
-      name: 'LashDiary',
+      name: 'The LashDiary',
       address: 'Nairobi, Kenya',
     }
   } catch {
     return {
       phone: '',
       email: 'hello@lashdiary.co.ke',
-      name: 'LashDiary',
+      name: 'The LashDiary',
       address: 'Nairobi, Kenya',
     }
   }
@@ -268,7 +268,7 @@ export async function createEmailTemplate(options: {
   const { content, campaignId, recipientEmail, unsubscribeToken, baseUrl, business } = options
   const resolvedBusiness = business || (await getBusinessSettings())
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${unsubscribeToken}`
-  const brandName = resolvedBusiness.name || 'LashDiary'
+  const brandName = resolvedBusiness.name || 'The LashDiary'
   const businessAddress = resolvedBusiness.address || 'Nairobi, Kenya'
   const displayUrl = baseUrl.replace(/^https?:\/\//, '')
 

@@ -57,8 +57,16 @@ function formatDateDisplay(dateStr?: string | null) {
 }
 
 function resolveBookingLink(rawLink?: string | null) {
-  const fallbackBase = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-  const base = fallbackBase.replace(/\/$/, '')
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  let base = 'https://lashdiary.co.ke'
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      base = trimmed
+    } else {
+      base = `https://${trimmed}`
+    }
+  }
   if (!rawLink) return `${base}/booking`
   if (/^https?:\/\//i.test(rawLink)) return rawLink
   const trimmed = rawLink.startsWith('/') ? rawLink : `/${rawLink}`
@@ -116,7 +124,17 @@ function buildAnnouncementEmail({
           ${closeLabel ? `Close on <strong>${closeLabel}</strong>` : bookingPeriod}
         </p>
         <p style="margin: 0 0 12px;"><strong>Deposit:</strong> ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)</p>
-        <p style="margin: 0;"><strong>Policy:</strong> Please review our <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies" style="color:#7C4B31;text-decoration:underline;">booking policies</a> for full details</p>
+        <p style="margin: 0;"><strong>Policy:</strong> Please review our <a href="${(() => {
+          const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+          if (typeof raw === 'string' && raw.trim().length > 0) {
+            const trimmed = raw.trim().replace(/\/+$/, '')
+            if (/^https?:\/\//i.test(trimmed)) {
+              return `${trimmed}/policies`
+            }
+            return `https://${trimmed}/policies`
+          }
+          return 'https://lashdiary.co.ke/policies'
+        })()}" style="color:#7C4B31;text-decoration:underline;">booking policies</a> for full details</p>
       </div>
       <p style="margin-bottom: 28px;">You can book directly here:</p>
       <p style="margin-bottom: 28px;">
@@ -144,7 +162,17 @@ function buildAnnouncementEmail({
     openLabel ? `Open from ${openLabel}` : '',
     closeLabel ? `Close on ${closeLabel}` : bookingPeriod,
     `Deposit: ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)`,
-    `Policy: Please review our booking policies at ${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies for full details`,
+    `Policy: Please review our booking policies at ${(() => {
+        const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          const trimmed = raw.trim().replace(/\/+$/, '')
+          if (/^https?:\/\//i.test(trimmed)) {
+            return `${trimmed}/policies`
+          }
+          return `https://${trimmed}/policies`
+        }
+        return 'https://lashdiary.co.ke/policies'
+      })()} for full details`,
     '',
     `Book here: ${bookingLink}`,
     '',

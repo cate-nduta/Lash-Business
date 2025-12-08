@@ -43,8 +43,8 @@ ZOHO_SMTP_PORT=465
 # Optional: Custom from email (defaults to ZOHO_SMTP_USER)
 ZOHO_FROM_EMAIL=your-email@zoho.com
 
-# Optional: Custom from name (defaults to "LashDiary")
-EMAIL_FROM_NAME=LashDiary
+# Optional: Custom from name (defaults to "The LashDiary")
+EMAIL_FROM_NAME=The LashDiary
 
 # Business notification email (where booking notifications are sent)
 BUSINESS_NOTIFICATION_EMAIL=hello@lashdiary.co.ke
@@ -87,7 +87,7 @@ After setting up your environment variables:
 | `ZOHO_SMTP_HOST` | No | SMTP server (default: `smtp.zoho.com`) | `smtp.zoho.com` |
 | `ZOHO_SMTP_PORT` | No | SMTP port (default: `465`) | `465` or `587` |
 | `ZOHO_FROM_EMAIL` | No | From email address | `noreply@zoho.com` |
-| `EMAIL_FROM_NAME` | No | Display name for emails | `LashDiary` |
+| `EMAIL_FROM_NAME` | No | Display name for emails | `The LashDiary` |
 | `BUSINESS_NOTIFICATION_EMAIL` | No | Where booking notifications go | `hello@lashdiary.co.ke` |
 
 ### Alternative Variable Names

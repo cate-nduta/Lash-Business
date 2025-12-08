@@ -260,7 +260,7 @@ export default function AdminEmailMarketing() {
       '{name}': previewSubscriber.name || 'Beautiful Soul',
       '{email}': previewSubscriber.email,
       '{phone}': '',
-      '{businessName}': 'LashDiary',
+      '{businessName}': 'The LashDiary',
       '{lastVisit}': previewSubscriber.lastBookingDate
         ? new Date(previewSubscriber.lastBookingDate).toLocaleDateString('en-US', {
             year: 'numeric',

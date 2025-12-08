@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
     const body = await request.json()
-    const { action, applicationId, status } = body
+    const { action, applicationId, status, personalNote } = body
 
     if (action === 'updateStatus') {
       const data = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
             const emailResult = await sendModelRejectionEmail({
               email: application.email,
               firstName: application.firstName || 'there',
+              personalNote: body.personalNote,
             })
             
             if (emailResult.success) {

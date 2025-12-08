@@ -48,7 +48,17 @@ function buildAnnouncementEmail({
       <p style="margin: 0 0 12px; font-weight: 600; color: #7C4B31; font-family: 'DM Serif Text', Georgia, serif;"><strong>Quick details:</strong></p>
       <p style="margin: 0 0 8px; font-family: 'DM Serif Text', Georgia, serif;">• <strong>Booking window:</strong> ${bookingPeriod}</p>
       <p style="margin: 0 0 8px; font-family: 'DM Serif Text', Georgia, serif;">• <strong>Deposit:</strong> ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)</p>
-      <p style="margin: 0; font-family: 'DM Serif Text', Georgia, serif;">• <strong>Policy:</strong> Please review our <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies" style="color:#7C4B31;text-decoration:underline;">booking policies</a> for full details</p>
+      <p style="margin: 0; font-family: 'DM Serif Text', Georgia, serif;">• <strong>Policy:</strong> Please review our <a href="${(() => {
+        const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          const trimmed = raw.trim().replace(/\/+$/, '')
+          if (/^https?:\/\//i.test(trimmed)) {
+            return `${trimmed}/policies`
+          }
+          return `https://${trimmed}/policies`
+        }
+        return 'https://lashdiary.co.ke/policies'
+      })()}" style="color:#7C4B31;text-decoration:underline;">booking policies</a> for full details</p>
     </div>
 
     <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'DM Serif Text', Georgia, serif; text-align: left;">Book early, skip the scramble, and get a time that actually fits your life.</p>
@@ -78,7 +88,17 @@ function buildAnnouncementEmail({
     '',
     `• Booking window: ${bookingPeriod}`,
     `• Deposit: ${depositPercentage}% to confirm your slot (strictly for securing your booking, non-refundable under any circumstance)`,
-    `• Policy: Please review our booking policies at ${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/policies for full details`,
+    `• Policy: Please review our booking policies at ${(() => {
+        const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          const trimmed = raw.trim().replace(/\/+$/, '')
+          if (/^https?:\/\//i.test(trimmed)) {
+            return `${trimmed}/policies`
+          }
+          return `https://${trimmed}/policies`
+        }
+        return 'https://lashdiary.co.ke/policies'
+      })()} for full details`,
     '',
     `Book early, skip the scramble, and get a time that actually fits your life.`,
     '',
@@ -118,8 +138,28 @@ export async function POST(request: NextRequest) {
     const bookingLink = typeof body?.bookingLink === 'string' && body.bookingLink.trim().length > 0
       ? body.bookingLink.trim()
       : bookingWindow?.bookingLink 
-        ? (bookingWindow.bookingLink.startsWith('http') ? bookingWindow.bookingLink : `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}${bookingWindow.bookingLink.startsWith('/') ? bookingWindow.bookingLink : '/' + bookingWindow.bookingLink}`)
-        : `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/booking`
+        ? (bookingWindow.bookingLink.startsWith('http') ? bookingWindow.bookingLink : (() => {
+            const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+            if (typeof raw === 'string' && raw.trim().length > 0) {
+              const trimmed = raw.trim().replace(/\/+$/, '')
+              if (/^https?:\/\//i.test(trimmed)) {
+                return `${trimmed}${bookingWindow.bookingLink.startsWith('/') ? bookingWindow.bookingLink : '/' + bookingWindow.bookingLink}`
+              }
+              return `https://${trimmed}${bookingWindow.bookingLink.startsWith('/') ? bookingWindow.bookingLink : '/' + bookingWindow.bookingLink}`
+            }
+            return `https://lashdiary.co.ke${bookingWindow.bookingLink.startsWith('/') ? bookingWindow.bookingLink : '/' + bookingWindow.bookingLink}`
+          })())
+        : (() => {
+            const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+            if (typeof raw === 'string' && raw.trim().length > 0) {
+              const trimmed = raw.trim().replace(/\/+$/, '')
+              if (/^https?:\/\//i.test(trimmed)) {
+                return `${trimmed}/booking`
+              }
+              return `https://${trimmed}/booking`
+            }
+            return 'https://lashdiary.co.ke/booking'
+          })()
 
     const subject = typeof body?.subject === 'string' && body.subject.trim().length > 0
       ? `${body.subject.trim()} 🤎`

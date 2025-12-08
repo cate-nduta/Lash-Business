@@ -11,7 +11,17 @@ const ZOHO_SMTP_PASS =
 const ZOHO_FROM_EMAIL = process.env.ZOHO_FROM_EMAIL || process.env.ZOHO_FROM || ZOHO_SMTP_USER
 const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
 const FALLBACK_FROM_EMAIL = process.env.FROM_EMAIL || 'hello@example.com'
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+const BASE_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+})()
 
 const hasZohoCredentials = Boolean(ZOHO_SMTP_USER && ZOHO_SMTP_PASS)
 

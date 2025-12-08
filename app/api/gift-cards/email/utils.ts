@@ -161,7 +161,17 @@ function createGiftCardRecipientSurpriseEmailTemplate(card: GiftCard) {
     month: 'long',
     day: 'numeric',
   })
-  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:3000'
+  const BASE_URL = (() => {
+    const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      const trimmed = raw.trim().replace(/\/+$/, '')
+      if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed
+      }
+      return `https://${trimmed}`
+    }
+    return 'https://lashdiary.co.ke'
+  })()
   const bookingLink = `${BASE_URL}/booking/gift-card?code=${card.code}`
 
   return `

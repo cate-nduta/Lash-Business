@@ -62,7 +62,7 @@ export async function generateMetadata(): Promise<Metadata> {
       : undefined
     
     return {
-      title: settings?.business?.name ? `${settings.business.name} - Luxury Lash Services` : 'LashDiary - Luxury Lash Services',
+      title: settings?.business?.name ? `${settings.business.name} - Lash Extensions Service` : 'LashDiary - Lash Extensions Service',
       description: settings?.business?.description || 'Premium lash extensions and beauty services',
       icons: absoluteFaviconUrl
         ? {
@@ -84,7 +84,7 @@ export async function generateMetadata(): Promise<Metadata> {
   } catch {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'https://lashdiary.co.ke'
     return {
-      title: 'LashDiary - Luxury Lash Services',
+      title: 'LashDiary - Lash Extensions Service',
       description: 'Premium lash extensions and beauty services',
       icons: undefined,
       verification: {

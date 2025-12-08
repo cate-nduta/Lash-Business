@@ -31,10 +31,13 @@ export default function AdminModels() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null)
   const [selectedApplication, setSelectedApplication] = useState<ModelApplication | null>(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
+  const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [emailMessage, setEmailMessage] = useState('')
+  const [rejectionMessage, setRejectionMessage] = useState('')
   const [appointmentDate, setAppointmentDate] = useState('')
   const [appointmentTime, setAppointmentTime] = useState({ hours: '10', minutes: '00', ampm: 'AM' })
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [sendingRejection, setSendingRejection] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'selected' | 'rejected'>('all')
 
@@ -83,12 +86,12 @@ export default function AdminModels() {
     }
   }
 
-  const updateStatus = async (applicationId: string, status: 'pending' | 'selected' | 'rejected') => {
+  const updateStatus = async (applicationId: string, status: 'pending' | 'selected' | 'rejected', personalNote?: string) => {
     try {
       const response = await authorizedFetch('/api/admin/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateStatus', applicationId, status }),
+        body: JSON.stringify({ action: 'updateStatus', applicationId, status, personalNote }),
       })
 
       if (response.ok) {
@@ -110,6 +113,22 @@ export default function AdminModels() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'An error occurred' })
+    }
+  }
+
+  const sendRejectionEmail = async () => {
+    if (!selectedApplication) return
+
+    setSendingRejection(true)
+    try {
+      await updateStatus(selectedApplication.id, 'rejected', rejectionMessage)
+      setShowRejectionModal(false)
+      setRejectionMessage('')
+      setSelectedApplication(null)
+    } catch (error) {
+      setMessage({ type: 'error', text: 'An error occurred while sending rejection email' })
+    } finally {
+      setSendingRejection(false)
     }
   }
 
@@ -313,7 +332,10 @@ export default function AdminModels() {
                             Send Selection Email
                           </button>
                           <button
-                            onClick={() => updateStatus(app.id, 'rejected')}
+                            onClick={() => {
+                              setSelectedApplication(app)
+                              setShowRejectionModal(true)
+                            }}
                             className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                           >
                             Reject
@@ -472,6 +494,52 @@ export default function AdminModels() {
                   setEmailMessage('')
                   setAppointmentDate('')
                   setAppointmentTime({ hours: '10', minutes: '00', ampm: 'AM' })
+                }}
+                className="px-4 py-2 border-2 border-brown-light rounded-lg text-brown-dark font-semibold hover:bg-brown-light transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {showRejectionModal && selectedApplication && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setShowRejectionModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Send Rejection Email</h2>
+            <p className="text-brown/80 mb-4">
+              Sending rejection email to <strong>{selectedApplication.firstName} {selectedApplication.lastName}</strong> ({selectedApplication.email})
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                Personal Note (Optional)
+              </label>
+              <textarea
+                value={rejectionMessage}
+                onChange={(e) => setRejectionMessage(e.target.value)}
+                rows={6}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                placeholder="Add a personal note to the rejection email..."
+              />
+              <p className="text-xs text-brown/60 mt-1">
+                This note will be included in the rejection email. If left empty, the standard rejection message will be sent.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={sendRejectionEmail}
+                disabled={sendingRejection}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors disabled:opacity-50"
+              >
+                {sendingRejection ? 'Sending...' : 'Send Rejection Email'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowRejectionModal(false)
+                  setRejectionMessage('')
+                  setSelectedApplication(null)
                 }}
                 className="px-4 py-2 border-2 border-brown-light rounded-lg text-brown-dark font-semibold hover:bg-brown-light transition-colors"
               >

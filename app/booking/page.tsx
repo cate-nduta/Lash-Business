@@ -182,7 +182,7 @@ export default function Booking() {
   const [availableDateStrings, setAvailableDateStrings] = useState<string[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [loading, setLoading] = useState(false)
-  const [loadingDates, setLoadingDates] = useState(false) // Start with false - generate dates immediately
+  const [loadingDates, setLoadingDates] = useState(true) // Start with true to show loading state initially
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null
@@ -523,6 +523,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           
           setAvailableDates(dates)
           setAvailableDateStrings(dateStrings)
+          setLoadingDates(false) // Dates loaded, hide loading state
           
           // Update blocked dates
           if (Array.isArray(calendarData?.fullyBookedDates)) {
@@ -553,6 +554,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               }
             })
           }
+        } else {
+          // If no calendar data, still hide loading after a short delay to prevent stuck state
+          setTimeout(() => setLoadingDates(false), 500)
         }
         
         setDiscountsLoaded(true)
@@ -568,6 +572,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           fridayNightDepositPercentage: 50,
           fridayNightEnabled: false,
         })
+        setLoadingDates(false) // Hide loading state even on error
         setDiscountsLoaded(true)
       })
     
@@ -1367,7 +1372,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
     let cancelled = false
     const refreshAvailableDates = async () => {
-      setLoadingDates(true)
+      // Don't show loading state for background refresh - it's already loaded
+      // Only show loading if dates are empty
+      const shouldShowLoading = availableDates.length === 0
+      if (shouldShowLoading) {
+        setLoadingDates(true)
+      }
       try {
         const timestamp = Date.now()
         const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { 
@@ -1375,7 +1385,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
-          }
+          },
+          signal: AbortSignal.timeout(8000) // 8 second timeout
         })
         if (!response.ok) {
           throw new Error(`Failed to refresh available dates: ${response.status}`)
@@ -1398,7 +1409,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           console.error('Error refreshing available dates:', error)
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && shouldShowLoading) {
           setLoadingDates(false)
         }
       }

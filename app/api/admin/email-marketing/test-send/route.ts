@@ -29,7 +29,17 @@ const FROM_EMAIL =
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const EMAIL_FROM_NAME = 'The LashDiary'
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+const BASE_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+})()
 const TEST_EMAIL = process.env.CALENDAR_EMAIL || BUSINESS_NOTIFICATION_EMAIL
 const UNSUBSCRIBE_SECRET = process.env.EMAIL_UNSUBSCRIBE_SECRET || 'lashdiary-secret'
 const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL
@@ -81,7 +91,7 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${business.name || 'LashDiary'}</title>
+  <title>${business.name || 'The LashDiary'}</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; background-color: #FDF7FA;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #FDF7FA; padding: 40px 20px;">
@@ -94,7 +104,7 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
                 ${business.description || 'Luxury Lash & Beauty Studio'}
               </div>
               <h1 style="color: #4F2C1D; margin: 0; font-size: 36px; font-weight: 800; letter-spacing: 0.04em;">
-                ${business.name || 'LashDiary'}
+                ${business.name || 'The LashDiary'}
               </h1>
               <p style="margin: 14px 0 0; font-size: 16px; color: #7B485C; line-height: 1.7;">
                 Personalized lash artistry, delivered with love and elegance.
@@ -136,7 +146,7 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
                 With love and gratitude,
               </p>
               <p style="font-size: 17px; color: #4F2C1D; font-weight: 700; margin: 0 0 20px 0;">
-                The ${business.name || 'LashDiary'} Team
+                The ${business.name || 'The LashDiary'} Team
               </p>
               <a
                 href="${BASE_URL}"
@@ -153,7 +163,7 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
                   font-size: 14px;
                 "
               >
-                Visit ${business.name || 'LashDiary'}
+                Visit ${business.name || 'The LashDiary'}
               </a>
             </td>
           </tr>
@@ -163,10 +173,10 @@ async function createEmailPreview(content: string, unsubscribeToken: string) {
                 Questions or special requests? Reply to this email and we’ll be happy to help.
               </p>
               <p style="font-size: 12px; color: #B07A8F; margin: 0;">
-                ${business.name || 'LashDiary'} • ${business.address || 'Nairobi, Kenya'} • <a href="${BASE_URL}" style="color: #B07A8F; text-decoration: underline;">${BASE_URL.replace(/^https?:\/\//, '')}</a>
+                ${business.name || 'The LashDiary'} • ${business.address || 'Nairobi, Kenya'} • <a href="${BASE_URL}" style="color: #B07A8F; text-decoration: underline;">${BASE_URL.replace(/^https?:\/\//, '')}</a>
               </p>
               <p style="font-size: 11px; color: #C295A8; margin: 12px 0 0;">
-                You are receiving this email because you opted in for ${business.name || 'LashDiary'} updates. <a href="${unsubscribeUrl}" style="color:#B07A8F;text-decoration:underline;">Unsubscribe</a>
+                You are receiving this email because you opted in for ${business.name || 'The LashDiary'} updates. <a href="${unsubscribeUrl}" style="color:#B07A8F;text-decoration:underline;">Unsubscribe</a>
               </p>
             </td>
           </tr>
