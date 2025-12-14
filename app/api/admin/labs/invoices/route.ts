@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailViaZoho } from '@/lib/email/zoho-config'
+import crypto from 'crypto'
 
 function normalizeBaseUrl(): string {
   const raw =
@@ -53,7 +54,10 @@ async function generateInvoiceEmailHTML(invoice: ConsultationInvoice): Promise<s
 }
 
 async function generateInvoiceEmailText(invoice: ConsultationInvoice): Promise<string> {
-  const pdfUrl = `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`
+  // Use public route with token for email links (bypasses admin auth requirement)
+  const pdfUrl = invoice.viewToken 
+    ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
+    : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf` // Fallback for admin access
   
   return `
 Invoice ${invoice.invoiceNumber}
@@ -129,6 +133,7 @@ export interface ConsultationInvoice {
   secondAmount?: number // For split payments
   upfrontPaid?: boolean
   secondPaid?: boolean
+  viewToken?: string // Secure token for public PDF access
   createdAt: string
   updatedAt: string
 }
@@ -226,6 +231,9 @@ export async function POST(request: NextRequest) {
     const expirationDate = new Date(issueDate)
     expirationDate.setDate(expirationDate.getDate() + 7)
 
+    // Generate secure view token for public PDF access
+    const viewToken = crypto.randomBytes(32).toString('hex')
+
     // Create invoice
     const invoice: ConsultationInvoice = {
       invoiceId: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -259,6 +267,7 @@ export async function POST(request: NextRequest) {
       secondAmount: isTier3 ? secondAmount : undefined,
       upfrontPaid: false,
       secondPaid: false,
+      viewToken,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }

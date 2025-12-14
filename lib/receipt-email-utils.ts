@@ -175,7 +175,7 @@ function createReceiptEmailTemplate(data: PaymentReceiptData, isLabsOrder: boole
             <td style="padding:0 32px 32px 32px; text-align:center; border-top:1px solid ${accent};">
               <p style="margin:0; font-size:12px; color:${textSecondary};">
                 This is an automated receipt. Please save this email for your records.<br>
-                ${data.businessName ? `From: ${data.businessName}` : 'From: LashDiary'}
+                ${data.businessName ? `From: ${data.businessName}` : 'From: The LashDiary'}
               </p>
             </td>
           </tr>
@@ -219,7 +219,7 @@ ${isLabsOrder && data.tierName ? `- Package: ${data.tierName}\n` : ''}
 
 ${data.description ? `Description: ${data.description}\n\n` : ''}
 This is an automated receipt. Please save this email for your records.
-${data.businessName ? `From: ${data.businessName}` : 'From: LashDiary'}
+${data.businessName ? `From: ${data.businessName}` : 'From: The LashDiary'}
     `.trim()
 
     // For Labs orders, try to use business email config

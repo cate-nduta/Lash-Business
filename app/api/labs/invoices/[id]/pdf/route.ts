@@ -5,12 +5,15 @@ import type { ConsultationInvoice } from '@/app/api/admin/labs/invoices/route'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// GET - Generate PDF-ready HTML for invoice
+// GET - Generate PDF-ready HTML for invoice (public access with token)
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const { searchParams } = new URL(request.url)
+    const token = searchParams.get('token')
+
     const invoices = await readDataFile<ConsultationInvoice[]>('labs-invoices.json', [])
     const invoice = invoices.find(inv => inv.invoiceId === params.id || inv.invoiceNumber === params.id)
 
@@ -33,6 +36,59 @@ export async function GET(
       }
     }
 
+    // Check authentication: token (email links), Labs client email match, or admin auth
+    let isAuthorized = false
+
+    // 1. Token authentication (for email links)
+    if (token) {
+      if (invoice.viewToken === token) {
+        isAuthorized = true
+      }
+    }
+
+    // 2. Labs client authentication (if logged in and email matches)
+    if (!isAuthorized) {
+      const labsSessionCookie = request.cookies.get('labs-session')
+      if (labsSessionCookie) {
+        try {
+          const sessionData = JSON.parse(decodeURIComponent(labsSessionCookie.value))
+          const { readDataFile: readUsers } = await import('@/lib/data-utils')
+          const users = await readUsers<any[]>('users.json', [])
+          const user = users.find((u: any) => u.email === sessionData.email && u.labsAccess)
+          
+          if (user && user.email.toLowerCase() === invoice.email.toLowerCase()) {
+            isAuthorized = true
+          }
+        } catch (error) {
+          // Invalid session, continue to check admin auth
+        }
+      }
+    }
+
+    // 3. Admin authentication (fallback)
+    if (!isAuthorized) {
+      const authCookie = request.cookies.get('admin-auth')?.value
+      const lastActiveRaw = request.cookies.get('admin-last-active')?.value
+      const lastActive = lastActiveRaw ? Number(lastActiveRaw) : NaN
+      const now = Date.now()
+
+      const isAuthenticated =
+        authCookie === 'authenticated' &&
+        Number.isFinite(lastActive) &&
+        now - lastActive <= 2 * 60 * 60 * 1000 // 2 hours
+
+      if (isAuthenticated) {
+        isAuthorized = true
+      }
+    }
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Token, client authentication, or admin authentication required' },
+        { status: 401 }
+      )
+    }
+
     // Format dates
     const formatDate = (dateStr: string) => {
       try {
@@ -51,6 +107,9 @@ export async function GET(
     const formatCurrency = (amount: number, currency: string) => {
       if (currency === 'USD') {
         return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      }
+      if (currency === 'EUR') {
+        return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       }
       return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
     }

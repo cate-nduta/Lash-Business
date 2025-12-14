@@ -38,7 +38,9 @@ export const FROM_EMAIL =
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 
-export const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
+// Normalize email from name - ensure it's always "The LashDiary" if set to just "LashDiary"
+const rawFromName = process.env.EMAIL_FROM_NAME || 'The LashDiary'
+export const EMAIL_FROM_NAME = rawFromName === 'LashDiary' ? 'The LashDiary' : rawFromName
 
 // Create Zoho transporter
 let zohoTransporter: ReturnType<typeof nodemailer.createTransport> | null = null

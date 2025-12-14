@@ -22,7 +22,8 @@ const FROM_EMAIL =
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'The LashDiary'
+const rawFromName = process.env.EMAIL_FROM_NAME || 'The LashDiary'
+const EMAIL_FROM_NAME = rawFromName === 'LashDiary' ? 'The LashDiary' : rawFromName
 
 const zohoTransporter =
   ZOHO_SMTP_USER && ZOHO_SMTP_PASS

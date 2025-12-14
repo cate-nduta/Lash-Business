@@ -67,6 +67,15 @@ export async function POST(
 
     const invoice = invoices[invoiceIndex]
 
+    // Ensure invoice has a viewToken for email links (generate if missing)
+    if (!invoice.viewToken) {
+      const crypto = await import('crypto')
+      invoice.viewToken = crypto.randomBytes(32).toString('hex')
+      invoice.updatedAt = new Date().toISOString()
+      invoices[invoiceIndex] = invoice
+      await writeDataFile('labs-invoices.json', invoices)
+    }
+
     // Generate email HTML
     const html = createInvoiceEmailTemplate(invoice)
 
@@ -99,7 +108,9 @@ ${invoice.tax && invoice.taxRate ? `Tax (${invoice.taxRate}%): ${formatCurrency(
 
 ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 
-View PDF Invoice: ${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf
+View PDF Invoice: ${invoice.viewToken 
+    ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
+    : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`}
 
 Payment Instructions:
 Please make payment by the due date (${formatDate(invoice.dueDate)}).${invoice.expirationDate ? `\n\nIMPORTANT: This invoice is valid for 7 days (expires ${formatDate(invoice.expirationDate)}). If unpaid, your project slot will be released.` : ''} If you have any questions about this invoice, please contact us at hello@lashdiary.co.ke.

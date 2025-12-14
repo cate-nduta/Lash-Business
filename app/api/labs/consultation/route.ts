@@ -14,6 +14,7 @@ import {
   FROM_EMAIL,
   EMAIL_FROM_NAME,
 } from '@/lib/email/zoho-config'
+import { formatCurrency, type Currency } from '@/lib/currency-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -382,7 +383,7 @@ async function sendConsultationEmail(data: ConsultationSubmission) {
 
               <div style="background-color: #7C4B31; color: #FFFFFF; padding: 16px; border-radius: 8px; margin-top: 24px; text-align: center;">
                 <p style="margin:0; font-size: 18px; font-weight: bold;">
-                  Consultation Price: ${data.currency === 'USD' ? `$${data.consultationPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `${data.consultationPrice.toLocaleString('en-US')} KES`}
+                  Consultation Price: ${formatCurrency(data.consultationPrice, data.currency as Currency)}
                 </p>
                 <p style="margin:8px 0 0 0; font-size: 14px; opacity: 0.9;">
                   Submitted: ${new Date(data.submittedAt).toLocaleString('en-US', { 
@@ -440,7 +441,7 @@ ${data.interestedTier ? `Interested Tier: ${data.interestedTier}` : ''}
 Pain Points:
 ${data.mainPainPoints}
 
-Consultation Price: ${data.currency === 'USD' ? `$${data.consultationPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `${data.consultationPrice.toLocaleString('en-US')} KES`}
+Consultation Price: ${formatCurrency(data.consultationPrice, data.currency as Currency)}
 Submitted: ${new Date(data.submittedAt).toLocaleString()}
       `.trim(),
       attachments: [
@@ -562,7 +563,7 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
 
               <div style="background-color: #7C4B31; color: #FFFFFF; padding: 16px; border-radius: 8px; margin-bottom: 24px; text-align: center;">
                 <p style="margin:0; font-size: 16px; font-weight: 600;">
-                  Consultation Fee: ${data.currency === 'USD' ? `$${data.consultationPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `${data.consultationPrice.toLocaleString('en-US')} KES`}
+                  Consultation Fee: ${formatCurrency(data.consultationPrice, data.currency as Currency)}
                 </p>
                 <p style="margin:8px 0 0 0; font-size: 14px; opacity: 0.9;">
                   If you proceed with a package, this fee will be credited back to your total package price.
@@ -608,7 +609,7 @@ Time: ${formatTime(data.preferredTime)}
 Meeting Type: ${data.meetingType === 'online' ? 'Online (Video Call)' : 'Physical (In-Person)'}
 ${data.meetingType === 'online' ? (timeGatedLink ? `\n\n📹 YOUR SECURE MEETING LINK:\n${timeGatedLink}\n\n🔒 Secure Access: This link will only work during your scheduled time slot (${formatTime(data.preferredTime)} on ${formatDate(data.preferredDate)}). This ensures your privacy and prevents unauthorized access.\n\nClick the link above to join your consultation meeting at your scheduled time.\n\nIf you have any issues joining, please reply to this email or call us.` : `\n\n📹 Google Meet Link:\nWe're setting up your meeting link. Please check your email shortly for the Google Meet link, or reply to this email and we'll send it to you immediately.\n\nIf you need help, reply to this email or call us at your scheduled time.`) : ''}
 
-Consultation Fee: ${data.currency === 'USD' ? `$${data.consultationPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `${data.consultationPrice.toLocaleString('en-US')} KES`}
+Consultation Fee: ${formatCurrency(data.consultationPrice, data.currency as Currency)}
 If you proceed with a package, this fee will be credited back to your total package price.
 
 We've attached a calendar event file (.ics) to this email. You can download it and add it to your calendar.
@@ -734,7 +735,7 @@ export async function POST(request: NextRequest) {
       meetingBuilding: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingBuilding, { fieldName: 'Meeting building', maxLength: 200, optional: true }) || '') : '',
       meetingStreet: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingStreet, { fieldName: 'Meeting street', maxLength: 200, optional: true }) || '') : '',
       consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 7000,
-      currency: body.currency || 'KES',
+      currency: (body.currency === 'USD' || body.currency === 'EUR' || body.currency === 'KES') ? body.currency : 'KES',
       submittedAt: body.submittedAt || new Date().toISOString(),
       source: body.source || 'labs-consultation',
       status: 'confirmed',

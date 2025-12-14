@@ -85,7 +85,10 @@ function createBuildEmailTemplate(
 ): string {
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   const tierInfo = getTierInfo(tierName)
-  const pdfUrl = `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`
+  // Use public route with token for email links (bypasses admin auth requirement)
+  const pdfUrl = invoice.viewToken 
+    ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
+    : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf` // Fallback for admin access
   
   // Calculate expiration date (7 days from issue date)
   const expirationDate = new Date(invoice.issueDate)
@@ -403,7 +406,9 @@ Total: ${formatCurrency(invoice.total, invoice.currency)}
 Due Date: ${formatDate(invoice.dueDate)}
 Valid Until: ${expirationDateStr}
 
-View Invoice PDF: ${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf
+View Invoice PDF: ${invoice.viewToken 
+    ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
+    : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`}
 
 TIMELINE & NEXT STEPS
 After payment confirmation, we'll begin immediately. You'll receive detailed timelines and milestones within 24 hours of payment receipt.

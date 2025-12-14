@@ -36,7 +36,10 @@ function formatCurrency(amount: number, currency: string): string {
 
 export function createInvoiceEmailTemplate(invoice: ConsultationInvoice): string {
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
-  const pdfUrl = `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`
+  // Use public route with token for email links (bypasses admin auth requirement)
+  const pdfUrl = invoice.viewToken 
+    ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
+    : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf` // Fallback for admin access
 
   return `
 <!DOCTYPE html>

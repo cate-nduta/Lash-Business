@@ -275,8 +275,12 @@ export async function POST(request: NextRequest) {
         unsubscribeLink: personalUnsubscribeLink,
       })
 
+      // Normalize business name - ensure it's "The LashDiary" if set to just "LashDiary"
+      const rawBusinessName = businessSettings.name || 'The LashDiary'
+      const fromName = rawBusinessName === 'LashDiary' ? 'The LashDiary' : rawBusinessName
+      
       return zohoTransporter.sendMail({
-        from: `"${businessSettings.name || 'The LashDiary'}" <${FROM_EMAIL}>`,
+        from: `"${fromName}" <${FROM_EMAIL}>`,
         to: recipient.email,
         subject: subject.includes('🤎') ? subject : `${subject} 🤎`,
         html: emailContent,
