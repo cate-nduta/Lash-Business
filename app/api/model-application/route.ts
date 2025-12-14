@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:#FFFFFF; border-radius:18px; border:1px solid #E8D5C4; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:#FFFFFF;">
-              <h1 style="margin:0; font-size:32px; color:#7C4B31; font-family:'Playfair Display', Georgia, serif; font-weight:600;">New Model Application</h1>
+              <h1 style="margin:0; font-size:32px; color:#7C4B31; font-family:'Playfair Display', Georgia, serif; font-weight:600;">Application Received</h1>
             </td>
           </tr>
 

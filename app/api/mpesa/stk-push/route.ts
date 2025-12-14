@@ -5,7 +5,18 @@ const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || ''
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || ''
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || ''
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY || ''
-const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL || `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/mpesa/callback`
+function getBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+}
+const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL || `${getBaseUrl()}/api/mpesa/callback`
 const MPESA_ENVIRONMENT = process.env.MPESA_ENVIRONMENT || 'sandbox' // 'sandbox' or 'production'
 
 // M-Pesa API URLs

@@ -79,7 +79,8 @@ function getBaseUrl(request: NextRequest) {
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_BASE_URL ||
     process.env.BASE_URL ||
-    'http://localhost:3000'
+    process.env.SITE_URL ||
+    'https://lashdiary.co.ke'
   )
 }
 

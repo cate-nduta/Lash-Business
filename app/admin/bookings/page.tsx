@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
 interface Booking {
   id: string
@@ -87,7 +87,7 @@ export default function AdminBookings() {
   // Note: Bookings are stored in KES, so we convert if USD is selected
   const convertBookingPrice = (amount: number): number => {
     if (currency === 'USD') {
-      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
     }
     return amount
   }
@@ -351,7 +351,7 @@ export default function AdminBookings() {
     if (selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card') && selectedBooking.finalPrice) {
       // Convert to current currency if viewing in USD
       const convertedAmount = currency === 'USD' 
-        ? convertCurrency(selectedBooking.finalPrice, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(selectedBooking.finalPrice, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
         : selectedBooking.finalPrice
       setCashAmount(convertedAmount.toString())
     } else if (!selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card')) {
@@ -360,7 +360,7 @@ export default function AdminBookings() {
       if (currentBalance > 0) {
         // Convert to current currency if viewing in USD
         const convertedBalance = currency === 'USD'
-          ? convertCurrency(currentBalance, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+          ? convertCurrency(currentBalance, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
           : currentBalance
         setCashAmount(convertedBalance.toString())
       }
@@ -1341,7 +1341,7 @@ export default function AdminBookings() {
       const price = currency === 'USD' && service.priceUSD !== undefined 
         ? service.priceUSD 
         : currency === 'USD' && service.price
-        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
         : service.price
       setNewServicePrice(price.toString())
     }
@@ -1370,7 +1370,7 @@ export default function AdminBookings() {
     try {
       // Convert price back to KES if USD is selected (bookings are stored in KES)
       const priceInKES = currency === 'USD' 
-        ? convertCurrency(price, 'USD', 'KES', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(price, 'USD', 'KES', DEFAULT_EXCHANGE_RATES)
         : price
 
       const response = await authorizedFetch('/api/admin/bookings/update', {
@@ -1504,11 +1504,11 @@ export default function AdminBookings() {
       const price = currency === 'USD' && service.priceUSD !== undefined 
         ? service.priceUSD 
         : currency === 'USD' && service.price
-        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
         : service.price
       
       const priceWithFee = price + (currency === 'USD' 
-        ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
         : walkInFee)
       
       // Walk-ins pay after appointment, no deposit required
@@ -1533,7 +1533,7 @@ export default function AdminBookings() {
     try {
       // Convert prices to KES for storage
       const originalPriceKES = currency === 'USD' 
-        ? convertCurrency(walkInForm.originalPrice, 'USD', 'KES', DEFAULT_EXCHANGE_RATE)
+        ? convertCurrency(walkInForm.originalPrice, 'USD', 'KES', DEFAULT_EXCHANGE_RATES)
         : walkInForm.originalPrice
       
       const finalPriceKES = originalPriceKES + walkInFee
@@ -2940,7 +2940,7 @@ export default function AdminBookings() {
                     <div className="flex justify-between pt-2 border-t border-blue-300">
                       <span className="font-semibold text-brown-dark">Final Price:</span>
                       <span className="font-bold text-lg text-brown-dark">
-                        {formatCurrencyContext(convertBookingPrice(walkInForm.originalPrice + (currency === 'USD' ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATE) : walkInFee)))}
+                        {formatCurrencyContext(convertBookingPrice(walkInForm.originalPrice + (currency === 'USD' ? convertCurrency(walkInFee, 'KES', 'USD', DEFAULT_EXCHANGE_RATES) : walkInFee)))}
                       </span>
                     </div>
                     <div className="flex justify-between">

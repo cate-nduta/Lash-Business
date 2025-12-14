@@ -73,7 +73,7 @@ function createBirthdayEmailTemplate(name: string, discountCode: string, expiryD
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background-color: #FFFFFF; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
           <tr>
             <td style="padding:40px 32px; text-align:center; background: linear-gradient(135deg, #F3E6DC 0%, #FFFFFF 100%); border-radius:12px 12px 0 0;">
-              <h1 style="margin:0 0 12px 0; font-size:32px; color:#3E2A20; font-weight:bold;">Happy Birthday, ${name}!</h1>
+              <h1 style="margin:0 0 12px 0; font-size:32px; color:#3E2A20; font-weight:bold;">A Special Gift Just For You!</h1>
               <p style="margin:0; font-size:18px; color:#6B4A3B;">We're celebrating you today!</p>
             </td>
           </tr>

@@ -32,6 +32,10 @@ interface Settings {
   newsletter?: {
     discountPercentage?: number
   }
+  exchangeRates?: {
+    usdToKes?: number
+    eurToKes?: number
+  }
 }
 
 export default function AdminSettings() {
@@ -59,6 +63,10 @@ export default function AdminSettings() {
     },
     newsletter: {
       discountPercentage: 10,
+    },
+    exchangeRates: {
+      usdToKes: 130,
+      eurToKes: 140,
     },
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -146,6 +154,17 @@ export default function AdminSettings() {
         } else if (typeof loaded.newsletter.discountPercentage !== 'number') {
           loaded.newsletter.discountPercentage = 10
         }
+        // Ensure exchange rates exist
+        if (!loaded.exchangeRates) {
+          loaded.exchangeRates = { usdToKes: 130, eurToKes: 140 }
+        } else {
+          if (typeof loaded.exchangeRates.usdToKes !== 'number' || loaded.exchangeRates.usdToKes <= 0) {
+            loaded.exchangeRates.usdToKes = 130
+          }
+          if (typeof loaded.exchangeRates.eurToKes !== 'number' || loaded.exchangeRates.eurToKes <= 0) {
+            loaded.exchangeRates.eurToKes = 140
+          }
+        }
         setSettings(loaded)
       }
     } catch (error) {
@@ -156,7 +175,7 @@ export default function AdminSettings() {
     }
   }
 
-  const handleInputChange = (section: 'business' | 'social' | 'newsletter', field: string, value: string | number) => {
+  const handleInputChange = (section: 'business' | 'social' | 'newsletter' | 'exchangeRates', field: string, value: string | number) => {
     setSettings(prev => ({
       ...prev,
       [section]: {
@@ -264,6 +283,7 @@ export default function AdminSettings() {
         body: JSON.stringify({
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword,
+          confirmPassword: passwordData.confirmPassword,
         }),
         credentials: 'include',
       })
@@ -907,6 +927,78 @@ export default function AdminSettings() {
           <div className="mb-8">
             <h2 className="text-2xl font-display text-brown-dark mb-4">Blog Settings</h2>
             <div className="space-y-4">
+            </div>
+          </div>
+
+          {/* Currency Exchange Rates */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-display text-brown-dark mb-4">Currency Exchange Rates</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Set the exchange rates for converting between KES (Kenyan Shillings) and other currencies. 
+              These rates are used for consultations, invoices, and all currency conversions throughout the system.
+            </p>
+            <div className="space-y-4 bg-blue-50 p-6 rounded-lg border-2 border-blue-200">
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  USD to KES Rate
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600">1 USD =</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={settings.exchangeRates?.usdToKes ?? 130}
+                    onChange={(e) => {
+                      const value = Math.max(1, Number(e.target.value))
+                      setSettings(prev => ({
+                        ...prev,
+                        exchangeRates: {
+                          ...prev.exchangeRates,
+                          usdToKes: value,
+                        }
+                      }))
+                      setHasUnsavedChanges(true)
+                    }}
+                    className="w-32 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                  <span className="text-brown-dark font-semibold">KES</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Example: If 1 USD = 130 KES, enter 130. This means 1 US Dollar equals 130 Kenyan Shillings.
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-2">
+                  EUR to KES Rate
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600">1 EUR =</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={settings.exchangeRates?.eurToKes ?? 140}
+                    onChange={(e) => {
+                      const value = Math.max(1, Number(e.target.value))
+                      setSettings(prev => ({
+                        ...prev,
+                        exchangeRates: {
+                          ...prev.exchangeRates,
+                          eurToKes: value,
+                        }
+                      }))
+                      setHasUnsavedChanges(true)
+                    }}
+                    className="w-32 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                  <span className="text-brown-dark font-semibold">KES</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Example: If 1 EUR = 140 KES, enter 140. This means 1 Euro equals 140 Kenyan Shillings.
+                </p>
+              </div>
             </div>
           </div>
 

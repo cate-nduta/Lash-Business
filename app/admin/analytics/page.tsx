@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATE_USD, DEFAULT_EXCHANGE_RATE_EUR } from '@/lib/currency-utils'
 
 interface Booking {
   id: string
@@ -561,7 +561,7 @@ export default function AdminAnalytics() {
   // Note: Analytics data is stored in KES, so we convert if USD is selected
   const convertAnalyticsAmount = (amount: number): number => {
     if (currency === 'USD') {
-      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      return convertCurrency(amount, 'KES', 'USD', { usdToKes: DEFAULT_EXCHANGE_RATE_USD, eurToKes: DEFAULT_EXCHANGE_RATE_EUR })
     }
     return amount
   }

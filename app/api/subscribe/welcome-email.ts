@@ -134,7 +134,7 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
           <tr>
             <td style="background: linear-gradient(135deg, ${brand} 0%, #9A5B3A 100%); padding:48px 32px 40px 32px; text-align:center;">
               <div style="font-size:48px; margin-bottom:16px;">🤎</div>
-              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">Welcome to LashDiary!</h1>
+              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">Your Exclusive Discount Awaits!</h1>
               <p style="margin:12px 0 0 0; font-size:18px; color:#FFFFFF; opacity:0.95;">We're so excited to have you, ${name}!</p>
             </td>
           </tr>

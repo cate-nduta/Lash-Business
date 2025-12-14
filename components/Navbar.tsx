@@ -22,14 +22,29 @@ export default function Navbar() {
     // Helper function to safely abort a controller
     const safeAbort = (ctrl: AbortController | null) => {
       if (!ctrl) return
+      // Double-check signal exists and is not already aborted
+      if (!ctrl.signal || ctrl.signal.aborted) {
+        return
+      }
+      
       try {
-        // Check if already aborted before attempting to abort
-        if (ctrl.signal && !ctrl.signal.aborted) {
-          ctrl.abort()
-        }
-      } catch (e) {
+        // Use a reason to avoid "aborted without reason" error
+        // Some environments require a reason when aborting
+        ctrl.abort('Cleanup')
+      } catch (e: any) {
         // Silently ignore any abort errors - this is expected during cleanup
         // AbortError can occur if the signal is already aborted or in transition
+        // DOMException can also occur in some browsers
+        const isAbortRelated = 
+          e?.name === 'AbortError' || 
+          e?.name === 'DOMException' ||
+          e?.message?.includes('abort') ||
+          e?.message?.includes('Abort')
+        
+        if (!isAbortRelated && process.env.NODE_ENV === 'development') {
+          // Only log non-abort errors in development
+          console.warn('Unexpected error during abort:', e)
+        }
       }
     }
     
@@ -128,6 +143,7 @@ export default function Navbar() {
     { href: '/services', label: 'Services' },
     { href: '/booking', label: 'Booking' },
     { href: '/blog', label: 'Blog' },
+    { href: '/labs', label: 'LashDiary Labs' },
     { href: '/contact', label: 'Contact' },
   ]
   
@@ -201,7 +217,7 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'KES'
                     ? 'bg-brown-dark text-white'
-                    : currency === 'USD'
+                    : currency === 'USD' || currency === 'EUR'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
@@ -214,10 +230,25 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'USD'
                     ? 'bg-amber-500 text-white shadow-md brightness-110'
+                    : currency === 'KES' || currency === 'EUR'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
               >
                 USD
+              </button>
+              <span className="text-brown-dark/40">|</span>
+              <button
+                onClick={() => setCurrency('EUR')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'EUR'
+                    ? 'bg-blue-600 text-white shadow-md brightness-110'
+                    : currency === 'KES' || currency === 'USD'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                EUR
               </button>
             </div>
             
@@ -358,7 +389,7 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'KES'
                     ? 'bg-brown-dark text-white'
-                    : currency === 'USD'
+                    : currency === 'USD' || currency === 'EUR'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
@@ -374,10 +405,28 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'USD'
                     ? 'bg-amber-500 text-white shadow-md brightness-110'
+                    : currency === 'KES' || currency === 'EUR'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
               >
                 USD
+              </button>
+              <span className="text-brown-dark/40">|</span>
+              <button
+                onClick={() => {
+                  setCurrency('EUR')
+                  setIsOpen(false)
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  currency === 'EUR'
+                    ? 'bg-blue-600 text-white shadow-md brightness-110'
+                    : currency === 'KES' || currency === 'USD'
+                    ? 'bg-gray-200 text-gray-500 opacity-60'
+                    : 'text-brown-dark hover:bg-brown-light/30'
+                }`}
+              >
+                EUR
               </button>
             </div>
           </div>

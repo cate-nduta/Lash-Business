@@ -1,4 +1,4 @@
-export type Currency = 'KES' | 'USD'
+export type Currency = 'KES' | 'USD' | 'EUR'
 
 export interface CurrencyConfig {
   code: Currency
@@ -20,12 +20,18 @@ export const CURRENCIES: Record<Currency, CurrencyConfig> = {
     name: 'US Dollar',
     locale: 'en-US',
   },
+  EUR: {
+    code: 'EUR',
+    symbol: '€',
+    name: 'Euro',
+    locale: 'en-EU',
+  },
 }
 
 export function formatCurrency(amount: number, currency: Currency = 'KES'): string {
   const config = CURRENCIES[currency]
   
-  if (currency === 'USD') {
+  if (currency === 'USD' || currency === 'EUR') {
     return `${config.symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
   
@@ -36,7 +42,7 @@ export function formatCurrency(amount: number, currency: Currency = 'KES'): stri
 export function formatCurrencyCompact(amount: number, currency: Currency = 'KES'): string {
   const config = CURRENCIES[currency]
   
-  if (currency === 'USD') {
+  if (currency === 'USD' || currency === 'EUR') {
     return `${config.symbol}${amount.toFixed(2)}`
   }
   
@@ -50,31 +56,65 @@ export function parseCurrencyAmount(value: string, currency: Currency = 'KES'): 
   return isNaN(parsed) ? 0 : parsed
 }
 
-// Exchange rate conversion (you can fetch this from an API or set it manually)
-// For now, using a placeholder - you should fetch real-time rates
-export const DEFAULT_EXCHANGE_RATE = 130 // 1 USD = 130 KES (example rate)
+// Default exchange rates (fallback if not set in admin settings)
+export const DEFAULT_EXCHANGE_RATE_USD = 130 // 1 USD = 130 KES
+export const DEFAULT_EXCHANGE_RATE_EUR = 140 // 1 EUR = 140 KES
+// Backward compatibility: DEFAULT_EXCHANGE_RATE maps to USD rate
+export const DEFAULT_EXCHANGE_RATE = DEFAULT_EXCHANGE_RATE_USD
+// Helper: Default exchange rates object for easy use
+export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
+  usdToKes: DEFAULT_EXCHANGE_RATE_USD,
+  eurToKes: DEFAULT_EXCHANGE_RATE_EUR,
+}
 
+export interface ExchangeRates {
+  usdToKes: number // 1 USD = X KES
+  eurToKes: number // 1 EUR = X KES
+}
+
+// Note: getExchangeRates() has been moved to lib/currency-server-utils.ts
+// Import it only in server-side code (API routes, server components)
+
+// Synchronous version for client-side (uses defaults or passed rates)
 export function convertCurrency(
   amount: number,
   fromCurrency: Currency,
   toCurrency: Currency,
-  exchangeRate: number = DEFAULT_EXCHANGE_RATE
+  exchangeRates?: ExchangeRates
 ): number {
   if (fromCurrency === toCurrency) return amount
   
-  if (fromCurrency === 'USD' && toCurrency === 'KES') {
-    return amount * exchangeRate
+  // Use provided rates or defaults
+  const rates = exchangeRates || {
+    usdToKes: DEFAULT_EXCHANGE_RATE_USD,
+    eurToKes: DEFAULT_EXCHANGE_RATE_EUR,
   }
   
-  if (fromCurrency === 'KES' && toCurrency === 'USD') {
-    const usdAmount = amount / exchangeRate
-    // Round up to next dollar if there are any decimals
-    if (usdAmount % 1 !== 0) {
-      return Math.ceil(usdAmount)
-    }
-    return usdAmount
+  // Convert to KES first (base currency), then to target currency
+  let amountInKES = amount
+  
+  if (fromCurrency === 'USD') {
+    amountInKES = amount * rates.usdToKes
+  } else if (fromCurrency === 'EUR') {
+    amountInKES = amount * rates.eurToKes
+  }
+  // If fromCurrency is KES, amountInKES is already correct
+  
+  // Convert from KES to target currency
+  if (toCurrency === 'USD') {
+    const usdAmount = amountInKES / rates.usdToKes
+    // Round to 2 decimal places for USD
+    return Math.round(usdAmount * 100) / 100
+  } else if (toCurrency === 'EUR') {
+    const eurAmount = amountInKES / rates.eurToKes
+    // Round to 2 decimal places for EUR
+    return Math.round(eurAmount * 100) / 100
   }
   
-  return amount
+  // If toCurrency is KES, return amountInKES (round for KES)
+  return Math.round(amountInKES)
 }
+
+// Note: For server-side async conversion, import from lib/currency-server-utils.ts
+// Client-side code should fetch rates from /api/admin/settings and use convertCurrency() directly
 

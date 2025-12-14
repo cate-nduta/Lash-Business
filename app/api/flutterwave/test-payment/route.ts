@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY || process.env.FLUTTERWAVE_CLIENT_SECRET
     const encryptionKey = process.env.FLUTTERWAVE_ENCRYPTION_KEY
     const environment = process.env.FLUTTERWAVE_ENVIRONMENT || 'sandbox'
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'https://lashdiary.co.ke'
 
     // Validate credentials
     if (!secretKey) {

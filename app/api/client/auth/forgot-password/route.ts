@@ -47,7 +47,7 @@ function createPasswordResetEmailTemplate(data: { name: string; resetLink: strin
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px; background:${card}; border-radius:18px; border:1px solid ${accent}; overflow:hidden; box-shadow:0 12px 32px rgba(124,75,49,0.08);">
           <tr>
             <td style="padding:32px; background:${card}; text-align:center;">
-              <h1 style="margin:0 0 16px 0; font-size:28px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600;">Reset Your Password</h1>
+              <h1 style="margin:0 0 16px 0; font-size:28px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600;">Secure Password Reset</h1>
               <p style="margin:0; font-size:16px; color:${textSecondary}; line-height:1.6;">
                 Hi ${friendlyName}!
               </p>

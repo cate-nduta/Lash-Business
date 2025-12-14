@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
 interface Product {
   id: string
@@ -53,7 +53,7 @@ export default function Shop() {
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
-      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
       return formatCurrency(usdPrice)
     }
     return formatCurrency(price)

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { type ServiceCatalog, type ServiceCategory } from '@/lib/services-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES, type Currency } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import Link from 'next/link'
 
@@ -43,13 +43,14 @@ const serviceDescriptions: Record<string, string> = {
   'Lash Removal': 'Professional removal of existing lash extensions. Recommended before getting a new full set for best results.',
 }
 
-const toDisplayServices = (category: ServiceCategory, currency: 'KES' | 'USD', formatCurrency: (amount: number) => string): DisplayService[] =>
+const toDisplayServices = (category: ServiceCategory, currency: Currency, formatCurrency: (amount: number) => string): DisplayService[] =>
   category.services.map((service) => {
-    const price = currency === 'USD' && service.priceUSD !== undefined
-      ? service.priceUSD
-      : currency === 'USD' && service.price
-      ? convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
-      : service.price || 0
+    let price = service.price || 0
+    if (currency === 'USD' && service.priceUSD !== undefined) {
+      price = service.priceUSD
+    } else if (currency !== 'KES' && service.price) {
+      price = convertCurrency(service.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
+    }
     return {
       id: service.id,
       name: service.name,
@@ -80,11 +81,40 @@ export default function Services() {
     const servicesController = new AbortController()
     const homepageController = new AbortController()
     
+    // Helper function to safely abort a controller
+    const safeAbort = (ctrl: AbortController | null) => {
+      if (!ctrl) return
+      // Double-check signal exists and is not already aborted
+      if (!ctrl.signal || ctrl.signal.aborted) {
+        return
+      }
+      
+      try {
+        // Use a reason to avoid "aborted without reason" error
+        // Some environments require a reason when aborting
+        ctrl.abort('Cleanup')
+      } catch (e: any) {
+        // Silently ignore any abort errors - this is expected during cleanup
+        // AbortError can occur if the signal is already aborted or in transition
+        // DOMException can also occur in some browsers
+        const isAbortRelated = 
+          e?.name === 'AbortError' || 
+          e?.name === 'DOMException' ||
+          e?.message?.includes('abort') ||
+          e?.message?.includes('Abort')
+        
+        if (!isAbortRelated && process.env.NODE_ENV === 'development') {
+          // Only log non-abort errors in development
+          console.warn('Unexpected error during abort:', e)
+        }
+      }
+    }
+    
     // Set timeout to prevent hanging
     const timeoutId = setTimeout(() => {
       if (!isMounted) return
-      servicesController.abort()
-      homepageController.abort()
+      safeAbort(servicesController)
+      safeAbort(homepageController)
       setLoading(false)
     }, 10000) // 10 second timeout
     
@@ -172,8 +202,8 @@ export default function Services() {
     return () => {
       isMounted = false
       clearTimeout(timeoutId)
-      servicesController.abort()
-      homepageController.abort()
+      safeAbort(servicesController)
+      safeAbort(homepageController)
     }
   }, [])
 
@@ -345,11 +375,13 @@ export default function Services() {
                         addService({
                           serviceId: fullService.id,
                           name: fullService.name,
-                          price: currency === 'USD' && fullService.priceUSD !== undefined 
+                          price: currency === 'KES' 
+                            ? fullService.price || 0
+                            : currency === 'USD' && fullService.priceUSD !== undefined 
                             ? fullService.priceUSD 
-                            : currency === 'USD' && fullService.price
-                            ? convertCurrency(fullService.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
-                            : fullService.price || 0,
+                            : fullService.price
+                            ? convertCurrency(fullService.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
+                            : 0,
                           priceUSD: fullService.priceUSD,
                           duration: fullService.duration,
                           categoryId: activeCategory.id,

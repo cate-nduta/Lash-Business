@@ -1,6 +1,85 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendShopOrderConfirmationEmail } from '@/app/api/shop/email/utils'
+import { sendLabsSetupEmail } from '@/app/api/labs/email/utils'
+import { sendPaymentReceipt } from '@/lib/receipt-email-utils'
+import crypto from 'crypto'
+
+// Helper function to create labs account after payment
+async function createLabsAccount(order: any): Promise<{ userId: string; password: string | null }> {
+  // Generate a secure password
+  const password = crypto.randomBytes(12).toString('hex')
+  const hashedPassword = crypto.createHash('sha256').update(password).digest('hex')
+
+  // Create user account
+  const users = await readDataFile<any[]>('users.json', [])
+  
+  // Check if user already exists
+  const existingUser = users.find(u => u.email === order.email)
+  if (existingUser) {
+    // Update existing user with labs access
+    existingUser.labsAccess = true
+    existingUser.labsOrderId = order.orderId
+    existingUser.labsSubdomain = order.subdomain
+    existingUser.labsTierId = order.tierId
+    existingUser.labsBusinessName = order.businessName
+    await writeDataFile('users.json', users)
+    return { userId: existingUser.id, password: null } // Don't return password for existing users
+  }
+
+  // Create new user
+  const userId = `user-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+  const newUser = {
+    id: userId,
+    email: order.email,
+    name: order.businessName,
+    phone: order.phone,
+    password: hashedPassword,
+    role: 'labs-user',
+    labsAccess: true,
+    labsOrderId: order.orderId,
+    labsSubdomain: order.subdomain,
+    labsTierId: order.tierId,
+    labsBusinessName: order.businessName,
+    createdAt: new Date().toISOString(),
+  }
+
+  users.push(newUser)
+  await writeDataFile('users.json', users)
+
+  // Create initial settings file for this business
+  const businessSettings = {
+    business: {
+      name: order.businessName,
+      email: order.email,
+      phone: order.phone || '',
+      address: '',
+      description: '',
+      logoType: 'text' as const,
+      logoUrl: '',
+      logoText: order.businessName,
+      logoColor: '#733D26',
+      faviconUrl: '',
+      faviconVersion: 0,
+      taxPercentage: 0,
+    },
+    social: {
+      instagram: '',
+      facebook: '',
+      tiktok: '',
+      twitter: '',
+    },
+    newsletter: {
+      discountPercentage: 10,
+    },
+  }
+
+  // Save settings for this subdomain
+  const settingsFileName = `labs-${order.orderId}-settings.json`
+  await writeDataFile(settingsFileName, businessSettings)
+
+  return { userId, password }
+}
 
 // This endpoint receives callbacks from M-Pesa after payment processing
 export async function POST(request: NextRequest) {
@@ -204,8 +283,109 @@ export async function POST(request: NextRequest) {
         // Continue to check bookings
       }
 
-      // Try to find and update the booking if not a shop purchase
+      // Try to find and update labs order if not a shop purchase
+      let labsOrderHandled = false
       if (!shopPurchaseHandled) {
+        try {
+          const labsOrders = await readDataFile<any[]>('labs-orders.json', [])
+          const orderIndex = labsOrders.findIndex(
+            (o: any) => o.checkoutRequestID === checkoutRequestID
+          )
+
+          if (orderIndex !== -1) {
+            const order = labsOrders[orderIndex]
+            
+            // Update order status
+            order.status = 'completed'
+            order.completedAt = new Date().toISOString()
+            order.mpesaReceiptNumber = mpesaReceiptNumber
+            order.transactionDate = transactionDate
+
+            // Create account automatically
+            if (!order.accountCreated) {
+              try {
+                const accountResult = await createLabsAccount(order)
+                order.accountCreated = true
+                order.userId = accountResult.userId
+                order.password = accountResult.password // Store password temporarily for email
+                console.log(`✅ Labs account created for order ${order.orderId}`)
+              } catch (accountError) {
+                console.error('Error creating labs account:', accountError)
+                // Don't fail the payment if account creation fails
+              }
+            }
+
+            // Save updated order
+            labsOrders[orderIndex] = order
+            await writeDataFile('labs-orders.json', labsOrders)
+
+            // Load tier information to get tier name (used in multiple places)
+            const labsSettings = await readDataFile<any>('labs-settings.json', { tiers: [] })
+            const tier = labsSettings.tiers?.find((t: any) => t.id === order.tierId)
+            const tierName = tier?.name || order.tierId
+
+            // Send setup email with instructions
+            try {
+              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'https://lashdiary.co.ke'
+
+              // Include password in email if it's a new account
+              const emailData: any = {
+                businessName: order.businessName,
+                email: order.email,
+                tierName: tierName,
+                subdomain: order.subdomain || '',
+                loginUrl: `${baseUrl}/labs/login?orderId=${order.orderId}`,
+              }
+              
+              // Include password if it was generated (new user)
+              if (order.password) {
+                emailData.password = order.password
+              }
+              
+              await sendLabsSetupEmail(emailData)
+              
+              // Clear password from order after sending email (security)
+              delete order.password
+              console.log(`✅ Setup email sent for order ${order.orderId}`)
+            } catch (emailError) {
+              console.error('Error sending labs setup email:', emailError)
+              // Don't fail the payment if email fails
+            }
+
+            // Send payment receipt
+            try {
+              await sendPaymentReceipt({
+                recipientEmail: order.email,
+                recipientName: order.businessName,
+                amount: order.amountKES,
+                currency: order.currency || 'KES',
+                paymentMethod: 'M-Pesa',
+                transactionId: order.orderId,
+                transactionDate: order.completedAt || new Date().toISOString(),
+                businessName: order.businessName,
+                orderId: order.orderId,
+                labsOrderId: order.orderId,
+                tierName: tierName,
+                mpesaReceiptNumber: mpesaReceiptNumber || undefined,
+                description: `Payment for ${tierName}`,
+              }, order.orderId)
+              console.log(`✅ Payment receipt sent for order ${order.orderId}`)
+            } catch (receiptError) {
+              console.error('Error sending payment receipt:', receiptError)
+              // Don't fail the payment if receipt email fails
+            }
+
+            console.log(`✅ Labs order completed: ${order.orderId}`)
+            labsOrderHandled = true
+          }
+        } catch (labsError) {
+          console.error('Error updating labs order:', labsError)
+          // Continue to check bookings
+        }
+      }
+
+      // Try to find and update the booking if not a shop purchase or labs order
+      if (!shopPurchaseHandled && !labsOrderHandled) {
         try {
           const data = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
           const bookings = data.bookings || []
@@ -269,6 +449,27 @@ export async function POST(request: NextRequest) {
               await writeDataFile('bookings.json', { bookings })
 
               console.log(`✅ Payment recorded for booking ${booking.id}: KSH ${amountInKSH.toLocaleString()}`)
+
+              // Send payment receipt
+              try {
+                await sendPaymentReceipt({
+                  recipientEmail: booking.email || '',
+                  recipientName: booking.name || 'Customer',
+                  amount: amountInKSH,
+                  currency: 'KES',
+                  paymentMethod: 'M-Pesa',
+                  transactionId: mpesaReceiptNumber || checkoutRequestID,
+                  transactionDate: transactionDate ? new Date(transactionDate).toISOString() : new Date().toISOString(),
+                  bookingId: booking.id,
+                  serviceName: booking.service || undefined,
+                  mpesaReceiptNumber: mpesaReceiptNumber || undefined,
+                  description: booking.service ? `Payment for ${booking.service}` : 'Booking payment',
+                })
+                console.log(`✅ Payment receipt sent for booking ${booking.id}`)
+              } catch (receiptError) {
+                console.error('Error sending payment receipt:', receiptError)
+                // Don't fail the payment if receipt email fails
+              }
             } else {
               console.log(`ℹ️ Payment already recorded for checkoutRequestID: ${checkoutRequestID}`)
             }

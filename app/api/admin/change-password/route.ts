@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdminAuth } from '@/lib/admin-auth'
-import { cookies } from 'next/headers'
-import fs from 'fs'
-import path from 'path'
+import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
+import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { hashPassword, verifyPassword } from '@/lib/password-utils'
 
+// Fallback to env variable for backward compatibility
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'lashdiary2025'
 
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
+    const currentUser = await getAdminUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     
     const body = await request.json()
-    const { currentPassword, newPassword } = body
+    const { currentPassword, newPassword, confirmPassword } = body
     
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
@@ -20,10 +25,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Verify current password
-    if (currentPassword !== ADMIN_PASSWORD) {
+    if (newPassword !== confirmPassword) {
       return NextResponse.json(
-        { error: 'Current password is incorrect' },
+        { error: 'New password and confirm password do not match' },
         { status: 400 }
       )
     }
@@ -36,44 +40,86 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Update .env.local file
+    // Try to verify password from admins.json first
+    let passwordValid = false
     try {
-      const envPath = path.join(process.cwd(), '.env.local')
-      let envContent = ''
+      const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
+      const admins = data.admins || []
       
-      // Read existing .env.local if it exists
-      if (fs.existsSync(envPath)) {
-        envContent = fs.readFileSync(envPath, 'utf-8')
-      }
+      // Find the current user's admin record
+      const admin = admins.find(a => 
+        a && (a.username === currentUser.username || a.email === currentUser.username)
+      )
       
-      // Update or add ADMIN_PASSWORD
-      const lines = envContent.split('\n')
-      let passwordLineFound = false
-      
-      const updatedLines = lines.map(line => {
-        if (line.startsWith('ADMIN_PASSWORD=')) {
-          passwordLineFound = true
-          return `ADMIN_PASSWORD=${newPassword}`
+      if (admin) {
+        // Check password from admin record
+        if (admin.passwordHash) {
+          passwordValid = verifyPassword(currentPassword, admin.passwordHash)
+        } else if (admin.password) {
+          passwordValid = admin.password === currentPassword
         }
-        return line
-      })
+      }
+    } catch (error) {
+      console.log('Could not read admins.json, trying env password')
+    }
+    
+    // Fallback to env password if not found in admins.json
+    if (!passwordValid) {
+      passwordValid = currentPassword === ADMIN_PASSWORD
+    }
+    
+    if (!passwordValid) {
+      return NextResponse.json(
+        { error: 'Current password is incorrect' },
+        { status: 400 }
+      )
+    }
+    
+    // Update password in admins.json (works in production!)
+    try {
+      const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
+      const admins = data.admins || []
       
-      // If ADMIN_PASSWORD line wasn't found, add it
-      if (!passwordLineFound) {
-        updatedLines.push(`ADMIN_PASSWORD=${newPassword}`)
+      // Find and update the admin record
+      const adminIndex = admins.findIndex(a => 
+        a && (a.username === currentUser.username || a.email === currentUser.username)
+      )
+      
+      if (adminIndex >= 0) {
+        // Update existing admin password
+        const hashedPassword = hashPassword(newPassword)
+        admins[adminIndex] = {
+          ...admins[adminIndex],
+          passwordHash: hashedPassword,
+          password: undefined, // Remove plain password if it exists
+          updatedAt: new Date().toISOString(),
+        }
+      } else {
+        // Create new admin record if it doesn't exist (for owner)
+        const hashedPassword = hashPassword(newPassword)
+        admins.push({
+          id: `admin-${Date.now()}`,
+          username: currentUser.username || 'owner',
+          email: currentUser.username === 'owner' ? 'hello@lashdiary.co.ke' : currentUser.username,
+          role: currentUser.role || 'owner',
+          passwordHash: hashedPassword,
+          canManageAdmins: currentUser.canManageAdmins || false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
       }
       
-      // Write back to .env.local
-      fs.writeFileSync(envPath, updatedLines.join('\n'))
+      // Save updated admins
+      await writeDataFile('admins.json', { admins })
       
       return NextResponse.json({
         success: true,
-        message: 'Password changed successfully. Please restart your server for changes to take effect.',
+        message: 'Password changed successfully! You can now use your new password to log in.',
       })
     } catch (fileError) {
-      console.error('Error updating .env.local:', fileError)
+      console.error('Error updating password in admins.json:', fileError)
       return NextResponse.json(
-        { error: 'Failed to update password file. You may need to manually edit .env.local' },
+        { error: 'Failed to update password. Please try again or contact support.' },
         { status: 500 }
       )
     }

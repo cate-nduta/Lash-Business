@@ -71,6 +71,17 @@ GOOGLE_PROJECT_ID=your-project-id
 GOOGLE_CALENDAR_ID=primary
 GOOGLE_CALENDAR_EMAIL=hello@lashdiary.co.ke
 NEXT_PUBLIC_CONTACT_EMAIL=hello@lashdiary.co.ke
+
+# Optional: Static/Recurring Google Meet Room (Fallback)
+# If dynamic Meet link generation fails, this will be used as a backup
+# To create a recurring Meet room:
+# 1. Go to https://meet.google.com/
+# 2. Click "New Meeting" > "Create a meeting for later"
+# 3. Copy the meeting link (e.g., https://meet.google.com/abc-defg-hij)
+# 4. Paste it here
+STATIC_GOOGLE_MEET_ROOM=https://meet.google.com/your-meeting-code
+# OR use this alternative variable name:
+GOOGLE_MEET_ROOM=https://meet.google.com/your-meeting-code
 ```
 
 **Important Notes:**
@@ -105,6 +116,48 @@ npm install googleapis
 - **Email Notifications**: Both you and the client will receive email notifications when a booking is made
 - **Automatic Updates**: The calendar is checked in real-time, so booked slots are immediately removed from the dropdown
 
+## Google Meet Links for Consultations
+
+The system automatically creates Google Meet links for online consultations. However, if the automatic link generation fails, you can set up a **static/recurring Google Meet room** as a fallback.
+
+### Setting Up a Static Meet Room (Recommended)
+
+1. **Create a Recurring Meet Room:**
+   - Go to [Google Meet](https://meet.google.com/)
+   - Click "New Meeting" > "Create a meeting for later"
+   - Copy the meeting link (e.g., `https://meet.google.com/abc-defg-hij`)
+   - This link will work for all your consultations
+
+2. **Add to Environment Variables:**
+   - Add the link to your `.env.local` file:
+     ```env
+     STATIC_GOOGLE_MEET_ROOM=https://meet.google.com/your-meeting-code
+     ```
+   - Or use the alternative variable name:
+     ```env
+     GOOGLE_MEET_ROOM=https://meet.google.com/your-meeting-code
+     ```
+
+3. **Benefits:**
+   - ✅ **Reliable**: Always works, even if Calendar API fails
+   - ✅ **Consistent**: Same link for all consultations
+   - ✅ **Easy**: Clients always know where to find you
+   - ✅ **No delays**: No waiting for Google to generate links
+
+### How It Works
+
+1. **Primary Method**: System tries to create a unique Meet link via Google Calendar API
+2. **Fallback Method**: If that fails, uses your static Meet room link
+3. **Email**: Client always receives a working Meet link in their confirmation email
+
+### Alternative Options
+
+If you prefer not to use Google Meet, you can:
+- Use **Zoom** (requires Zoom API integration)
+- Use **Microsoft Teams** (requires Teams API integration)
+- Use **Jitsi Meet** (open-source, free, no account needed)
+- Manually send links via email after booking
+
 ## Troubleshooting
 
 ### "Failed to fetch available slots"
@@ -121,6 +174,12 @@ npm install googleapis
 - Check your browser console for errors
 - Verify the API routes are working by checking the Network tab
 - Make sure your calendar is shared with the service account
+
+### "Google Meet link not working in emails"
+- **Solution 1**: Set up a static Meet room (see above) - this is the most reliable option
+- **Solution 2**: Check server logs for Meet link generation errors
+- **Solution 3**: The link should still be in the calendar event (.ics file) attached to the email
+- **Solution 4**: Clients can reply to the email to request the link manually
 
 ## Security Notes
 

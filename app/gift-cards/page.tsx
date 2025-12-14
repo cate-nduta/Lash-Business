@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 import Link from 'next/link'
 
 // Secret token for private gift card access
@@ -136,7 +136,7 @@ export default function GiftCards() {
 
   const getDisplayAmount = (amount: number) => {
     if (currency === 'USD') {
-      const usdAmount = convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      const usdAmount = convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
       return formatCurrency(usdAmount)
     }
     return formatCurrency(amount)
@@ -254,7 +254,9 @@ export default function GiftCards() {
       }
       // If currency is USD, convert to KES
       if (currency === 'USD') {
-        amount = Math.round(customValue / DEFAULT_EXCHANGE_RATE)
+        amount = Math.round(customValue / DEFAULT_EXCHANGE_RATES.usdToKes)
+      } else if (currency === 'EUR') {
+        amount = Math.round(customValue / DEFAULT_EXCHANGE_RATES.eurToKes)
       } else {
         amount = customValue
       }

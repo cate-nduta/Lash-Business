@@ -1,0 +1,83 @@
+﻿{
+  "consultationFeeKES": 7000,
+  "tiers": [
+    {
+      "id": "starter",
+      "name": "Starter System",
+      "tagline": "Plug-and-play structure for service providers who want to stop managing chaos.",
+      "priceKES": 100000,
+      "description": "",
+      "features": {
+        "included": [
+          "Pre-built website structure (locked layout)",
+          "Core pages: Home, Services, Booking & Checkout, Contact",
+          "Guided setup flow (business details, services, pricing)",
+          "Basic booking rules: working hours, simple deposits OR full payment",
+          "One payment provider connection",
+          "Temporary subdomain included",
+          "Mobile-first, professional design"
+        ],
+        "excluded": [
+          "No layout changes",
+          "No strategy input",
+          "No advanced booking logic",
+          "No domain assistance beyond basic instructions"
+        ]
+      },
+      "cta": "Get Started"
+    },
+    {
+      "id": "business",
+      "name": "Business System",
+      "tagline": "Your website works the way your business actually works.",
+      "priceKES": 200000,
+      "description": "",
+      "features": {
+        "included": [
+          "Everything in Starter System",
+          "Flexible structure (you adjust pages and flow)",
+          "Additional pages: About, Policies / Terms, FAQ",
+          "Advanced booking rules: buffer times, cancellation windows, deposits + balance logic",
+          "Multiple payment methods (based on country)",
+          "Custom domain connection",
+          "Automated emails: booking confirmation, reminders, cancellation notices",
+          "One guided setup or review session"
+        ],
+        "excluded": [
+          "No unlimited changes",
+          "No full done-for-you build",
+          "No ongoing support"
+        ]
+      },
+      "cta": "Get Started",
+      "popular": true
+    },
+    {
+      "id": "premium",
+      "name": "Full Operations Suite",
+      "tagline": "A website that replaces a receptionist, a notebook, and half your mental load.",
+      "priceKES": 300000,
+      "description": "",
+      "features": {
+        "included": [
+          "Everything in Business System",
+          "Full system setup done-for-you",
+          "Full page set: Home, About, Services, Booking, Blog / Content, Legal pages",
+          "Client journey design: how clients discover, how they book, how they pay, how they behave",
+          "Advanced booking & checkout logic: service-specific rules, conditional deposits",
+          "Domain setup + launch handled",
+          "Post-launch support window",
+          "Final review + handover"
+        ]
+      },
+      "cta": "Get Started"
+    }
+  ],
+  "statistics": {
+    "consultationsCompleted": 0,
+    "websitesBuilt": 0,
+    "averageSetupTime": "2-3 weeks",
+    "clientSatisfactionRate": 0,
+    "businessesTransformed": 0
+  }
+}

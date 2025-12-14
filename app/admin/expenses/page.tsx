@@ -6,7 +6,7 @@ import Link from 'next/link'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import Toast from '@/components/Toast'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
 interface Expense {
   id: string
@@ -307,7 +307,7 @@ export default function AdminExpenses() {
   // Note: Expenses are stored in KES, so we convert if USD is selected
   const convertExpenseAmount = (amount: number): number => {
     if (currency === 'USD') {
-      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      return convertCurrency(amount, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
     }
     return amount
   }

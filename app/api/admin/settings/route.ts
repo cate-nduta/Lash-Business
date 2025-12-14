@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
     const social = settings?.social ?? {}
     const newsletter = settings?.newsletter ?? {}
 
+    const exchangeRates = settings?.exchangeRates || {}
+    
     return NextResponse.json({
         business: {
           name: business.name ?? '',
@@ -61,6 +63,10 @@ export async function GET(request: NextRequest) {
         },
       social,
       newsletter: newsletter || { discountPercentage: 10 },
+      exchangeRates: {
+        usdToKes: typeof exchangeRates.usdToKes === 'number' ? exchangeRates.usdToKes : 130,
+        eurToKes: typeof exchangeRates.eurToKes === 'number' ? exchangeRates.eurToKes : 140,
+      },
     })
   } catch (error: any) {
     if (error.status === 401) {
@@ -104,6 +110,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { exchangeRates } = body
+    
     const settings = {
       business: {
         name: business.name || '',
@@ -122,6 +130,14 @@ export async function POST(request: NextRequest) {
       },
       social: social || {},
       newsletter: newsletter || { discountPercentage: 10 },
+      exchangeRates: {
+        usdToKes: typeof exchangeRates?.usdToKes === 'number' && exchangeRates.usdToKes > 0 
+          ? exchangeRates.usdToKes 
+          : 130,
+        eurToKes: typeof exchangeRates?.eurToKes === 'number' && exchangeRates.eurToKes > 0 
+          ? exchangeRates.eurToKes 
+          : 140,
+      },
     }
 
     await writeDataFile('settings.json', settings)

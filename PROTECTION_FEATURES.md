@@ -167,3 +167,5 @@ These technical protections are deterrents, but **legal protection** (copyright 
 **Remember**: No technical protection is 100% foolproof. The goal is to make unauthorized copying difficult enough that most users won't attempt it, while the watermark ensures that even if they do, your content is clearly marked as copyrighted.
 
 
+
+

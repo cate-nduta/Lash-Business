@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
     await writeFile(filepath, buffer)
 
     // Return absolute URL for local uploads too
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-    const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'localhost:3000'
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'https'
+    const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'lashdiary.co.ke'
     const publicUrl = `${protocol}://${host}/uploads/blog/${filename}`
     
     console.log(`[Blog Upload] Image uploaded locally: ${publicUrl}`)

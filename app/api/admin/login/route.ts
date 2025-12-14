@@ -25,13 +25,13 @@ export async function POST(request: NextRequest) {
       maxAge: Math.floor(ADMIN_SESSION_MAX_IDLE_MS / 1000),
     }
 
-    // Try multi-admin login first (only if username is provided)
-    if (username && username.trim()) {
-      try {
-        const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
-        const admins = data.admins || []
-        
-        // Check if any admin credentials match
+    // Try multi-admin login first (check admins.json)
+    try {
+      const data = await readDataFile<{ admins: any[] }>('admins.json', { admins: [] })
+      const admins = data.admins || []
+      
+      // If username is provided, check for that specific admin
+      if (username && username.trim()) {
         const admin = admins.find(admin => 
           admin && (admin.username === username.trim() || admin.email === username.trim())
         )
@@ -45,27 +45,49 @@ export async function POST(request: NextRequest) {
             isValid = admin.password === password
           }
 
-          if (!isValid) {
-            return NextResponse.json(
-              { success: false, error: 'Invalid credentials' },
-              { status: 401 }
-            )
+          if (isValid) {
+            const response = NextResponse.json({
+              success: true,
+              username: admin.username,
+              role: admin.role,
+            })
+            response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
+            response.cookies.set(ADMIN_USER_COOKIE, admin.username, cookieOptions)
+            response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
+            return response
+          }
+        }
+      } else {
+        // No username provided - check for owner account in admins.json
+        const owner = admins.find(admin => 
+          admin && (admin.role === 'owner' || admin.username === 'owner')
+        )
+
+        if (owner) {
+          let isValid = false
+
+          if (owner.passwordHash) {
+            isValid = verifyPassword(password, owner.passwordHash)
+          } else if (owner.password) {
+            isValid = owner.password === password
           }
 
-          const response = NextResponse.json({
-            success: true,
-            username: admin.username,
-            role: admin.role,
-          })
-          response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
-          response.cookies.set(ADMIN_USER_COOKIE, admin.username, cookieOptions)
-          response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
-          return response
+          if (isValid) {
+            const response = NextResponse.json({
+              success: true,
+              username: owner.username || 'owner',
+              role: owner.role || 'owner',
+            })
+            response.cookies.set(ADMIN_AUTH_COOKIE, 'authenticated', cookieOptions)
+            response.cookies.set(ADMIN_USER_COOKIE, owner.username || 'owner', cookieOptions)
+            response.cookies.set(ADMIN_LAST_ACTIVE_COOKIE, String(now), cookieOptions)
+            return response
+          }
         }
-      } catch (error) {
-        // If admins.json doesn't exist or has issues, fall back to env password
-        console.log('Multi-admin not available, using env password')
       }
+    } catch (error) {
+      // If admins.json doesn't exist or has issues, fall back to env password
+      console.log('Multi-admin not available, using env password')
     }
 
     // Fallback to original single password method (for backward compatibility)

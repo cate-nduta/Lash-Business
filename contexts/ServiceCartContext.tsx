@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { Currency, convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
 export interface ServiceCartItem {
   serviceId: string
@@ -18,7 +19,7 @@ interface ServiceCartContextType {
   removeService: (serviceId: string) => void
   clearCart: () => void
   getTotalItems: () => number
-  getTotalPrice: (currency: 'KES' | 'USD') => number
+  getTotalPrice: (currency: Currency) => number
   getTotalDuration: () => number
   hasService: (serviceId: string) => boolean
 }
@@ -83,10 +84,16 @@ export function ServiceCartProvider({ children }: { children: ReactNode }) {
     return items.length
   }
 
-  const getTotalPrice = (currency: 'KES' | 'USD') => {
+  const getTotalPrice = (currency: Currency) => {
     return items.reduce((total, item) => {
-      const price = currency === 'USD' && item.priceUSD !== undefined ? item.priceUSD : item.price
-      return total + price
+      if (currency === 'KES') {
+        return total + item.price
+      }
+      if (currency === 'USD' && item.priceUSD !== undefined) {
+        return total + item.priceUSD
+      }
+      // For EUR or USD without priceUSD, convert from KES
+      return total + convertCurrency(item.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
     }, 0)
   }
 

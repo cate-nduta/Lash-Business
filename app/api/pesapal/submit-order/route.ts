@@ -5,8 +5,19 @@ import crypto from 'crypto'
 const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || ''
 const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || ''
 const PESAPAL_ENVIRONMENT = process.env.PESAPAL_ENVIRONMENT || 'sandbox' // 'sandbox' or 'live'
-const PESAPAL_CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/pesapal/callback`
-const PESAPAL_IPN_URL = process.env.PESAPAL_IPN_URL || `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/pesapal/ipn`
+function getBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '')
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return `https://${trimmed}`
+  }
+  return 'https://lashdiary.co.ke'
+}
+const PESAPAL_CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || `${getBaseUrl()}/api/pesapal/callback`
+const PESAPAL_IPN_URL = process.env.PESAPAL_IPN_URL || `${getBaseUrl()}/api/pesapal/ipn`
 
 // Pesapal API URLs
 const PESAPAL_BASE_URL = PESAPAL_ENVIRONMENT === 'live'

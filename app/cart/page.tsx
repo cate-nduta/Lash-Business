@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/contexts/CartContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 import Link from 'next/link'
 
 export default function Cart() {
@@ -36,7 +36,7 @@ export default function Cart() {
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
-      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
       return formatCurrency(usdPrice)
     }
     return formatCurrency(price)

@@ -67,13 +67,23 @@ export async function generateMetadata(): Promise<Metadata> {
       icons: absoluteFaviconUrl
         ? {
             icon: [
-              { url: absoluteFaviconUrl, type: 'image/svg+xml' },
-              { url: absoluteFaviconUrl, sizes: 'any' },
+              // Root favicon.ico for Google search results (Google specifically looks for this)
+              { url: `${baseUrl}/favicon.ico`, sizes: 'any' },
+              // SVG favicon for modern browsers
+              { url: absoluteFaviconUrl, type: 'image/svg+xml', sizes: 'any' },
+              // Additional sizes for better compatibility
+              { url: absoluteFaviconUrl, sizes: '32x32', type: 'image/svg+xml' },
+              { url: absoluteFaviconUrl, sizes: '16x16', type: 'image/svg+xml' },
             ],
             shortcut: absoluteFaviconUrl,
             apple: absoluteFaviconUrl,
           }
-        : undefined,
+        : {
+            // Fallback: ensure favicon.ico is always available
+            icon: [
+              { url: `${baseUrl}/favicon.ico`, sizes: 'any' },
+            ],
+          },
       verification: {
         google: '8pANyQEtsYFr_Bh3f2tfaiNIdoNjdtYVaaAZI54N4pg',
       },
@@ -186,6 +196,9 @@ export default async function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        {/* Explicit favicon links for Google search results - Google specifically looks for /favicon.ico */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="shortcut icon" href="/favicon.ico" />
         {/* Inject theme colors immediately before React hydrates to prevent flash of wrong theme */}
         <script
           dangerouslySetInnerHTML={{

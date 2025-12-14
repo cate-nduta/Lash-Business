@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useInView } from 'react-intersection-observer'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATE } from '@/lib/currency-utils'
+import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 
 // Lazy load CalendarPicker for faster initial page load
@@ -101,8 +102,9 @@ function isFillService(serviceName: string, categoryMap: Record<string, { id: st
 const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 export default function Booking() {
+  const searchParams = useSearchParams()
   const { currency, setCurrency, formatCurrency: formatCurrencyContext } = useCurrency()
-  const { items: cartItems, removeService, getTotalItems, getTotalPrice, getTotalDuration, clearCart } = useServiceCart()
+  const { items: cartItems, removeService, getTotalItems, getTotalPrice, getTotalDuration, clearCart, addService } = useServiceCart()
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -114,7 +116,9 @@ export default function Booking() {
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'none'>('none')
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'none' | string>('none')
+  const [paymentSettings, setPaymentSettings] = useState<any>(null)
+  const [loadingPaymentSettings, setLoadingPaymentSettings] = useState(true)
 
   // Auto-switch to card payment if USD is selected and M-Pesa is selected (M-Pesa only accepts KES)
   useEffect(() => {
@@ -153,6 +157,11 @@ export default function Booking() {
       : formData.service
       ? [formData.service]
       : []
+
+  // Check if this is a consultation booking
+  const isConsultation = selectedServiceNames.some(name => 
+    name && name.toLowerCase().includes('consult')
+  )
 
   // Debug helper to ensure cart + selection stay in sync (only runs in browser)
   useEffect(() => {
@@ -661,6 +670,28 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       })
     : null
 
+  // Load payment settings
+  useEffect(() => {
+    const loadPaymentSettings = async () => {
+      try {
+        const response = await fetch('/api/payment-settings', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          setPaymentSettings(data)
+          // Set default payment method if configured
+          if (data.defaultPaymentMethod) {
+            setPaymentMethod(data.defaultPaymentMethod)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading payment settings:', error)
+      } finally {
+        setLoadingPaymentSettings(false)
+      }
+    }
+    loadPaymentSettings()
+  }, [])
+
   // Load services and pre-appointment guidelines in parallel - no cache for real-time updates
   useEffect(() => {
     let isMounted = true
@@ -772,6 +803,63 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
   }, [])
 
+  // Handle URL parameters for pre-selecting consultation service
+  useEffect(() => {
+    const serviceParam = searchParams.get('service')
+    const tierParam = searchParams.get('tier')
+    
+    // Store tier in localStorage for later reference
+    if (tierParam) {
+      localStorage.setItem('labsTier', tierParam)
+    }
+    
+    // Pre-select consultation service if specified in URL
+    if (serviceParam && serviceParam.toLowerCase().includes('consult')) {
+      // Wait for services to load before selecting
+      if (!loadingServices && serviceOptionGroups.length > 0) {
+        // Find the consultation service in the service groups
+        let found = false
+        for (const group of serviceOptionGroups) {
+          const consultationService = group.options.find(
+            option => option.name.toLowerCase().includes('consult')
+          )
+          if (consultationService) {
+            // Add to cart if not already added
+            const alreadyInCart = cartItems.some(item => item.name === consultationService.name)
+            if (!alreadyInCart) {
+              addService({
+                serviceId: consultationService.id,
+                name: consultationService.name,
+                price: consultationService.price,
+                priceUSD: consultationService.priceUSD,
+                duration: consultationService.duration,
+                categoryId: consultationService.categoryId,
+                categoryName: consultationService.categoryName,
+              })
+            }
+            found = true
+            break
+          }
+        }
+        
+        // If consultation service not found in catalog, set it directly in formData
+        // This handles the case where consultation might not be in the regular services
+        if (!found && !formData.service) {
+          setFormData(prev => ({
+            ...prev,
+            service: serviceParam,
+          }))
+        }
+      } else if (!loadingServices && !formData.service) {
+        // If services are loaded but no consultation found, set service name directly
+        setFormData(prev => ({
+          ...prev,
+          service: serviceParam,
+        }))
+      }
+    }
+  }, [searchParams, loadingServices, serviceOptionGroups, cartItems, addService, formData.service])
+
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('')
@@ -816,6 +904,22 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   const salonReferralActive = referralMode === 'salon'
   const referralActive = referralMode !== 'none'
   const isReferralBasedBooking = referralActive
+
+  // Consultation questionnaire state
+  const [consultationForm, setConsultationForm] = useState({
+    businessName: '',
+    serviceType: '',
+    businessStatus: '',
+    currentBookingMethod: '',
+    paymentTiming: '',
+    hasNoShows: '',
+    hasWebsite: '',
+    websiteIssues: '',
+    investmentWillingness: '',
+    consultationGoals: '',
+    successCriteria: '',
+    whyNow: '',
+  })
 
   // Returning discount promo code clearing removed - discounts will be applied manually
 
@@ -1205,7 +1309,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         }
         // Fallback: convert KES to USD if USD price not set
         if (currency === 'USD' && servicePrices[serviceName]) {
-          return total + convertCurrency(servicePrices[serviceName], 'KES', 'USD', DEFAULT_EXCHANGE_RATE)
+          return total + convertCurrency(servicePrices[serviceName], 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
         }
         return total + (servicePrices[serviceName] || 0)
       }, 0)
@@ -1515,6 +1619,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     if (submitStatus.type === 'error') {
       setSubmitStatus({ type: null, message: '' })
     }
+  }
+
+  const handleConsultationChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setConsultationForm({
+      ...consultationForm,
+      [e.target.name]: e.target.value,
+    })
   }
 
   useEffect(() => {
@@ -2844,6 +2955,23 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 Payment Method
               </label>
               
+              {/* Checkout Instructions from Admin */}
+              {paymentSettings?.showPaymentInstructions && paymentSettings?.checkoutInstructions && (
+                <div className="mb-4 bg-amber-50 border-2 border-amber-200 rounded-lg p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="text-xl sm:text-2xl flex-shrink-0">ℹ️</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm sm:text-base font-semibold text-amber-900 mb-2">
+                        {paymentSettings.paymentInstructionsTitle || 'Payment Instructions'}
+                      </p>
+                      <p className="text-xs sm:text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">
+                        {paymentSettings.checkoutInstructions}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Payment Notice */}
               <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 sm:p-5">
                 <div className="flex items-start gap-3">
@@ -2868,51 +2996,110 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </div>
 
               <div className="space-y-3">
-                {/* Card Payment Option */}
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                  style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="card"
-                    checked={paymentMethod === 'card'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
-                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
-                      💳 Card Payment (Full Payment Required)
-                      <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES & USD)</span>
-                    </div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                      Pay the full amount ({pricing ? formatCurrencyContext(pricing.finalPrice) : 'full price'}) securely via card. Accepts both KES and USD. You'll be redirected to a secure payment page.
-                  </div>
-                </div>
-                </label>
+                {/* Admin-Configured Payment Links */}
+                {paymentSettings?.paymentLinks && paymentSettings.paymentLinks.length > 0 && (
+                  <>
+                    {paymentSettings.paymentLinks.map((link: any) => {
+                      const getIcon = (type: string) => {
+                        switch (type) {
+                          case 'stripe': return '💳'
+                          case 'paypal': return '🅿️'
+                          case 'bank-transfer': return '🏦'
+                          case 'mpesa': return '📱'
+                          default: return '💵'
+                        }
+                      }
+                      
+                      return (
+                        <label
+                          key={link.id}
+                          className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
+                          style={{ borderColor: paymentMethod === link.id ? '#7C4B31' : '#E5D5C8' }}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentMethod"
+                            value={link.id}
+                            checked={paymentMethod === link.id}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
+                              {getIcon(link.type)} {link.name}
+                            </div>
+                            {link.instructions && (
+                              <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
+                                {link.instructions}
+                              </div>
+                            )}
+                            {link.url && (
+                              <a
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-brown-dark underline mt-1 inline-block"
+                              >
+                                Open Payment Link →
+                              </a>
+                            )}
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </>
+                )}
 
-                {/* M-Pesa Payment Option */}
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                  style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="mpesa"
-                    checked={paymentMethod === 'mpesa'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
-                    disabled={currency === 'USD'}
-                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50 touch-manipulation"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
-                      📱 M-Pesa STK Push (Deposit Payment)
-                      <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES only)</span>
-                      {currency === 'USD' && <span className="block sm:inline sm:ml-2 text-xs text-amber-700 font-semibold mt-1 sm:mt-0">⚠️ Not available for USD</span>}
-                    </div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                      Pay the deposit ({pricing ? formatCurrencyContext(depositAmount) : 'deposit'}) now via M-Pesa. <strong>KES currency only.</strong> You can pay the remaining balance later.
+                {/* Card Payment Option (fallback if no payment links configured) */}
+                {(!paymentSettings?.paymentLinks || paymentSettings.paymentLinks.length === 0) && (
+                  <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
+                    style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="card"
+                      checked={paymentMethod === 'card'}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
+                        💳 Card Payment (Full Payment Required)
+                        <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES & USD)</span>
+                      </div>
+                      <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
+                        Pay the full amount ({pricing ? formatCurrencyContext(pricing.finalPrice) : 'full price'}) securely via card. Accepts both KES and USD. You'll be redirected to a secure payment page.
                     </div>
                   </div>
-                </label>
+                  </label>
+                )}
+
+                {/* M-Pesa Payment Option (fallback if no payment links configured) */}
+                {(!paymentSettings?.paymentLinks || paymentSettings.paymentLinks.length === 0) && (
+                  <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
+                    style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="mpesa"
+                      checked={paymentMethod === 'mpesa'}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      disabled={currency === 'USD'}
+                      className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50 touch-manipulation"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
+                        📱 M-Pesa STK Push (Deposit Payment)
+                        <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES only)</span>
+                        {currency === 'USD' && <span className="block sm:inline sm:ml-2 text-xs text-amber-700 font-semibold mt-1 sm:mt-0">⚠️ Not available for USD</span>}
+                      </div>
+                      <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
+                        Pay the deposit ({pricing ? formatCurrencyContext(depositAmount) : 'deposit'}) now via M-Pesa. <strong>KES currency only.</strong> You can pay the remaining balance later.
+                      </div>
+                    </div>
+                  </label>
+                )}
 
                 {/* Pay Later Option (only if deposit allowed) */}
                 {!requiresFullPayment && (
@@ -2923,7 +3110,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     name="paymentMethod"
                     value="none"
                     checked={paymentMethod === 'none'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'mpesa' | 'card' | 'none')}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
                     className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
                   />
                   <div className="flex-1 min-w-0">

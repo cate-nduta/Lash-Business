@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { sendAftercareEmail } from '@/app/api/booking/email/utils'
+import { sendPaymentReceipt } from '@/lib/receipt-email-utils'
 
 interface Booking {
   id: string
@@ -129,6 +130,30 @@ export async function POST(request: NextRequest) {
 
     bookings[bookingIndex] = booking
     await writeDataFile('bookings.json', { bookings })
+
+    // Send payment receipt
+    if (booking.email && amount > 0) {
+      try {
+        const paymentAmount = amount || 0
+        await sendPaymentReceipt({
+          recipientEmail: booking.email,
+          recipientName: booking.name,
+          amount: paymentAmount,
+          currency: 'KES',
+          paymentMethod: paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'M-Pesa',
+          transactionId: mpesaCheckoutRequestID || `${booking.id}-${Date.now()}`,
+          transactionDate: new Date().toISOString(),
+          bookingId: booking.id,
+          serviceName: booking.service || undefined,
+          mpesaReceiptNumber: mpesaCheckoutRequestID || undefined,
+          description: booking.service ? `Payment for ${booking.service}` : 'Booking payment',
+        })
+        console.log(`✅ Payment receipt sent for booking ${booking.id}`)
+      } catch (receiptError) {
+        console.error('Error sending payment receipt:', receiptError)
+        // Don't fail the payment if receipt email fails
+      }
+    }
 
     // Send aftercare email when booking is marked as paid (appointment completed)
     if (isNowPaidInFull && !wasPaidInFull && booking.email) {
