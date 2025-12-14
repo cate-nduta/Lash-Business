@@ -234,6 +234,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Ensure at least one tier is provided
+    if (tiers.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one pricing tier must be configured' },
+        { status: 400 }
+      )
+    }
+
     // Validate each tier
     for (const tier of tiers) {
       if (!tier.id || !tier.name || typeof tier.priceKES !== 'number' || tier.priceKES < 0) {

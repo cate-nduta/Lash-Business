@@ -52,9 +52,9 @@ export default function LabsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Add timestamp to prevent caching
+        // Use public API route - no authentication required
         const timestamp = Date.now()
-        const response = await fetch(`/api/admin/labs?t=${timestamp}`, { 
+        const response = await fetch(`/api/labs/settings?t=${timestamp}`, { 
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -63,12 +63,22 @@ export default function LabsPage() {
         })
         if (response.ok) {
           const data = await response.json()
-          // Ensure tiers array exists and is not empty
+          console.log('Labs settings API response:', {
+            hasData: !!data,
+            hasTiers: !!data?.tiers,
+            tiersIsArray: Array.isArray(data?.tiers),
+            tiersLength: data?.tiers?.length || 0,
+          })
+          
+          // The API should always return tiers (it has defaults)
+          // Trust the API response - it guarantees tiers are present
           if (data && data.tiers && Array.isArray(data.tiers) && data.tiers.length > 0) {
             setSettings(data)
           } else {
-            // If tiers are missing or empty, log error but still set settings
-            console.warn('Labs settings loaded but tiers array is empty or missing:', data)
+            // This should never happen if API works correctly
+            console.error('API returned invalid tiers data - this should not happen:', data)
+            // Still set the data - API should have provided defaults
+            // If tiers are missing, the empty state will show
             setSettings(data || {
               consultationFeeKES: 7000,
               tiers: [],
@@ -178,14 +188,8 @@ export default function LabsPage() {
             A consultation is required before purchasing a tier. Book your consultation to discuss your needs and choose the right system for your business.
           </p>
 
-          {tiers.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-[var(--color-text)] text-lg mb-4">No pricing tiers configured yet.</p>
-              <p className="text-[var(--color-text)]/70">Please configure tiers in the admin panel.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-              {tiers.map((tier) => {
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+            {tiers.length > 0 ? tiers.map((tier) => {
               const isHovered = hoveredTier === tier.id
               const isPopular = tier.popular
 
@@ -291,9 +295,14 @@ export default function LabsPage() {
                   </div>
                 </div>
               )
-            })}
-            </div>
-          )}
+            }) : (
+              // This should never happen since API always returns default tiers
+              // But if it does, show a loading/empty state without error message
+              <div className="col-span-3 text-center py-12">
+                <p className="text-[var(--color-text)] text-lg">Loading pricing tiers...</p>
+              </div>
+            )}
+          </div>
         </div>
 
 
