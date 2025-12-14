@@ -3,6 +3,7 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const runtime = 'nodejs'
 
 export interface PricingTier {
   id: string
@@ -162,22 +163,43 @@ export async function GET(request: NextRequest) {
   try {
     const settings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
     
-    // If tiers array is empty or missing, ensure we have default tiers
-    if (!settings.tiers || settings.tiers.length === 0) {
-      // Initialize with default tiers if file exists but has no tiers
-      const settingsWithTiers: LabsSettings = {
-        ...settings,
-        tiers: DEFAULT_TIERS,
-        consultationFeeKES: settings.consultationFeeKES || DEFAULT_SETTINGS.consultationFeeKES,
-        statistics: settings.statistics || DEFAULT_SETTINGS.statistics,
-      }
-      
-      // Save the initialized settings
-      await writeDataFile('labs-settings.json', settingsWithTiers)
-      return NextResponse.json(settingsWithTiers)
+    // Log what we received for debugging
+    console.log('Loaded labs settings:', {
+      hasTiers: !!settings.tiers,
+      tiersLength: settings.tiers?.length || 0,
+      consultationFee: settings.consultationFeeKES,
+    })
+    
+    // Ensure all required fields are present with defaults
+    const completeSettings: LabsSettings = {
+      consultationFeeKES: settings.consultationFeeKES || DEFAULT_SETTINGS.consultationFeeKES,
+      tiers: (settings.tiers && Array.isArray(settings.tiers) && settings.tiers.length > 0) 
+        ? settings.tiers 
+        : DEFAULT_TIERS,
+      statistics: settings.statistics || DEFAULT_SETTINGS.statistics,
+      whatYouGet: settings.whatYouGet || DEFAULT_SETTINGS.whatYouGet,
+      googleMeetRoom: settings.googleMeetRoom || '',
+      googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
     
-    return NextResponse.json(settings)
+    // Always ensure tiers are present - if missing or empty, use defaults and save
+    if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
+      console.warn('Labs settings had empty tiers, initializing with defaults')
+      completeSettings.tiers = DEFAULT_TIERS
+      await writeDataFile('labs-settings.json', completeSettings)
+    } else if (!settings.tiers || settings.tiers.length === 0) {
+      // Settings were loaded but tiers were empty - save the complete version
+      await writeDataFile('labs-settings.json', completeSettings)
+    }
+    
+    // Validate the response before sending
+    if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
+      console.error('ERROR: Complete settings still has empty tiers after initialization!')
+      // Force defaults as last resort
+      return NextResponse.json(DEFAULT_SETTINGS)
+    }
+    
+    return NextResponse.json(completeSettings)
   } catch (error) {
     console.error('Error loading labs settings:', error)
     // If file doesn't exist, create it with defaults
@@ -234,6 +256,7 @@ export async function POST(request: NextRequest) {
     const newMeetRoom = body.googleMeetRoom || ''
     const meetRoomChanged = newMeetRoom !== (currentSettings.googleMeetRoom || '')
 
+    // Preserve existing statistics and whatYouGet if not provided
     const settings: LabsSettings = {
       consultationFeeKES: Math.round(consultationFeeKES),
       tiers: tiers.map((tier: PricingTier) => ({
@@ -244,13 +267,22 @@ export async function POST(request: NextRequest) {
           excluded: tier.features.excluded || [],
         },
       })),
-      statistics: body.statistics || DEFAULT_STATISTICS,
-      whatYouGet: body.whatYouGet || DEFAULT_WHAT_YOU_GET,
+      statistics: body.statistics || currentSettings.statistics || DEFAULT_STATISTICS,
+      whatYouGet: body.whatYouGet || currentSettings.whatYouGet || DEFAULT_WHAT_YOU_GET,
       googleMeetRoom: newMeetRoom,
       // Update last changed date if Meet room link was changed
       googleMeetRoomLastChanged: meetRoomChanged 
         ? new Date().toISOString()
         : (body.googleMeetRoomLastChanged || currentSettings.googleMeetRoomLastChanged || new Date().toISOString()),
+    }
+
+    // Ensure tiers are saved correctly
+    if (!settings.tiers || settings.tiers.length === 0) {
+      console.warn('Warning: Attempting to save settings with empty tiers array')
+      // Don't allow saving empty tiers - use current or defaults
+      settings.tiers = currentSettings.tiers && currentSettings.tiers.length > 0 
+        ? currentSettings.tiers 
+        : DEFAULT_TIERS
     }
 
     await writeDataFile('labs-settings.json', settings)

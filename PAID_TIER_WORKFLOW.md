@@ -212,3 +212,4 @@ To test the complete paid workflow:
 - Card payment integration is pending (would use Stripe/PayPal)
 - For testing without real payment, you can manually mark order as `completed` in `labs-orders.json`
 
+

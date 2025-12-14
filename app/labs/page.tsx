@@ -52,11 +52,30 @@ export default function LabsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await fetch('/api/admin/labs', { cache: 'no-store' })
+        // Add timestamp to prevent caching
+        const timestamp = Date.now()
+        const response = await fetch(`/api/admin/labs?t=${timestamp}`, { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          }
+        })
         if (response.ok) {
           const data = await response.json()
-          setSettings(data)
+          // Ensure tiers array exists and is not empty
+          if (data && data.tiers && Array.isArray(data.tiers) && data.tiers.length > 0) {
+            setSettings(data)
+          } else {
+            // If tiers are missing or empty, log error but still set settings
+            console.warn('Labs settings loaded but tiers array is empty or missing:', data)
+            setSettings(data || {
+              consultationFeeKES: 7000,
+              tiers: [],
+            })
+          }
         } else {
+          console.error('Failed to load labs settings:', response.status, response.statusText)
           // Fallback to default if API fails
           setSettings({
             consultationFeeKES: 7000,
