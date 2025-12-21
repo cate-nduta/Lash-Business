@@ -39,6 +39,16 @@ Make sure these are set in Netlify's environment variables:
 - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
 - `SUPABASE_GALLERY_BUCKET` - Your Supabase storage bucket name
 
+### 🚨 Pesapal Payment Gateway (REQUIRED for payments):
+- `PESAPAL_CONSUMER_KEY` - Your Pesapal consumer key
+- `PESAPAL_CONSUMER_SECRET` - Your Pesapal consumer secret
+- `PESAPAL_ENVIRONMENT` - Set to `live` for production
+- `NEXT_PUBLIC_BASE_URL` - Your production URL (e.g., `https://lashdiary.co.ke`)
+- `PESAPAL_CALLBACK_URL` - Your callback URL (e.g., `https://lashdiary.co.ke/api/pesapal/callback`)
+- `PESAPAL_IPN_URL` - Your IPN URL (e.g., `https://lashdiary.co.ke/api/pesapal/ipn`)
+
+**⚠️ IMPORTANT**: Without these Pesapal variables, payments will NOT work! See `NETLIFY_PESAPAL_SETUP.md` for detailed setup instructions.
+
 ### Email Configuration (choose one):
 - **Option 1: Resend**
   - `RESEND_API_KEY`

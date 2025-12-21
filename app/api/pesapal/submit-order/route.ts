@@ -57,10 +57,15 @@ export async function POST(request: NextRequest) {
   try {
     // Check if Pesapal is configured
     if (!PESAPAL_CONSUMER_KEY || !PESAPAL_CONSUMER_SECRET) {
+      console.error('❌ Pesapal API credentials not configured:', {
+        hasKey: !!PESAPAL_CONSUMER_KEY,
+        hasSecret: !!PESAPAL_CONSUMER_SECRET,
+        environment: PESAPAL_ENVIRONMENT,
+      })
       return NextResponse.json(
         { 
           error: 'Pesapal API credentials not configured',
-          message: 'Please add PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET to your .env.local file'
+          message: 'Pesapal environment variables are missing. Please add PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET to your Netlify environment variables (for production) or .env.local file (for local development). See NETLIFY_PESAPAL_SETUP.md for instructions.'
         },
         { status: 500 }
       )
