@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminBackButton from '@/components/AdminBackButton'
 import type { ConsultationInvoice, InvoiceItem } from '@/app/api/admin/labs/invoices/route'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -223,6 +224,7 @@ export default function AdminLabsInvoices() {
   return (
     <div className="min-h-screen bg-baby-pink-light py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AdminBackButton />
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-display text-brown mb-2">Labs Invoices</h1>

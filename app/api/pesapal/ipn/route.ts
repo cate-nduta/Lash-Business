@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { sendShopOrderConfirmationEmail } from '@/app/api/shop/email/utils'
 
 // Pesapal API Configuration
 const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || ''
@@ -88,9 +89,10 @@ export async function POST(request: NextRequest) {
       })
 
       // Try to find and update the booking
+      let bookingUpdated = false
       try {
-        const data = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
-        const bookings = data.bookings || []
+        const bookingData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
+        const bookings = bookingData.bookings || []
         
         // Find booking by orderTrackingId (could be in initial deposit or balance payment)
         const bookingIndex = bookings.findIndex(b => {
@@ -147,14 +149,124 @@ export async function POST(request: NextRequest) {
             booking.paymentStatus = 'paid'
           }
 
-          await writeDataFile('bookings.json', data)
+          await writeDataFile('bookings.json', bookingData)
           
           console.log(`✅ Payment recorded for booking ${booking.id}: ${currency} ${amount.toLocaleString()}`)
-        } else {
-          console.warn(`⚠️ Booking not found for orderTrackingId: ${orderTrackingId}`)
+          bookingUpdated = true
         }
       } catch (error) {
         console.error('Error updating booking with payment:', error)
+      }
+
+      // If not a booking, try to find and update shop order
+      let shopOrderUpdated = false
+      if (!bookingUpdated) {
+        try {
+          const shopData = await readDataFile<any>('shop-products.json', { orders: [], products: [] })
+          const orders = shopData.orders || []
+          
+          // Find order by pesapalOrderTrackingId
+          const orderIndex = orders.findIndex((o: any) => o.pesapalOrderTrackingId === orderTrackingId)
+          
+          if (orderIndex !== -1) {
+            const order = orders[orderIndex]
+            
+            // Update order payment status
+            order.paymentStatus = 'paid'
+            order.status = 'paid'
+            order.paidAt = new Date().toISOString()
+            order.pesapalTransactionId = transactionId
+            order.paymentMethod = paymentMethod
+            
+            // Deduct inventory now that payment is confirmed
+            const products = shopData.products || []
+            const updatedProducts = products.map((product: any) => {
+              const orderItem = order.items.find((item: any) => item.productId === product.id)
+              if (orderItem) {
+                return {
+                  ...product,
+                  quantity: Math.max((product.quantity || 0) - orderItem.quantity, 0),
+                  updatedAt: new Date().toISOString(),
+                }
+              }
+              return product
+            })
+            
+            await writeDataFile('shop-products.json', {
+              ...shopData,
+              orders,
+              products: updatedProducts,
+              updatedAt: new Date().toISOString(),
+            })
+            
+            // Send confirmation email
+            try {
+              const pickupLocation = shopData.pickupLocation || 'Pick up Mtaani'
+              const pickupDays = shopData.pickupDays || ['Monday', 'Wednesday', 'Friday']
+              const normalizedDeliveryOption = order.deliveryOption === 'delivery' ? 'delivery' : 'pickup'
+              
+              await sendShopOrderConfirmationEmail({
+                email: order.email,
+                phoneNumber: order.phoneNumber,
+                productName: order.items.map((item: any) => item.productName).join(', '),
+                orderId: order.id,
+                amount: order.amount,
+                subtotal: order.subtotal,
+                transportationFee: order.transportationFee || 0,
+                deliveryOption: normalizedDeliveryOption,
+                deliveryAddress: order.deliveryAddress,
+                pickupLocation,
+                pickupDays,
+              })
+            } catch (emailError) {
+              console.error('Error sending shop order confirmation email:', emailError)
+            }
+            
+            console.log(`✅ Payment recorded for shop order ${order.id}: ${currency} ${amount.toLocaleString()}`)
+            shopOrderUpdated = true
+          } else {
+            console.warn(`⚠️ Order not found for orderTrackingId: ${orderTrackingId}`)
+          }
+        } catch (error) {
+          console.error('Error updating shop order with payment:', error)
+        }
+      }
+
+      // If not a booking or shop order, try to find and update consultation
+      if (!bookingUpdated && !shopOrderUpdated) {
+        try {
+          const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+          const consultations = consultationsData.consultations || []
+          
+          // Find consultation by pesapalOrderTrackingId
+          const consultationIndex = consultations.findIndex((c: any) => c.pesapalOrderTrackingId === orderTrackingId)
+          
+          if (consultationIndex !== -1) {
+            const consultation = consultations[consultationIndex]
+            
+            // Update consultation payment status
+            consultation.paymentStatus = 'paid'
+            consultation.status = 'confirmed'
+            consultation.paidAt = new Date().toISOString()
+            consultation.pesapalTransactionId = transactionId
+            
+            await writeDataFile('labs-consultations.json', consultationsData)
+            
+            console.log(`✅ Payment recorded for consultation ${consultation.consultationId}: ${currency} ${amount.toLocaleString()}`)
+            
+            // Send consultation confirmation email (if not already sent)
+            try {
+              const { sendConsultationEmail } = await import('@/app/api/labs/consultation/email-utils')
+              await sendConsultationEmail(consultation)
+            } catch (emailError) {
+              console.error('Error sending consultation confirmation email:', emailError)
+            }
+          } else {
+            console.warn(`⚠️ Consultation not found for orderTrackingId: ${orderTrackingId}`)
+          }
+        } catch (error) {
+          console.error('Error updating consultation with payment:', error)
+        }
       }
     }
 

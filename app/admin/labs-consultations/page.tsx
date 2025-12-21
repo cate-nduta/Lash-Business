@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import AdminBackButton from '@/components/AdminBackButton'
 import type { ConsultationSubmission } from '@/app/api/labs/consultation/route'
 import type { InvoiceItem, ConsultationInvoice } from '@/app/api/admin/labs/invoices/route'
 import { convertCurrency, type Currency, type ExchangeRates } from '@/lib/currency-utils'
@@ -481,6 +482,7 @@ export default function AdminLabsConsultations() {
   return (
     <div className="min-h-screen bg-baby-pink-light py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AdminBackButton />
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-display text-brown mb-2">Labs Consultation Requests</h1>
@@ -1245,8 +1247,15 @@ export default function AdminLabsConsultations() {
               <p className="text-gray-700 mb-4">
                 Are you sure you want to delete <strong>all {consultations.length} consultations</strong>? This action cannot be undone.
               </p>
-              <p className="text-sm text-gray-600 mb-6">
-                This will permanently remove all consultation requests from the system. Only use this when testing or cleaning up test data.
+              <p className="text-sm text-gray-600 mb-4">
+                This will permanently remove:
+              </p>
+              <ul className="text-sm text-gray-600 mb-6 list-disc list-inside space-y-1">
+                <li>All consultation requests</li>
+                <li>All invoices (to reset invoice numbering)</li>
+              </ul>
+              <p className="text-sm text-orange-600 font-semibold mb-6">
+                ⚠️ Invoice numbering will start from the beginning (INV-YYYYMMDD-001) after deletion.
               </p>
               <div className="flex gap-4">
                 <button

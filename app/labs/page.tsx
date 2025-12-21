@@ -28,6 +28,12 @@ interface WhatYouGetContent {
   whyThisWorksItems: string[]
 }
 
+interface WhoThisIsForContent {
+  title: string
+  subtitle: string
+  items: string[]
+}
+
 interface LabsStatistics {
   consultationsCompleted: number
   websitesBuilt: number
@@ -40,7 +46,11 @@ interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
   statistics?: LabsStatistics
+  statisticsEnabled?: boolean
   whatYouGet?: WhatYouGetContent
+  whatYouGetEnabled?: boolean
+  whoThisIsFor?: WhoThisIsForContent
+  whoThisIsForEnabled?: boolean
 }
 
 export default function LabsPage() {
@@ -63,12 +73,6 @@ export default function LabsPage() {
         })
         if (response.ok) {
           const data = await response.json()
-          console.log('Labs settings API response:', {
-            hasData: !!data,
-            hasTiers: !!data?.tiers,
-            tiersIsArray: Array.isArray(data?.tiers),
-            tiersLength: data?.tiers?.length || 0,
-          })
           
           // The API should always return tiers (it has defaults)
           // Trust the API response - it guarantees tiers are present
@@ -76,7 +80,6 @@ export default function LabsPage() {
             setSettings(data)
           } else {
             // This should never happen if API works correctly
-            console.error('API returned invalid tiers data - this should not happen:', data)
             // Still set the data - API should have provided defaults
             // If tiers are missing, the empty state will show
             setSettings(data || {
@@ -85,7 +88,6 @@ export default function LabsPage() {
             })
           }
         } else {
-          console.error('Failed to load labs settings:', response.status, response.statusText)
           // Fallback to default if API fails
           setSettings({
             consultationFeeKES: 7000,
@@ -159,7 +161,7 @@ export default function LabsPage() {
           </p>
           <div className="max-w-4xl mx-auto mt-8">
             <div className="bg-[var(--color-surface)] rounded-2xl p-6 sm:p-8 md:p-10 shadow-soft border border-[var(--color-primary)]/10">
-              <p className="text-lg sm:text-xl text-[var(--color-text)] leading-relaxed mb-4">
+              <p className="text-base sm:text-lg text-[var(--color-text)] leading-relaxed mb-4">
                 We understand that running a service-based business means juggling appointments, payments, client communication, and endless administrative tasks. 
                 <span className="font-semibold text-[var(--color-primary)]"> LashDiary Labs</span> exists to eliminate that chaos.
               </p>
@@ -188,21 +190,25 @@ export default function LabsPage() {
             A consultation is required before purchasing a tier. Book your consultation to discuss your needs and choose the right system for your business.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            {tiers.length > 0 ? tiers.map((tier) => {
+          <div className="flex flex-row gap-3 w-full">
+            {tiers.length > 0 ? tiers.map((tier, index) => {
               const isHovered = hoveredTier === tier.id
               const isPopular = tier.popular
+              const tierWidth = `calc((100% - ${(tiers.length - 1) * 12}px) / ${tiers.length})`
+              const isFirst = index === 0
+              const isLast = index === tiers.length - 1
 
               return (
                 <div
                   key={tier.id}
-                  className={`relative bg-[var(--color-surface)] rounded-2xl shadow-soft border-2 transition-all duration-300 ${
+                  className={`relative bg-[var(--color-surface)] rounded-2xl shadow-soft border-2 transition-all duration-300 flex-shrink-0 ${
                     isPopular
-                      ? 'border-[var(--color-primary)] scale-105 md:scale-110 shadow-xl'
+                      ? 'border-[var(--color-primary)] shadow-xl z-10'
                       : 'border-[var(--color-primary)]/20 hover:border-[var(--color-primary)]/40'
-                  } ${isHovered ? 'transform hover:scale-105' : ''}`}
+                  }`}
                   onMouseEnter={() => setHoveredTier(tier.id)}
                   onMouseLeave={() => setHoveredTier(null)}
+                  style={{ width: tierWidth }}
                 >
                   {isPopular && (
                     <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
@@ -298,63 +304,92 @@ export default function LabsPage() {
             }) : (
               // This should never happen since API always returns default tiers
               // But if it does, show a loading/empty state without error message
-              <div className="col-span-3 text-center py-12">
+              <div className="w-full text-center py-12">
                 <p className="text-[var(--color-text)] text-lg">Loading pricing tiers...</p>
               </div>
             )}
           </div>
         </div>
 
+        {/* What You Get Section */}
+        {settings?.whatYouGetEnabled && settings?.whatYouGet && (
+          <div className="bg-[var(--color-surface)] rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/10 mb-12">
+            <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] text-center mb-4">
+              {settings.whatYouGet.title || 'What You Get'}
+            </h2>
+            {settings.whatYouGet.subtitle && (
+              <p className="text-lg sm:text-xl text-[var(--color-text)] mb-10 text-center max-w-3xl mx-auto">
+                {settings.whatYouGet.subtitle}
+              </p>
+            )}
+
+            <div className="max-w-4xl mx-auto space-y-10">
+              {/* What You Get Items */}
+              {settings.whatYouGet.whatYouGetTitle && settings.whatYouGet.whatYouGetItems && settings.whatYouGet.whatYouGetItems.length > 0 && (
+                <div>
+                  <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-primary)] mb-6">
+                    {settings.whatYouGet.whatYouGetTitle}
+                  </h3>
+                  <ul className="space-y-4 text-[var(--color-text)]">
+                    {settings.whatYouGet.whatYouGetItems.map((item, index) => (
+                      <li key={index} className="flex items-start">
+                        <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
+                        <span className="text-base sm:text-lg">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Why This Works Items */}
+              {settings.whatYouGet.whyThisWorksTitle && settings.whatYouGet.whyThisWorksItems && settings.whatYouGet.whyThisWorksItems.length > 0 && (
+                <div>
+                  <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-primary)] mb-6">
+                    {settings.whatYouGet.whyThisWorksTitle}
+                  </h3>
+                  <ul className="space-y-4 text-[var(--color-text)]">
+                    {settings.whatYouGet.whyThisWorksItems.map((item, index) => (
+                      <li key={index} className="flex items-start">
+                        <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
+                        <span className="text-base sm:text-lg">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Who This is For Section */}
-        <div className="bg-[var(--color-surface)] rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/10 mb-12">
-          <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] text-center mb-8">
-            Who This is For
-          </h2>
-          <div className="max-w-4xl mx-auto">
-            <p className="text-lg sm:text-xl text-[var(--color-text)] mb-8 text-center">
-              This system is for service providers who:
-            </p>
-            <ul className="space-y-4 text-[var(--color-text)]">
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Struggle to keep track of client bookings and constantly worry about scheduling mistakes.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Get frustrated trying to chase deposits or payments from clients.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Spend hours manually adding appointments to calendars or sending reminders.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Lose track of how much money they've received or what's still owed.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Want to reduce no-shows with booking fees and automated reminders.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Need simple, secure payment checkouts that just work.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Want email automation for confirmations, follow-ups, and client communications.</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
-                <span className="text-base sm:text-lg">Are ready to invest in a professional system to get rid of chaos and run their business efficiently.</span>
-              </li>
-            </ul>
+        {settings?.whoThisIsForEnabled && settings?.whoThisIsFor && (
+          <div className="bg-[var(--color-surface)] rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/10 mb-12">
+            <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] text-center mb-8">
+              {settings.whoThisIsFor.title || 'Who This is For'}
+            </h2>
+            <div className="max-w-4xl mx-auto">
+              {settings.whoThisIsFor.subtitle && (
+                <p className="text-lg sm:text-xl text-[var(--color-text)] mb-8 text-center">
+                  {settings.whoThisIsFor.subtitle}
+                </p>
+              )}
+              {settings.whoThisIsFor.items && settings.whoThisIsFor.items.length > 0 && (
+                <ul className="space-y-4 text-[var(--color-text)]">
+                  {settings.whoThisIsFor.items.map((item, index) => (
+                    <li key={index} className="flex items-start">
+                      <span className="text-[var(--color-primary)] mr-3 mt-1 text-xl">•</span>
+                      <span className="text-base sm:text-lg">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
 
         {/* Statistics Section */}
-        {settings?.statistics && (
+        {settings?.statisticsEnabled && settings?.statistics && (
           <div className="bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/20 mt-8">
               <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-primary)] text-center mb-8">
                 The Results Speak for Themselves

@@ -1654,52 +1654,84 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
   }, [])
 
-  // Initiate M-Pesa payment (for deposit or full payment)
+  // Initiate M-Pesa payment via PesaPal (for deposit payment)
   const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string, isFullPayment: boolean = false) => {
     const formattedAmount = formatCurrencyContext(amount)
-    setMpesaStatus({ loading: true, success: null, message: `Initiating M-Pesa payment for ${formattedAmount}...` })
+    setMpesaStatus({ loading: true, success: null, message: `Initiating payment...` })
     
     try {
-      const response = await fetch('/api/mpesa/stk-push', {
+      // Validate and format phone number
+      const cleanPhone = phone.replace(/\s+/g, '').replace(/^\+/, '')
+      if (!cleanPhone || cleanPhone.length < 9) {
+        return { 
+          success: false, 
+          error: 'Invalid phone number. Please enter a valid phone number.' 
+        }
+      }
+
+      const nameParts = formData.name.trim().split(' ')
+      const firstName = nameParts[0] || formData.name
+      const lastName = nameParts.slice(1).join(' ') || firstName
+
+      if (!formData.email || !formData.email.includes('@')) {
+        return { 
+          success: false, 
+          error: 'Email is required for payment processing.' 
+        }
+      }
+
+      const response = await fetch('/api/pesapal/submit-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phone,
           amount,
-          accountReference: bookingReference,
-          transactionDesc: isFullPayment
+          currency: 'KES', // M-Pesa only supports KES
+          phoneNumber: cleanPhone,
+          email: formData.email,
+          firstName,
+          lastName,
+          description: isFullPayment
             ? `LashDiary Full Payment - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`
             : `LashDiary Deposit - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
+          bookingReference,
         }),
       })
 
       const data = await response.json()
 
-      if (response.ok && data.success) {
+      if (response.ok && data.success && data.redirectUrl) {
         setMpesaStatus({
           loading: false,
           success: true,
-          message: `M-Pesa prompt sent! Check your phone - you'll be asked to pay exactly ${formattedAmount}. Enter your M-Pesa PIN to complete the payment.`,
-          checkoutRequestID: data.checkoutRequestID,
+          message: 'Redirecting to secure payment page...',
+          orderTrackingId: data.orderTrackingId,
         })
-        return { success: true, checkoutRequestID: data.checkoutRequestID }
+        // Redirect to PesaPal payment page (customer can choose M-Pesa or Card)
+        // Use setTimeout to ensure state updates before redirect
+        setTimeout(() => {
+          window.location.href = data.redirectUrl
+        }, 100)
+        return { success: true, orderTrackingId: data.orderTrackingId }
       } else {
+        const errorMessage = data.error || data.details || data.message || 'Failed to initiate payment. Please check your details and try again.'
         setMpesaStatus({
           loading: false,
           success: false,
-          message: data.error || data.details || 'Failed to initiate M-Pesa payment. Please try again or contact us.',
+          message: errorMessage,
         })
-        return { success: false, error: data.error || data.details }
+        console.error('PesaPal payment initiation failed:', data)
+        return { success: false, error: errorMessage }
       }
     } catch (error: any) {
+      console.error('Error initiating M-Pesa payment:', error)
       setMpesaStatus({
         loading: false,
         success: false,
-        message: 'Failed to initiate M-Pesa payment. Please try again or contact us.',
+        message: 'Network error. Please check your connection and try again.',
       })
-      return { success: false, error: error.message }
+      return { success: false, error: error.message || 'Network error occurred' }
     }
   }
 
@@ -1883,21 +1915,95 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       // Initiate payment based on selected method
       let paymentResult: { success: boolean; checkoutRequestID?: string | null; orderTrackingId?: string | null; error?: string } = { success: true }
 
+      // For PesaPal payments (card or M-Pesa), create booking first, then redirect to payment
+      // This ensures we have the booking data even if payment fails
+      let bookingCreated = false
+      let createdBookingId: string | null = null
+
       // Handle payment based on method
       if (paymentMethod === 'card') {
         // Card payment - ALWAYS requires full payment
-        const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
-        paymentResult = cardResult
-        // Card payment redirects to Pesapal, so we don't create booking here
-        // Booking will be created after successful payment via callback
-        if (cardResult.success) {
-          setLoading(false)
-          return // User will be redirected to payment page
+        // Create booking first with pending payment status
+        const timestamp = Date.now()
+        const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...formData,
+            service: selectedServiceNames.length > 0 
+              ? selectedServiceNames.join(' + ') 
+              : formData.service || 'Lash Service',
+            services: selectedServiceNames,
+            serviceDetails: cartItems.map(item => ({
+              serviceId: item.serviceId,
+              name: item.name,
+              price: item.price,
+              priceUSD: item.priceUSD,
+              duration: item.duration,
+              categoryId: item.categoryId,
+              categoryName: item.categoryName,
+            })),
+            location: STUDIO_LOCATION,
+            isFirstTimeClient: effectiveIsFirstTimeClient === true,
+            originalPrice: pricingDetails.originalPrice,
+            discount: pricingDetails.discount,
+            finalPrice: pricingDetails.finalPrice,
+            deposit: pricingDetails.finalPrice, // Card = full payment
+            paymentType: 'full',
+            discountType: pricingDetails.discountType,
+            promoCode: promoCodeData?.code || null,
+            promoCodeType: referralType,
+            salonReferral: salonReferralContext,
+            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
+            paymentMethod: 'pesapal',
+            paymentStatus: 'pending_payment',
+            currency: currency,
+            desiredLook: 'Custom',
+          }),
+        })
+
+        const bookingData = await bookingResponse.json()
+        if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
+          bookingCreated = true
+          createdBookingId = bookingData.bookingId
+          
+          // Now initiate payment with booking ID
+          const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
+          paymentResult = { ...cardResult }
+          
+          if (cardResult.success && cardResult.orderTrackingId) {
+            // Update booking with PesaPal tracking ID
+            try {
+              await fetch(`/api/booking/update-pesapal-tracking`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  bookingId: createdBookingId,
+                  pesapalOrderTrackingId: cardResult.orderTrackingId,
+                }),
+              })
+            } catch (error) {
+              console.error('Error updating booking with PesaPal tracking ID:', error)
+            }
+            
+            setLoading(false)
+            return // User will be redirected to payment page
+          } else {
+            setSubmitStatus({
+              type: 'error',
+              message: 'Payment Failed',
+              details: cardResult.error || 'Failed to initiate card payment. Please try again or select a different payment method.',
+            })
+            setLoading(false)
+            return
+          }
         } else {
           setSubmitStatus({
             type: 'error',
-            message: 'Payment Failed',
-            details: cardResult.error || 'Failed to initiate card payment. Please try again or select a different payment method.',
+            message: 'Booking Failed',
+            details: bookingData.error || 'Failed to create booking. Please try again.',
           })
           setLoading(false)
           return
@@ -1906,11 +2012,98 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       
       // At this point, paymentMethod is 'mpesa' or 'none' (card already returned above)
       if (paymentMethod === 'mpesa') {
-        // M-Pesa payment - allows deposit payment (not full payment required)
+        // Validate phone number first
         const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
+        if (!phoneLocalNumber || phoneLocalNumber.trim().length < 9) {
+          setSubmitStatus({
+            type: 'error',
+            message: 'Phone Number Required',
+            details: 'Please enter a valid phone number for M-Pesa payment.',
+          })
+          setLoading(false)
+          // Scroll to phone number field
+          setTimeout(() => {
+            document.getElementById('payment-method-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 100)
+          return
+        }
+
+        // M-Pesa payment via PesaPal - allows deposit payment (not full payment required)
+        // Initiate payment FIRST, then create booking only if payment initiation succeeds
         const paymentAmount = pricingDetails.deposit // M-Pesa always uses deposit
         const mpesaResult = await initiateMpesaPayment(fullPhone, paymentAmount, bookingReference, false)
-        paymentResult = mpesaResult
+        
+        // Only create booking if payment initiation was successful
+        if (!mpesaResult.success || !mpesaResult.orderTrackingId) {
+          setSubmitStatus({
+            type: 'error',
+            message: 'Payment Initiation Failed',
+            details: mpesaResult.error || 'Failed to initiate M-Pesa payment. Please check your phone number and try again, or contact us for assistance.',
+          })
+          setLoading(false)
+          return
+        }
+
+        // Payment initiation successful - now create booking
+        const timestamp = Date.now()
+        const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...formData,
+            service: selectedServiceNames.length > 0 
+              ? selectedServiceNames.join(' + ') 
+              : formData.service || 'Lash Service',
+            services: selectedServiceNames,
+            serviceDetails: cartItems.map(item => ({
+              serviceId: item.serviceId,
+              name: item.name,
+              price: item.price,
+              priceUSD: item.priceUSD,
+              duration: item.duration,
+              categoryId: item.categoryId,
+              categoryName: item.categoryName,
+            })),
+            location: STUDIO_LOCATION,
+            isFirstTimeClient: effectiveIsFirstTimeClient === true,
+            originalPrice: pricingDetails.originalPrice,
+            discount: pricingDetails.discount,
+            finalPrice: pricingDetails.finalPrice,
+            deposit: pricingDetails.deposit, // M-Pesa = deposit
+            paymentType: 'deposit',
+            discountType: pricingDetails.discountType,
+            promoCode: promoCodeData?.code || null,
+            promoCodeType: referralType,
+            salonReferral: salonReferralContext,
+            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
+            paymentMethod: 'pesapal',
+            paymentStatus: 'pending_payment',
+            pesapalOrderTrackingId: mpesaResult.orderTrackingId, // Store tracking ID immediately
+            currency: 'KES', // M-Pesa only supports KES
+            desiredLook: 'Custom',
+          }),
+        })
+
+        const bookingData = await bookingResponse.json()
+        if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
+          // Booking created successfully with PesaPal tracking ID
+          // User should already be redirected to PesaPal (redirect happens in initiateMpesaPayment)
+          setLoading(false)
+          return // User will be redirected to payment page
+        } else {
+          // Booking creation failed but payment was initiated
+          // This is a problem - payment was initiated but booking wasn't created
+          console.error('Booking creation failed after payment initiation:', bookingData)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Booking Creation Failed',
+            details: 'Payment was initiated but booking creation failed. Please contact us immediately with your payment reference.',
+          })
+          setLoading(false)
+          return
+        }
       } else {
         // No payment - booking will be created without payment
         // User will be notified to pay later (only if deposit allowed by admin)
@@ -1929,9 +2122,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }
 
       // Proceed with booking creation (with or without payment)
-      // Note: Card payments redirect to Pesapal, so booking is created via callback
-      // At this point, paymentMethod can only be 'mpesa' or 'none' (card already returned above)
-      if (paymentResult.success || (paymentMethod === 'none' && !requiresFullPayment)) {
+      // Note: Card and M-Pesa payments via PesaPal redirect, so booking is created via callback
+      // At this point, paymentMethod can only be 'none' (card and mpesa already returned above)
+      if (paymentMethod === 'none' && !requiresFullPayment) {
         // Proceed with booking creation
         const timestamp = Date.now()
         const response = await fetch(`/api/calendar/book?t=${timestamp}`, {
@@ -1960,7 +2153,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
             deposit: pricingDetails.deposit, // M-Pesa or 'none' always uses deposit
-            paymentType: paymentMethod === 'mpesa' ? 'deposit' : 'deposit', // M-Pesa = deposit, 'none' = deposit
+            paymentType: 'deposit', // Only 'none' reaches here (card and mpesa redirect to PesaPal), so always deposit
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
@@ -1968,7 +2161,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             giftCardCode: giftCardData?.valid ? giftCardData.code : null,
             mpesaCheckoutRequestID: paymentResult.checkoutRequestID || null,
             pesapalOrderTrackingId: paymentResult.orderTrackingId || null,
-            paymentMethod: paymentMethod === 'mpesa' ? 'mpesa' : 'none',
+            paymentMethod: 'none', // Only 'none' reaches here, card and mpesa redirect to PesaPal
             currency: currency,
             desiredLook: 'Custom',
           }),
@@ -2951,177 +3144,125 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
             {/* Payment Method Selection */}
             <div id="payment-method-section" className="rounded-lg border-2 border-brown-light bg-white p-4 sm:p-5">
-              <label className="block text-sm sm:text-base font-semibold text-brown-dark mb-3">
+              <label className="block text-sm sm:text-base font-semibold text-brown-dark mb-4">
                 Payment Method
               </label>
-              
-              {/* Checkout Instructions from Admin */}
-              {paymentSettings?.showPaymentInstructions && paymentSettings?.checkoutInstructions && (
-                <div className="mb-4 bg-amber-50 border-2 border-amber-200 rounded-lg p-4 sm:p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="text-xl sm:text-2xl flex-shrink-0">ℹ️</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm sm:text-base font-semibold text-amber-900 mb-2">
-                        {paymentSettings.paymentInstructionsTitle || 'Payment Instructions'}
-                      </p>
-                      <p className="text-xs sm:text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">
-                        {paymentSettings.checkoutInstructions}
-                      </p>
+
+              <div className="space-y-4">
+                {/* Card Payment Option */}
+                <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
+                  style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="card"
+                    checked={paymentMethod === 'card'}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="h-5 w-5 accent-brown-dark flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-base text-brown-dark">
+                      💳 Card Payment
+                    </div>
+                    <div className="text-sm text-brown-dark/70 mt-1">
+                      Full payment • KES & USD accepted
+                    </div>
+                  </div>
+                </label>
+
+                {/* M-Pesa Payment Option */}
+                <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
+                  style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="mpesa"
+                    checked={paymentMethod === 'mpesa'}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    disabled={currency === 'USD'}
+                    className="h-5 w-5 accent-brown-dark flex-shrink-0 disabled:opacity-50"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-base text-brown-dark">
+                      📱 M-Pesa Payment
+                      {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-normal">(KES only)</span>}
+                    </div>
+                    <div className="text-sm text-brown-dark/70 mt-1">
+                      Deposit payment • KES only • Pay balance later
+                    </div>
+                  </div>
+                </label>
+
+                {/* Pay Later Option (only if deposit allowed) */}
+                {!requiresFullPayment && (
+                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
+                    style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="none"
+                      checked={paymentMethod === 'none'}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="h-5 w-5 accent-brown-dark flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-base text-brown-dark">Pay Later</div>
+                      <div className="text-sm text-brown-dark/70 mt-1">
+                        We'll contact you with payment instructions
+                      </div>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {/* M-Pesa Phone Number Input */}
+              {paymentMethod === 'mpesa' && currency !== 'USD' && (
+                <div className="mt-4 p-4 bg-brown-light/10 rounded-lg border border-brown-light">
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Phone Number for M-Pesa Payment *
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={phoneCountryCode}
+                      onChange={(e) => setPhoneCountryCode(e.target.value)}
+                      className="px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark text-sm focus:border-brown-dark focus:outline-none"
+                    >
+                      {PHONE_COUNTRY_CODES.map((code) => (
+                        <option key={code.code} value={code.dialCode}>
+                          {code.dialCode}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      value={phoneLocalNumber}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '')
+                        setPhoneLocalNumber(value)
+                      }}
+                      placeholder="712345678"
+                      className="flex-1 px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark text-sm focus:border-brown-dark focus:outline-none"
+                      required={paymentMethod === 'mpesa'}
+                    />
+                  </div>
+                  <p className="text-xs text-brown-dark/60 mt-2">
+                    We'll redirect you to PesaPal where you can complete your M-Pesa payment
+                  </p>
+                </div>
+              )}
+
+              {/* Card Payment Info */}
+              {paymentMethod === 'card' && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">ℹ️</span>
+                    <div className="text-sm text-blue-900">
+                      <p className="font-medium mb-1">Secure Payment</p>
+                      <p>You'll be redirected to PesaPal's secure payment page to complete your card payment. We accept both KES and USD.</p>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Payment Notice */}
-              <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <div className="text-xl sm:text-2xl flex-shrink-0">💳</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm sm:text-base font-semibold text-blue-900 mb-2">
-                      Payment Information
-                    </p>
-                    <p className="text-xs sm:text-sm text-blue-800 leading-relaxed">
-                      <strong>Card Payment:</strong> Full payment required to secure your booking. Accepts both KES and USD. You'll be redirected to a secure payment page.
-                      <br />
-                      <strong>M-Pesa Payment:</strong> Pay the deposit ({pricing?.depositPercentage || depositPercentage}%) now via M-Pesa. <strong>KES only.</strong> You can pay the remaining balance later.
-                      {!requiresFullPayment && (
-                        <>
-                          <br />
-                          <strong>Pay Later:</strong> Complete your booking now and we'll contact you with payment instructions.
-                        </>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {/* Admin-Configured Payment Links */}
-                {paymentSettings?.paymentLinks && paymentSettings.paymentLinks.length > 0 && (
-                  <>
-                    {paymentSettings.paymentLinks.map((link: any) => {
-                      const getIcon = (type: string) => {
-                        switch (type) {
-                          case 'stripe': return '💳'
-                          case 'paypal': return '🅿️'
-                          case 'bank-transfer': return '🏦'
-                          case 'mpesa': return '📱'
-                          default: return '💵'
-                        }
-                      }
-                      
-                      return (
-                        <label
-                          key={link.id}
-                          className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                          style={{ borderColor: paymentMethod === link.id ? '#7C4B31' : '#E5D5C8' }}
-                        >
-                          <input
-                            type="radio"
-                            name="paymentMethod"
-                            value={link.id}
-                            checked={paymentMethod === link.id}
-                            onChange={(e) => setPaymentMethod(e.target.value)}
-                            className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
-                              {getIcon(link.type)} {link.name}
-                            </div>
-                            {link.instructions && (
-                              <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                                {link.instructions}
-                              </div>
-                            )}
-                            {link.url && (
-                              <a
-                                href={link.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-xs text-brown-dark underline mt-1 inline-block"
-                              >
-                                Open Payment Link →
-                              </a>
-                            )}
-                          </div>
-                        </label>
-                      )
-                    })}
-                  </>
-                )}
-
-                {/* Card Payment Option (fallback if no payment links configured) */}
-                {(!paymentSettings?.paymentLinks || paymentSettings.paymentLinks.length === 0) && (
-                  <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                    style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="card"
-                      checked={paymentMethod === 'card'}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
-                        💳 Card Payment (Full Payment Required)
-                        <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES & USD)</span>
-                      </div>
-                      <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                        Pay the full amount ({pricing ? formatCurrencyContext(pricing.finalPrice) : 'full price'}) securely via card. Accepts both KES and USD. You'll be redirected to a secure payment page.
-                    </div>
-                  </div>
-                  </label>
-                )}
-
-                {/* M-Pesa Payment Option (fallback if no payment links configured) */}
-                {(!paymentSettings?.paymentLinks || paymentSettings.paymentLinks.length === 0) && (
-                  <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                    style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="mpesa"
-                      checked={paymentMethod === 'mpesa'}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      disabled={currency === 'USD'}
-                      className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 disabled:opacity-50 touch-manipulation"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm sm:text-base text-brown-dark break-words">
-                        📱 M-Pesa STK Push (Deposit Payment)
-                        <span className="block sm:inline sm:ml-2 text-xs font-normal text-brown-dark/70 mt-1 sm:mt-0">(KES only)</span>
-                        {currency === 'USD' && <span className="block sm:inline sm:ml-2 text-xs text-amber-700 font-semibold mt-1 sm:mt-0">⚠️ Not available for USD</span>}
-                      </div>
-                      <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                        Pay the deposit ({pricing ? formatCurrencyContext(depositAmount) : 'deposit'}) now via M-Pesa. <strong>KES currency only.</strong> You can pay the remaining balance later.
-                      </div>
-                    </div>
-                  </label>
-                )}
-
-                {/* Pay Later Option (only if deposit allowed) */}
-                {!requiresFullPayment && (
-                <label className="flex items-start sm:items-center gap-3 cursor-pointer p-4 sm:p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10 min-h-[72px] sm:min-h-[60px] touch-manipulation"
-                  style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="none"
-                    checked={paymentMethod === 'none'}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="h-5 w-5 sm:h-5 sm:w-5 accent-brown-dark mt-1 sm:mt-0 flex-shrink-0 touch-manipulation"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm sm:text-base text-brown-dark">Pay Later</div>
-                    <div className="text-xs sm:text-sm text-brown-dark/70 mt-2 sm:mt-1">
-                      Complete your booking now. We'll contact you with payment instructions to secure your appointment.
-                    </div>
-                  </div>
-                </label>
-                )}
-              </div>
             </div>
 
             {/* Terms Acknowledgement */}

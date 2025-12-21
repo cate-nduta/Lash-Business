@@ -32,11 +32,28 @@ export interface WhatYouGetContent {
   whyThisWorksItems: string[]
 }
 
+export interface WhoThisIsForContent {
+  title: string
+  subtitle: string
+  items: string[]
+}
+
+export interface BudgetRange {
+  id: string
+  label: string
+  value: string
+}
+
 export interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
   statistics?: LabsStatistics
+  statisticsEnabled?: boolean // Enable/disable Statistics section display
+  budgetRanges?: BudgetRange[] // Budget range options for booking form
   whatYouGet?: WhatYouGetContent
+  whatYouGetEnabled?: boolean // Enable/disable What You Get section display
+  whoThisIsFor?: WhoThisIsForContent
+  whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
 }
@@ -119,6 +136,12 @@ const DEFAULT_TIERS: PricingTier[] = [
   },
 ]
 
+const DEFAULT_BUDGET_RANGES: BudgetRange[] = [
+  { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+  { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+  { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+]
+
 const DEFAULT_SETTINGS: LabsSettings = {
   consultationFeeKES: 7000,
   tiers: DEFAULT_TIERS,
@@ -129,6 +152,9 @@ const DEFAULT_SETTINGS: LabsSettings = {
     clientSatisfactionRate: 0,
     businessesTransformed: 0,
   },
+  statisticsEnabled: true, // Statistics section enabled by default
+  budgetRanges: DEFAULT_BUDGET_RANGES,
+  whatYouGetEnabled: true, // What You Get section enabled by default
   whatYouGet: {
     title: 'What You Get',
     subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -151,6 +177,20 @@ const DEFAULT_SETTINGS: LabsSettings = {
       'Focus on your craft while the website handles the operational chaos',
     ],
   },
+  whoThisIsFor: {
+    title: 'Who This is For',
+    subtitle: 'This system is for service providers who:',
+    items: [
+      'Struggle to keep track of client bookings and constantly worry about scheduling mistakes.',
+      'Get frustrated trying to chase deposits or payments from clients.',
+      'Spend hours manually adding appointments to calendars or sending reminders.',
+      'Lose track of how much money they\'ve received or what\'s still owed.',
+      'Want to reduce no-shows with booking fees and automated reminders.',
+      'Need simple, secure payment checkouts that just work.',
+      'Want email automation for confirmations, follow-ups, and client communications.',
+      'Are ready to invest in a professional system to get rid of chaos and run their business efficiently.',
+    ],
+  },
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
 }
@@ -160,15 +200,6 @@ export async function GET(request: NextRequest) {
   try {
     const settings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
     
-    // Log what we read from the file/database
-    console.log('Labs settings loaded from storage:', {
-      hasSettings: !!settings,
-      hasTiers: !!settings.tiers,
-      tiersIsArray: Array.isArray(settings.tiers),
-      tiersLength: settings.tiers?.length || 0,
-      consultationFee: settings.consultationFeeKES,
-    })
-    
     // Ensure all required fields are present with defaults
     const completeSettings: LabsSettings = {
       consultationFeeKES: settings.consultationFeeKES || DEFAULT_SETTINGS.consultationFeeKES,
@@ -176,21 +207,25 @@ export async function GET(request: NextRequest) {
         ? settings.tiers 
         : DEFAULT_TIERS,
       statistics: settings.statistics || DEFAULT_SETTINGS.statistics,
+      statisticsEnabled: settings.statisticsEnabled !== undefined ? settings.statisticsEnabled : DEFAULT_SETTINGS.statisticsEnabled,
+      budgetRanges: (settings.budgetRanges && Array.isArray(settings.budgetRanges) && settings.budgetRanges.length > 0)
+        ? settings.budgetRanges
+        : DEFAULT_BUDGET_RANGES,
       whatYouGet: settings.whatYouGet || DEFAULT_SETTINGS.whatYouGet,
+      whatYouGetEnabled: settings.whatYouGetEnabled !== undefined ? settings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled,
+      whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
+      whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults
     if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
-      console.warn('Labs settings had empty tiers, using defaults. Original settings:', settings)
       completeSettings.tiers = DEFAULT_TIERS
     }
     
     // Final validation - this should NEVER fail if code above works
     if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
-      console.error('CRITICAL ERROR: Complete settings still has empty tiers after initialization!')
-      console.error('Complete settings:', JSON.stringify(completeSettings, null, 2))
       // Force defaults as last resort
       return NextResponse.json(DEFAULT_SETTINGS, {
         headers: {
@@ -200,9 +235,6 @@ export async function GET(request: NextRequest) {
         },
       })
     }
-    
-    // Log final response
-    console.log('Returning labs settings with', completeSettings.tiers.length, 'tiers')
     
     return NextResponse.json(completeSettings, {
       headers: {

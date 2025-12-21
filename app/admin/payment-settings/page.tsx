@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+import AdminBackButton from '@/components/AdminBackButton'
 import type { PaymentLink, PaymentSettings } from '@/app/api/admin/payment-settings/route'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
@@ -229,6 +230,7 @@ export default function AdminPaymentSettings() {
   return (
     <div className="min-h-screen bg-baby-pink-light py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AdminBackButton />
         <div className="mb-8">
           <h1 className="text-3xl font-display text-brown mb-2">Payment & Checkout Settings</h1>
           <p className="text-gray-600">Configure payment links and checkout instructions</p>

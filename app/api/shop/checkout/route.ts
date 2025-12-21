@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     const transportCost = deliveryOption === 'lash_suite' ? 0 : deliveryOption === 'pickup' ? transportationFee : 0
     const total = subtotal + transportCost
 
-    // Validate contact info for manual order processing
+    // Validate contact info
     if (!email && !phoneNumber) {
       return NextResponse.json(
         { error: 'Email or phone number is required so we can confirm your order.' },
@@ -121,7 +121,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create order
+    // For both M-Pesa and card, use PesaPal
+    // PesaPal supports both payment methods
     const orderItems = checkoutItems.map((item) => ({
       productId: item.product.id,
       productName: item.product.name,
@@ -129,26 +130,22 @@ export async function POST(request: NextRequest) {
       price: item.product.price,
     }))
 
-    // Deduct inventory
-    const updatedProducts = products.map((product) => ({ ...product }))
-    for (const item of checkoutItems) {
-      const productIndex = updatedProducts.findIndex((p) => p.id === item.product.id)
-      if (productIndex !== -1) {
-        updatedProducts[productIndex] = {
-          ...updatedProducts[productIndex],
-          quantity: Math.max(updatedProducts[productIndex].quantity - item.quantity, 0),
-          updatedAt: new Date().toISOString(),
-        }
-      }
-    }
-
+    // Create order first (will be updated after payment)
     const orderId = `order-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     const now = new Date().toISOString()
     const orders = Array.isArray(data.orders) ? data.orders : []
+    
+    // Prepare customer name for PesaPal
+    const customerName = email ? email.split('@')[0] : phoneNumber || 'Customer'
+    const nameParts = customerName.split(' ')
+    const firstName = nameParts[0] || 'Customer'
+    const lastName = nameParts.slice(1).join(' ') || firstName
+
+    // Create temporary order record (will be confirmed after payment)
     const order = {
       id: orderId,
       items: orderItems,
-      paymentMethod,
+      paymentMethod: 'pesapal', // Both M-Pesa and card go through PesaPal
       paymentStatus: 'pending',
       phoneNumber: phoneNumber || undefined,
       email: email || undefined,
@@ -161,50 +158,155 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       readyForPickupAt: null,
       pickedUpAt: null,
+      pesapalOrderTrackingId: null, // Will be set after PesaPal order submission
     }
 
     orders.unshift(order)
 
+    // Save order temporarily (will be updated after payment confirmation)
     await writeDataFile('shop-products.json', {
       ...data,
-      products: updatedProducts,
       orders,
       updatedAt: now,
     })
 
-    // Send confirmation email if possible
-    const normalizedDeliveryOption = deliveryOption === 'delivery' ? 'delivery' : 'pickup'
+    // Submit order to PesaPal (import the function directly)
     try {
-      await sendShopOrderConfirmationEmail({
-        email: email || undefined,
-        phoneNumber: phoneNumber || undefined,
-        productName: orderItems.map((item) => item.productName).join(', '),
+      // Import PesaPal submit order logic
+      const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || ''
+      const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || ''
+      const PESAPAL_ENVIRONMENT = process.env.PESAPAL_ENVIRONMENT || 'sandbox'
+      
+      const getBaseUrl = (): string => {
+        const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          const trimmed = raw.trim().replace(/\/+$/, '')
+          if (/^https?:\/\//i.test(trimmed)) {
+            return trimmed
+          }
+          return `https://${trimmed}`
+        }
+        return 'https://lashdiary.co.ke'
+      }
+      
+      const PESAPAL_CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || `${getBaseUrl()}/api/pesapal/callback`
+      const PESAPAL_IPN_URL = process.env.PESAPAL_IPN_URL || `${getBaseUrl()}/api/pesapal/ipn`
+      const PESAPAL_BASE_URL = PESAPAL_ENVIRONMENT === 'live'
+        ? 'https://pay.pesapal.com/v3'
+        : 'https://cybqa.pesapal.com/pesapalv3'
+
+      // Get access token
+      const auth = Buffer.from(`${PESAPAL_CONSUMER_KEY}:${PESAPAL_CONSUMER_SECRET}`).toString('base64')
+      const tokenResponse = await fetch(`${PESAPAL_BASE_URL}/api/Auth/RequestToken`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth}`,
+        },
+        body: JSON.stringify({}),
+      })
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get PesaPal access token')
+      }
+
+      const tokenData = await tokenResponse.json()
+      const accessToken = tokenData.token
+
+      // Generate order tracking ID
+      const orderTrackingId = `LashDiary-Shop-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+      // Prepare order data
+      const pesapalOrderData = {
+        id: orderTrackingId,
+        currency: 'KES',
+        amount: Math.round(total),
+        description: `LashDiary Shop Order - ${orderItems.map((item) => item.productName).join(', ')}`,
+        callback_url: PESAPAL_CALLBACK_URL,
+        notification_id: PESAPAL_IPN_URL,
+        billing_address: {
+          email_address: email || undefined,
+          phone_number: phoneNumber || null,
+          country_code: 'KE',
+          first_name: firstName,
+          middle_name: '',
+          last_name: lastName,
+          line_1: '',
+          line_2: '',
+          city: '',
+          postal_code: '',
+          zip_code: '',
+        },
+      }
+
+      // Submit order to PesaPal
+      const pesapalResponse = await fetch(`${PESAPAL_BASE_URL}/api/Transactions/SubmitOrderRequest`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(pesapalOrderData),
+      })
+
+      const pesapalData = await pesapalResponse.json()
+
+      if (pesapalResponse.ok && pesapalData.redirect_url) {
+        // Update order with PesaPal tracking ID
+        const updatedOrders = orders.map((o: any) => 
+          o.id === orderId 
+            ? { ...o, pesapalOrderTrackingId: pesapalData.order_tracking_id || orderTrackingId }
+            : o
+        )
+        
+        await writeDataFile('shop-products.json', {
+          ...data,
+          orders: updatedOrders,
+          updatedAt: now,
+        })
+
+        return NextResponse.json({
+          success: true,
+          orderId,
+          paymentMethod: 'pesapal',
+          redirectUrl: pesapalData.redirect_url,
+          orderTrackingId: pesapalData.order_tracking_id || orderTrackingId,
+          message: 'Redirecting to secure payment page...',
+          items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
+          subtotal,
+          transportationFee: transportCost,
+          total,
+        })
+      } else {
+        console.error('PesaPal Submit Order Error:', pesapalData)
+        // If PesaPal fails, still create order but mark as pending manual payment
+        return NextResponse.json({
+          success: true,
+          orderId,
+          paymentMethod: 'pesapal',
+          message: pesapalData.message || pesapalData.error || 'Payment gateway temporarily unavailable. We will contact you with payment instructions.',
+          items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
+          subtotal,
+          transportationFee: transportCost,
+          total,
+        })
+      }
+    } catch (pesapalError: any) {
+      console.error('Error submitting to PesaPal:', pesapalError)
+      // If PesaPal fails, still create order but mark as pending manual payment
+      return NextResponse.json({
+        success: true,
         orderId,
-        amount: total,
+        paymentMethod: 'pesapal',
+        message: 'Payment gateway temporarily unavailable. We will contact you with payment instructions.',
+        items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
         subtotal,
         transportationFee: transportCost,
-        deliveryOption: normalizedDeliveryOption,
-        deliveryAddress: deliveryOption === 'delivery' ? deliveryAddress : undefined,
-        pickupLocation,
-        pickupDays,
+        total,
       })
-    } catch (emailError) {
-      console.error('Error sending shop order confirmation email:', emailError)
     }
-
-    return NextResponse.json({
-      success: true,
-      orderId,
-      paymentMethod,
-      message:
-        paymentMethod === 'mpesa'
-          ? 'Order received! Our team will send an M-Pesa prompt or follow-up instructions shortly.'
-          : 'Order received! We will contact you with payment instructions.',
-      items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
-      subtotal,
-      transportationFee: transportCost,
-      total,
-    })
   } catch (error: any) {
     console.error('Error processing checkout:', error)
     return NextResponse.json(

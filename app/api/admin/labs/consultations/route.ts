@@ -34,10 +34,14 @@ export async function DELETE(request: NextRequest) {
   try {
     // Delete all consultations
     await writeDataFile('labs-consultations.json', { consultations: [] })
+    
+    // Also delete all invoices to reset invoice numbering
+    const { writeDataFile: writeInvoices } = await import('@/lib/data-utils')
+    await writeInvoices('labs-invoices.json', [])
 
     return NextResponse.json({
       success: true,
-      message: 'All consultations deleted successfully',
+      message: 'All consultations and invoices deleted successfully. Invoice numbering will reset.',
       deletedCount: 0, // We don't track the count before deletion, but it's cleared
     })
   } catch (error) {

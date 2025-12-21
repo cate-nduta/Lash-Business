@@ -99,6 +99,7 @@ LashDiary Labs - Professional System Setup Services
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const runtime = 'nodejs'
 
 export interface InvoiceItem {
   description: string
@@ -226,10 +227,10 @@ export async function POST(request: NextRequest) {
     const upfrontAmount = isTier3 ? Math.round(total * 0.5) : total
     const secondAmount = isTier3 ? Math.round(total * 0.5) : 0
     
-    // Set expiration date (7 days from issue date for build invoices)
+    // Set expiration date (7 days from issue date - all invoices expire after 7 days)
     const issueDate = new Date().toISOString().split('T')[0]
     const expirationDate = new Date(issueDate)
-    expirationDate.setDate(expirationDate.getDate() + 7)
+    expirationDate.setDate(expirationDate.getDate() + 7) // Add 7 days to issue date
 
     // Generate secure view token for public PDF access
     const viewToken = crypto.randomBytes(32).toString('hex')
@@ -241,7 +242,7 @@ export async function POST(request: NextRequest) {
       invoiceNumber,
       issueDate,
       dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-      expirationDate: expirationDate.toISOString().split('T')[0], // 7 days for build invoices
+      expirationDate: expirationDate.toISOString().split('T')[0], // 7 days from issue date - invoice expires after 7 days
       businessName: consultation.businessName,
       contactName: consultation.contactName,
       email: consultation.email,
@@ -305,6 +306,26 @@ export async function POST(request: NextRequest) {
     console.error('Error creating invoice:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to create invoice' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE - Delete all invoices (for resetting invoice numbering)
+export async function DELETE(request: NextRequest) {
+  try {
+    // Delete all invoices
+    await writeDataFile('labs-invoices.json', [])
+
+    return NextResponse.json({
+      success: true,
+      message: 'All invoices deleted successfully. Invoice numbering will reset.',
+      deletedCount: 0, // We don't track the count before deletion, but it's cleared
+    })
+  } catch (error) {
+    console.error('Error deleting invoices:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete invoices' },
       { status: 500 }
     )
   }

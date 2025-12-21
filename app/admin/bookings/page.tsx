@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
+import AdminBackButton from '@/components/AdminBackButton'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
@@ -1683,12 +1684,7 @@ export default function AdminBookings() {
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
-          <Link 
-            href="/admin/dashboard" 
-            className="text-brown hover:text-brown-dark"
-          >
-            ← Back to Dashboard
-          </Link>
+          <AdminBackButton />
           <div className="flex items-center gap-2">
             <button
               type="button"

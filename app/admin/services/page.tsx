@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+import AdminBackButton from '@/components/AdminBackButton'
 import { type ServiceCatalog, type ServiceCategory, type Service } from '@/lib/services-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
@@ -320,6 +321,7 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">
       <div className="max-w-6xl mx-auto">
+        <AdminBackButton />
         <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-4">
           {hasUnsavedChanges && (
             <div className="text-sm text-orange-600 font-medium flex items-center gap-2">

@@ -28,6 +28,7 @@ export default function LabsBookAppointment() {
   const { currency } = useCurrency()
   const searchParams = useSearchParams()
   const tierIdFromUrl = searchParams.get('tier')
+  const rebookConsultationId = searchParams.get('rebook')
   
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
@@ -35,14 +36,29 @@ export default function LabsBookAppointment() {
   const [loadingFee, setLoadingFee] = useState(true)
   const [selectedTier, setSelectedTier] = useState<PricingTier | null>(null)
   const [loadingTier, setLoadingTier] = useState(true)
+  const [isRebooking, setIsRebooking] = useState(false)
+  const [loadingRebookData, setLoadingRebookData] = useState(false)
+  const [budgetRanges, setBudgetRanges] = useState<Array<{ id: string; label: string; value: string }>>([])
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await fetch('/api/admin/labs', { cache: 'no-store' })
+        const response = await fetch('/api/labs/settings', { cache: 'no-store' })
         if (response.ok) {
           const data = await response.json()
           setConsultationFeeKES(data.consultationFeeKES || 7000)
+          
+          // Load budget ranges
+          if (data.budgetRanges && Array.isArray(data.budgetRanges) && data.budgetRanges.length > 0) {
+            setBudgetRanges(data.budgetRanges)
+          } else {
+            // Fallback to defaults if not set
+            setBudgetRanges([
+              { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+              { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+              { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+            ])
+          }
           
           // Find the tier if tierId is in URL
           if (tierIdFromUrl && data.tiers) {
@@ -128,6 +144,13 @@ export default function LabsBookAppointment() {
     message: string
   }>({ type: null, message: '' })
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | null>(null)
+  const [paymentStatus, setPaymentStatus] = useState<{
+    loading: boolean
+    success: boolean | null
+    message: string
+    orderTrackingId?: string
+  }>({ loading: false, success: null, message: '' })
 
   const [exchangeRates, setExchangeRates] = useState<{ usdToKes: number; eurToKes: number } | null>(null)
 
@@ -300,7 +323,58 @@ export default function LabsBookAppointment() {
     setSubmitStatus({ type: null, message: '' })
 
     try {
+      // If rebooking, use rebook API (no payment required)
+      if (isRebooking && rebookConsultationId) {
+        const response = await fetch('/api/labs/consultation/rebook', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            consultationId: rebookConsultationId,
+            preferredDate: formData.preferredDate,
+            preferredTime: formData.preferredTime,
+          }),
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to reschedule consultation')
+        }
+
+        // Show confirmation modal
+        setShowConfirmationModal(true)
+        setLoading(false)
+        return
+      }
+
+      // Regular new consultation submission (REQUIRES PAYMENT FIRST)
+      // Validate payment method
+      if (!paymentMethod) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select a payment method to proceed with your consultation booking.',
+        })
+        setLoading(false)
+        // Scroll to payment section
+        setTimeout(() => {
+          document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+        return
+      }
+
       const fullPhone = `${phoneCountryCode}${phoneLocalNumber.replace(/\D/g, '')}`
+      
+      // Validate phone number for M-Pesa
+      if (paymentMethod === 'mpesa' && (!phoneLocalNumber || phoneLocalNumber.trim().length < 9)) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please enter a valid phone number for M-Pesa payment.',
+        })
+        setLoading(false)
+        return
+      }
       
       // Convert consultation fee to the selected currency
       let consultationPrice = consultationFeeKES
@@ -320,7 +394,49 @@ export default function LabsBookAppointment() {
           consultationPrice = Math.round(consultationPrice * 100) / 100
         }
       }
+
+      // Initiate payment FIRST before creating consultation
+      setPaymentStatus({ loading: true, success: null, message: 'Processing payment...' })
       
+      const nameParts = formData.contactName.trim().split(' ')
+      const firstName = nameParts[0] || formData.contactName
+      const lastName = nameParts.slice(1).join(' ') || firstName
+
+      // Submit order to PesaPal
+      const paymentResponse = await fetch('/api/pesapal/submit-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: consultationPrice,
+          currency: currency === 'USD' ? 'USD' : 'KES',
+          phoneNumber: paymentMethod === 'mpesa' ? fullPhone : undefined,
+          email: formData.email,
+          firstName,
+          lastName,
+          description: `LashDiary Labs Consultation - ${formData.businessName}`,
+          bookingReference: `Consultation-${Date.now()}`,
+        }),
+      })
+
+      const paymentData = await paymentResponse.json()
+
+      if (!paymentResponse.ok || !paymentData.success || !paymentData.redirectUrl) {
+        setPaymentStatus({
+          loading: false,
+          success: false,
+          message: paymentData.error || paymentData.details || 'Failed to initiate payment. Please try again.',
+        })
+        setSubmitStatus({
+          type: 'error',
+          message: paymentData.error || paymentData.details || 'Payment initiation failed. Please try again.',
+        })
+        setLoading(false)
+        return
+      }
+
+      // Payment initiated successfully - create consultation with pending payment status
       const submissionData = {
         ...formData,
         phone: fullPhone,
@@ -328,8 +444,10 @@ export default function LabsBookAppointment() {
         currency: currency,
         submittedAt: new Date().toISOString(),
         source: 'labs-consultation',
-        // Send tier name if tier was selected, otherwise send empty string
         interestedTier: selectedTier ? selectedTier.name : (formData.interestedTier || ''),
+        paymentStatus: 'pending_payment',
+        pesapalOrderTrackingId: paymentData.orderTrackingId,
+        paymentMethod: 'pesapal',
       }
 
       const response = await fetch('/api/labs/consultation', {
@@ -343,12 +461,26 @@ export default function LabsBookAppointment() {
       const result = await response.json()
 
       if (!response.ok) {
+        setPaymentStatus({
+          loading: false,
+          success: false,
+          message: 'Payment initiated but consultation creation failed. Please contact us.',
+        })
         throw new Error(result.error || 'Failed to submit consultation request')
       }
 
-      // Show confirmation modal immediately
-      setShowConfirmationModal(true)
-      setLoading(false)
+      // Payment initiated and consultation created - redirect to payment page
+      setPaymentStatus({
+        loading: false,
+        success: true,
+        message: 'Redirecting to secure payment page...',
+        orderTrackingId: paymentData.orderTrackingId,
+      })
+      
+      // Redirect to PesaPal payment page
+      setTimeout(() => {
+        window.location.href = paymentData.redirectUrl
+      }, 500)
 
       // Reset form immediately for better UX
       setFormData({
@@ -413,29 +545,47 @@ export default function LabsBookAppointment() {
         {/* Header */}
         <div className="text-center mb-8 sm:mb-12">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-display text-[var(--color-primary)] mb-4">
-            Book a Consultation
+            {isRebooking ? 'Reschedule Your Consultation' : 'Book a Consultation'}
           </h1>
           <p className="text-lg sm:text-xl text-[var(--color-text)] mb-6 max-w-2xl mx-auto">
-            Let's understand your business and create a clear plan to eliminate operational chaos
+            {isRebooking 
+              ? 'Select a new date and time for your consultation. No payment required - you already paid!'
+              : "Let's understand your business and create a clear plan to eliminate operational chaos"}
           </p>
           
-          {selectedTier && (
-            <div className="mb-4 p-4 bg-[var(--color-accent)]/10 border-2 border-[var(--color-primary)]/30 rounded-lg max-w-md mx-auto">
-              <p className="text-sm text-[var(--color-text)]/70 mb-1">You're interested in:</p>
-              <p className="text-lg font-semibold text-[var(--color-primary)]">{selectedTier.name}</p>
-              <p className="text-sm text-[var(--color-text)]/70 mt-1">
-                {formatPrice(selectedTier.priceKES)}
+          {isRebooking && (
+            <div className="max-w-md mx-auto mb-6 bg-green-50 border-2 border-green-400 rounded-lg p-4">
+              <p className="text-green-800 font-semibold mb-1">
+                ✅ No Payment Required
               </p>
-              <p className="text-xs text-[var(--color-text)]/60 mt-2 italic">
-                During the consultation, we'll help determine if this is the right fit for your business
+              <p className="text-green-700 text-sm">
+                Since you already paid for your original consultation, you can reschedule at no additional cost.
               </p>
             </div>
           )}
           
-          <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
-            {loadingFee ? 'Loading...' : formatPrice(consultationFeeKES)}
-          </div>
-          <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
+          {!isRebooking && (
+            <div className="flex flex-col items-center gap-4 mb-6">
+              {/* Selected Tier Display */}
+              {selectedTier && (
+                <div className="w-full max-w-md mx-auto p-4 bg-[var(--color-accent)]/10 border-2 border-[var(--color-primary)]/30 rounded-lg">
+                  <p className="text-sm text-[var(--color-text)]/70 mb-1">Selected Tier:</p>
+                  <p className="text-xl font-semibold text-[var(--color-primary)] mb-1">{selectedTier.name}</p>
+                  <p className="text-sm text-[var(--color-text)]/70">
+                    {formatPrice(selectedTier.priceKES)}
+                  </p>
+                </div>
+              )}
+              
+              {/* Consultation Fee */}
+              <div>
+                <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
+                  {loadingFee ? 'Loading...' : formatPrice(consultationFeeKES)}
+                </div>
+                <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Form */}
@@ -560,6 +710,16 @@ export default function LabsBookAppointment() {
                     <option value="business-coach">Business Coach</option>
                     <option value="consultant">Consultant</option>
                     <option value="life-coach">Life Coach</option>
+                  </optgroup>
+                  <optgroup label="Technology & Marketing">
+                    <option value="technology-group">Technology Group</option>
+                    <option value="marketing-agency">Marketing Agency</option>
+                    <option value="digital-marketing">Digital Marketing Professional</option>
+                    <option value="social-media-manager">Social Media Manager</option>
+                    <option value="seo-specialist">SEO Specialist</option>
+                    <option value="content-creator">Content Creator</option>
+                    <option value="web-developer">Web Developer / Designer</option>
+                    <option value="it-consultant">IT Consultant</option>
                   </optgroup>
                   <optgroup label="Professional Services">
                     <option value="lawyer">Lawyer / Legal Services</option>
@@ -755,9 +915,11 @@ export default function LabsBookAppointment() {
                   className="w-full px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
                 >
                   <option value="">Select range</option>
-                  <option value="100k-150k">100K–150K KES</option>
-                  <option value="150k-250k">150K–250K KES</option>
-                  <option value="250k-300k+">250K–300K+ KES</option>
+                  {budgetRanges.map((range) => (
+                    <option key={range.id} value={range.value}>
+                      {range.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1040,6 +1202,121 @@ export default function LabsBookAppointment() {
               </div>
             </div>
 
+            {/* Payment Method Section - Only show for new consultations (not rebooking) */}
+            {!isRebooking && (
+              <div id="payment-section" className="mt-8 space-y-4">
+                <h2 className="text-2xl font-display text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]/20 pb-2">
+                  Payment
+                </h2>
+                
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Payment Required:</strong> Consultation fee must be paid before your appointment is confirmed. 
+                    You'll be redirected to a secure payment page after submitting this form.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-[var(--color-accent)]/10"
+                    style={{ borderColor: paymentMethod === 'card' ? 'var(--color-primary)' : 'rgba(124, 75, 49, 0.2)' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="card"
+                      checked={paymentMethod === 'card'}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'card')}
+                      className="h-5 w-5 accent-[var(--color-primary)] flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-base text-[var(--color-text)]">
+                        💳 Card Payment
+                      </div>
+                      <div className="text-sm text-[var(--color-text)]/70 mt-1">
+                        Full payment • KES & USD accepted
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-[var(--color-accent)]/10"
+                    style={{ borderColor: paymentMethod === 'mpesa' ? 'var(--color-primary)' : 'rgba(124, 75, 49, 0.2)' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="mpesa"
+                      checked={paymentMethod === 'mpesa'}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'mpesa')}
+                      disabled={currency === 'USD'}
+                      className="h-5 w-5 accent-[var(--color-primary)] flex-shrink-0 disabled:opacity-50"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-base text-[var(--color-text)]">
+                        📱 M-Pesa Payment
+                        {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-normal">(KES only)</span>}
+                      </div>
+                      <div className="text-sm text-[var(--color-text)]/70 mt-1">
+                        Full payment • KES only
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* M-Pesa Phone Number Input */}
+                {paymentMethod === 'mpesa' && currency !== 'USD' && (
+                  <div className="p-4 bg-[var(--color-accent)]/10 rounded-lg border border-[var(--color-primary)]/20">
+                    <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
+                      Phone Number for M-Pesa Payment *
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={phoneCountryCode}
+                        onChange={(e) => setPhoneCountryCode(e.target.value)}
+                        className="px-3 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg bg-white text-[var(--color-text)] text-sm focus:border-[var(--color-primary)] focus:outline-none"
+                      >
+                        {PHONE_COUNTRY_CODES.map((code) => (
+                          <option key={code.code} value={code.dialCode}>
+                            {code.dialCode}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="tel"
+                        value={phoneLocalNumber}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '')
+                          setPhoneLocalNumber(value)
+                        }}
+                        placeholder="712345678"
+                        className="flex-1 px-3 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg bg-white text-[var(--color-text)] text-sm focus:border-[var(--color-primary)] focus:outline-none"
+                        required={paymentMethod === 'mpesa'}
+                      />
+                    </div>
+                    <p className="text-xs text-[var(--color-text)]/60 mt-2">
+                      We'll redirect you to PesaPal where you can complete your M-Pesa payment
+                    </p>
+                  </div>
+                )}
+
+                {/* Payment Status */}
+                {paymentStatus.loading && (
+                  <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+                      <p className="text-sm text-blue-800 font-medium">
+                        {paymentStatus.message || 'Processing payment...'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {paymentStatus.success === false && !paymentStatus.loading && (
+                  <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
+                    <p className="text-sm text-red-800 font-medium">
+                      ⚠️ {paymentStatus.message}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Status Message */}
             {submitStatus.type && (
               <div
@@ -1057,10 +1334,14 @@ export default function LabsBookAppointment() {
             <div className="flex flex-col sm:flex-row gap-4 pt-6">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || loadingRebookData}
                 className="flex-1 bg-[var(--color-primary)] text-[var(--color-on-primary)] px-8 py-4 rounded-lg font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Submitting...' : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
+                {loading || loadingRebookData 
+                  ? 'Processing...' 
+                  : isRebooking 
+                    ? 'Reschedule Consultation (No Payment Required)' 
+                    : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
               </button>
               <Link
                 href="/labs"
@@ -1109,22 +1390,36 @@ export default function LabsBookAppointment() {
                 </svg>
               </div>
               <h2 className="text-2xl sm:text-3xl font-display text-[var(--color-primary)] mb-4">
-                Booking Confirmed! ✅
+                {isRebooking ? 'Consultation Rescheduled! ✅' : 'Booking Confirmed! ✅'}
               </h2>
               <p className="text-[var(--color-text)] mb-6 text-lg">
-                Your consultation request has been received successfully!
+                {isRebooking 
+                  ? 'Your consultation has been successfully rescheduled!'
+                  : 'Your consultation request has been received successfully!'}
               </p>
+              {isRebooking && (
+                <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4 mb-6">
+                  <p className="text-green-800 font-semibold mb-1">
+                    ✅ No Payment Required
+                  </p>
+                  <p className="text-green-700 text-sm">
+                    Since you already paid for your original consultation, no additional payment was required.
+                  </p>
+                </div>
+              )}
               <div className="bg-[var(--color-accent)]/10 rounded-lg p-4 mb-6 border border-[var(--color-primary)]/20">
                 <p className="text-[var(--color-text)] text-sm mb-2">
                   <strong>📧 Check your email</strong>
                 </p>
                 <p className="text-[var(--color-text)]/80 text-sm">
-                  We've sent a confirmation email to <strong>{formData.email || 'your email address'}</strong> with all the details, including the Google Meet link (for online meetings).
+                  We've sent a {isRebooking ? 'rescheduling' : 'confirmation'} email to <strong>{formData.email || 'your email address'}</strong> with all the details{formData.meetingType === 'online' ? ', including the Google Meet link' : ''}.
                 </p>
               </div>
-              <p className="text-[var(--color-text)] mb-6 text-sm">
-                We'll contact you within 24 hours to finalize your consultation schedule.
-              </p>
+              {!isRebooking && (
+                <p className="text-[var(--color-text)] mb-6 text-sm">
+                  We'll contact you within 24 hours to finalize your consultation schedule.
+                </p>
+              )}
               <button
                 onClick={() => setShowConfirmationModal(false)}
                 className="w-full bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold hover:bg-[var(--color-primary-dark)] transition-colors"

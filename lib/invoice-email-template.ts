@@ -34,7 +34,7 @@ function formatCurrency(amount: number, currency: string): string {
   return `KSH ${Math.round(amount).toLocaleString('en-KE')}`
 }
 
-export function createInvoiceEmailTemplate(invoice: ConsultationInvoice): string {
+export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, paymentUrl?: string): string {
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   // Use public route with token for email links (bypasses admin auth requirement)
   const pdfUrl = invoice.viewToken 
@@ -189,8 +189,8 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice): string
           ` : ''}
 
           <tr>
-            <td style="padding:0 32px 32px 32px; text-align:center;">
-              <a href="${pdfUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; text-decoration:none; padding:16px 32px; border-radius:8px; font-size:18px; font-weight:600; font-family:'Playfair Display', Georgia, serif; letter-spacing:0.5px;">
+            <td style="padding:0 32px 24px 32px; text-align:center;">
+              <a href="${pdfUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; text-decoration:none; padding:16px 32px; border-radius:8px; font-size:18px; font-weight:600; font-family:'Playfair Display', Georgia, serif; letter-spacing:0.5px; margin-bottom:16px;">
                 View PDF Invoice →
               </a>
               <p style="margin:16px 0 0 0; font-size:14px; color:${textSecondary};">
@@ -198,6 +198,27 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice): string
               </p>
             </td>
           </tr>
+
+          ${paymentUrl && invoice.status !== 'paid' ? `
+          <tr>
+            <td style="padding:0 32px 32px 32px; text-align:center;">
+              <div style="background:${accent}; border-radius:12px; padding:24px; margin:0 0 24px 0; border:2px solid ${brand};">
+                <h2 style="margin:0 0 16px 0; font-size:20px; color:${brand}; font-family:'Playfair Display', Georgia, serif; font-weight:600;">
+                  💳 Pay Now
+                </h2>
+                <p style="margin:0 0 20px 0; font-size:15px; color:${textPrimary}; line-height:1.6;">
+                  Click the button below to pay this invoice securely via PesaPal. You can pay using your card or M-Pesa.
+                </p>
+                <a href="${paymentUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; text-decoration:none; padding:18px 40px; border-radius:8px; font-size:18px; font-weight:600; font-family:'Playfair Display', Georgia, serif; letter-spacing:0.5px; box-shadow:0 4px 12px rgba(124,75,49,0.3);">
+                  Pay ${formatCurrency(invoice.total, invoice.currency)} →
+                </a>
+                <p style="margin:16px 0 0 0; font-size:13px; color:${textSecondary};">
+                  Secure payment via PesaPal (Card or M-Pesa)
+                </p>
+              </div>
+            </td>
+          </tr>
+          ` : ''}
 
           <tr>
             <td style="padding:0 32px 32px 32px;">
@@ -213,6 +234,14 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice): string
                   </p>
                 </div>
                 ` : ''}
+                <div style="background-color:#e8f5e9; border:2px solid #4caf50; border-radius:8px; padding:16px; margin-bottom:16px;">
+                  <p style="margin:0 0 8px 0; font-size:14px; color:#2e7d32; font-weight:600;">
+                    🚀 Website Building Timeline
+                  </p>
+                  <p style="margin:0; font-size:14px; color:#2e7d32; line-height:1.6;">
+                    Once payment has been made, we will immediately begin building your website. Our team will start working on your project as soon as payment is confirmed.
+                  </p>
+                </div>
                 <p style="margin:0 0 12px 0; font-size:14px; color:${textSecondary};">
                   <strong>Payment Instructions</strong>
                 </p>

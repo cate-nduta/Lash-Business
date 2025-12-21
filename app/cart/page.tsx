@@ -105,9 +105,18 @@ export default function Cart() {
 
       if (!response.ok) {
         alert(data.error || 'Failed to process checkout')
+        setProcessing(false)
         return
       }
 
+      // If PesaPal redirect URL is provided, redirect to payment page
+      if (data.redirectUrl) {
+        // Redirect to PesaPal payment page
+        window.location.href = data.redirectUrl
+        return
+      }
+
+      // Otherwise, show success message (fallback for manual payment)
       setSuccessMessage(
         data.message ||
           'Order received! We will reach out shortly with payment instructions and pickup details.'

@@ -3,6 +3,7 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailViaZoho } from '@/lib/email/zoho-config'
 import type { ConsultationInvoice } from '@/app/api/admin/labs/invoices/route'
 import { createInvoiceEmailTemplate } from '@/lib/invoice-email-template'
+import { generateInvoicePaymentLink } from '@/lib/pesapal-invoice-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -76,8 +77,34 @@ export async function POST(
       await writeDataFile('labs-invoices.json', invoices)
     }
 
-    // Generate email HTML
-    const html = createInvoiceEmailTemplate(invoice)
+    // Generate PesaPal payment link if invoice is not paid
+    let paymentUrl: string | undefined = undefined
+    if (invoice.status !== 'paid') {
+      try {
+        // Generate payment link using shared utility
+        const paymentResult = await generateInvoicePaymentLink({
+          invoiceId: invoice.invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          total: invoice.total,
+          currency: invoice.currency,
+          email: invoice.email,
+          phone: invoice.phone,
+          contactName: invoice.contactName,
+          address: invoice.address,
+          businessName: invoice.businessName,
+        })
+        
+        if (paymentResult.success && paymentResult.paymentUrl) {
+          paymentUrl = paymentResult.paymentUrl
+        }
+      } catch (error) {
+        // If payment link generation fails, continue without it (non-blocking)
+        console.warn('Failed to generate payment link for invoice:', error)
+      }
+    }
+
+    // Generate email HTML with payment link
+    const html = createInvoiceEmailTemplate(invoice, paymentUrl)
 
     // Generate plain text version
     const text = `
@@ -111,6 +138,11 @@ ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 View PDF Invoice: ${invoice.viewToken 
     ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
     : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf`}
+
+${paymentUrl && invoice.status !== 'paid' ? `\nPay Now: ${paymentUrl}\nYou can pay using your card or M-Pesa via PesaPal.\n` : ''}
+
+🚀 Website Building Timeline:
+Once payment has been made, we will immediately begin building your website. Our team will start working on your project as soon as payment is confirmed.
 
 Payment Instructions:
 Please make payment by the due date (${formatDate(invoice.dueDate)}).${invoice.expirationDate ? `\n\nIMPORTANT: This invoice is valid for 7 days (expires ${formatDate(invoice.expirationDate)}). If unpaid, your project slot will be released.` : ''} If you have any questions about this invoice, please contact us at hello@lashdiary.co.ke.

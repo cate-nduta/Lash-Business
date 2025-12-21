@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 
 interface ConsultationDetails {
   consultationId: string
@@ -13,6 +14,15 @@ interface ConsultationDetails {
   meetLink?: string
 }
 
+interface AccessResponse {
+  consultation: ConsultationDetails
+  canJoin: boolean
+  message: string
+  timeRemaining?: string
+  meetingHasPassed?: boolean
+  scheduledTime?: string
+}
+
 export default function TimeGatedMeetPage() {
   const params = useParams()
   const consultationId = params?.consultationId as string
@@ -21,6 +31,7 @@ export default function TimeGatedMeetPage() {
   const [canJoin, setCanJoin] = useState(false)
   const [message, setMessage] = useState('')
   const [timeRemaining, setTimeRemaining] = useState<string>('')
+  const [meetingHasPassed, setMeetingHasPassed] = useState(false)
 
   useEffect(() => {
     if (!consultationId) {
@@ -32,10 +43,17 @@ export default function TimeGatedMeetPage() {
     const checkAccess = async () => {
       try {
         const response = await fetch(`/api/labs/consultation/meet-access?consultationId=${encodeURIComponent(consultationId)}`)
-        const data = await response.json()
+        const data: AccessResponse | { error?: string } = await response.json()
 
         if (!response.ok) {
-          setMessage(data.error || 'Unable to verify meeting access')
+          setMessage('error' in data ? data.error || 'Unable to verify meeting access' : 'Unable to verify meeting access')
+          setLoading(false)
+          return
+        }
+
+        // Type guard: ensure data is AccessResponse after OK check
+        if (!('consultation' in data)) {
+          setMessage('Unable to verify meeting access')
           setLoading(false)
           return
         }
@@ -44,15 +62,18 @@ export default function TimeGatedMeetPage() {
         setCanJoin(data.canJoin)
         setMessage(data.message || '')
         setTimeRemaining(data.timeRemaining || '')
+        setMeetingHasPassed(data.meetingHasPassed || false)
 
         // If access is granted, open Meet in new window with security features
         if (data.canJoin && data.consultation.meetLink) {
+          // Store meetLink in a const to ensure type narrowing works inside setTimeout
+          const meetLink = data.consultation.meetLink
           // Show security warning first
           setTimeout(() => {
             // Open in new window to reduce URL visibility
             // Use window.open with specific features to minimize URL bar visibility
             const meetWindow = window.open(
-              data.consultation.meetLink,
+              meetLink,
               '_blank',
               'noopener,noreferrer,width=1280,height=720,menubar=no,toolbar=no,location=no,status=no'
             )
@@ -64,7 +85,7 @@ export default function TimeGatedMeetPage() {
               setMessage('Meeting opened in new window. Please do not share the meeting link.')
             } else {
               // If popup blocked, redirect normally
-              window.location.href = data.consultation.meetLink
+              window.location.href = meetLink
             }
           }, 3000) // 3 second delay to show security message
         }
@@ -172,15 +193,49 @@ export default function TimeGatedMeetPage() {
           </div>
         ) : (
           <div className="text-center">
-            <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-12 h-12 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h1 className="text-3xl font-display text-brown mb-4">Meeting Not Available Yet</h1>
-            <p className="text-gray-700 text-lg mb-6">
-              {message || 'Your meeting is scheduled for a specific time slot.'}
-            </p>
+            {meetingHasPassed ? (
+              <>
+                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h1 className="text-3xl font-display text-red-600 mb-4">Meeting Has Already Passed</h1>
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6 mb-6 max-w-md mx-auto">
+                  <p className="text-red-800 text-lg font-semibold mb-2">
+                    ⚠️ This meeting time slot has already ended
+                  </p>
+                  <p className="text-red-700 text-base mb-4">
+                    {message || 'Your scheduled meeting time has passed. You can rebook your consultation below - no payment required!'}
+                  </p>
+                </div>
+                
+                {/* Rebook Button */}
+                <div className="mt-6">
+                  <Link
+                    href={`/labs/book-appointment?rebook=${consultationId}`}
+                    className="inline-block bg-brown-dark hover:bg-brown text-white font-semibold px-8 py-4 rounded-lg text-lg transition-colors shadow-md hover:shadow-lg"
+                  >
+                    🔄 Rebook Consultation (No Payment Required)
+                  </Link>
+                  <p className="text-sm text-gray-600 mt-3">
+                    Since you already paid for your consultation, you can reschedule at no additional cost.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-12 h-12 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h1 className="text-3xl font-display text-brown mb-4">Meeting Not Available Yet</h1>
+                <p className="text-gray-700 text-lg mb-6">
+                  {message || 'Your meeting is scheduled for a specific time slot.'}
+                </p>
+              </>
+            )}
             
             {consultation && (
               <div className="bg-brown-light/20 rounded-lg p-6 mb-6">

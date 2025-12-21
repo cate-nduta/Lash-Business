@@ -36,11 +36,28 @@ export interface WhatYouGetContent {
   whyThisWorksItems: string[]
 }
 
+export interface WhoThisIsForContent {
+  title: string
+  subtitle: string
+  items: string[]
+}
+
+export interface BudgetRange {
+  id: string
+  label: string
+  value: string
+}
+
 export interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
   statistics?: LabsStatistics
+  statisticsEnabled?: boolean // Enable/disable Statistics section display
+  budgetRanges?: BudgetRange[] // Budget range options for booking form
   whatYouGet?: WhatYouGetContent
+  whatYouGetEnabled?: boolean // Enable/disable What You Get section display
+  whoThisIsFor?: WhoThisIsForContent
+  whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
 }
@@ -150,11 +167,37 @@ const DEFAULT_WHAT_YOU_GET: WhatYouGetContent = {
   ],
 }
 
+const DEFAULT_WHO_THIS_IS_FOR: WhoThisIsForContent = {
+  title: 'Who This is For',
+  subtitle: 'This system is for service providers who:',
+  items: [
+    'Struggle to keep track of client bookings and constantly worry about scheduling mistakes.',
+    'Get frustrated trying to chase deposits or payments from clients.',
+    'Spend hours manually adding appointments to calendars or sending reminders.',
+    'Lose track of how much money they\'ve received or what\'s still owed.',
+    'Want to reduce no-shows with booking fees and automated reminders.',
+    'Need simple, secure payment checkouts that just work.',
+    'Want email automation for confirmations, follow-ups, and client communications.',
+    'Are ready to invest in a professional system to get rid of chaos and run their business efficiently.',
+  ],
+}
+
+const DEFAULT_BUDGET_RANGES: BudgetRange[] = [
+  { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+  { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+  { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+]
+
 const DEFAULT_SETTINGS: LabsSettings = {
   consultationFeeKES: 7000,
   tiers: DEFAULT_TIERS,
   statistics: DEFAULT_STATISTICS,
+  statisticsEnabled: true, // Statistics section enabled by default
+  budgetRanges: DEFAULT_BUDGET_RANGES,
   whatYouGet: DEFAULT_WHAT_YOU_GET,
+  whatYouGetEnabled: true, // What You Get section enabled by default
+  whoThisIsFor: DEFAULT_WHO_THIS_IS_FOR,
+  whoThisIsForEnabled: true, // Who This is For section enabled by default
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
 }
@@ -163,13 +206,6 @@ export async function GET(request: NextRequest) {
   try {
     const settings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
     
-    // Log what we received for debugging
-    console.log('Loaded labs settings:', {
-      hasTiers: !!settings.tiers,
-      tiersLength: settings.tiers?.length || 0,
-      consultationFee: settings.consultationFeeKES,
-    })
-    
     // Ensure all required fields are present with defaults
     const completeSettings: LabsSettings = {
       consultationFeeKES: settings.consultationFeeKES || DEFAULT_SETTINGS.consultationFeeKES,
@@ -177,14 +213,20 @@ export async function GET(request: NextRequest) {
         ? settings.tiers 
         : DEFAULT_TIERS,
       statistics: settings.statistics || DEFAULT_SETTINGS.statistics,
+      statisticsEnabled: settings.statisticsEnabled !== undefined ? settings.statisticsEnabled : DEFAULT_SETTINGS.statisticsEnabled,
+      budgetRanges: (settings.budgetRanges && Array.isArray(settings.budgetRanges) && settings.budgetRanges.length > 0)
+        ? settings.budgetRanges
+        : DEFAULT_BUDGET_RANGES,
       whatYouGet: settings.whatYouGet || DEFAULT_SETTINGS.whatYouGet,
+      whatYouGetEnabled: settings.whatYouGetEnabled !== undefined ? settings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled,
+      whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
+      whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults and save
     if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
-      console.warn('Labs settings had empty tiers, initializing with defaults')
       completeSettings.tiers = DEFAULT_TIERS
       await writeDataFile('labs-settings.json', completeSettings)
     } else if (!settings.tiers || settings.tiers.length === 0) {
@@ -194,7 +236,6 @@ export async function GET(request: NextRequest) {
     
     // Validate the response before sending
     if (!completeSettings.tiers || completeSettings.tiers.length === 0) {
-      console.error('ERROR: Complete settings still has empty tiers after initialization!')
       // Force defaults as last resort
       return NextResponse.json(DEFAULT_SETTINGS)
     }
@@ -259,6 +300,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate budget ranges if provided
+    if (body.budgetRanges !== undefined) {
+      if (!Array.isArray(body.budgetRanges)) {
+        return NextResponse.json(
+          { error: 'Budget ranges must be an array' },
+          { status: 400 }
+        )
+      }
+      
+      if (body.budgetRanges.length === 0) {
+        return NextResponse.json(
+          { error: 'At least one budget range must be configured' },
+          { status: 400 }
+        )
+      }
+
+      for (const range of body.budgetRanges) {
+        if (!range.id || !range.label || !range.value) {
+          return NextResponse.json(
+            { error: 'Each budget range must have an id, label, and value' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     // Get current settings to check if Meet room link changed
     const currentSettings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
     const newMeetRoom = body.googleMeetRoom || ''
@@ -276,7 +343,16 @@ export async function POST(request: NextRequest) {
         },
       })),
       statistics: body.statistics || currentSettings.statistics || DEFAULT_STATISTICS,
+      statisticsEnabled: body.statisticsEnabled !== undefined ? body.statisticsEnabled : (currentSettings.statisticsEnabled !== undefined ? currentSettings.statisticsEnabled : DEFAULT_SETTINGS.statisticsEnabled),
+      budgetRanges: (body.budgetRanges && Array.isArray(body.budgetRanges) && body.budgetRanges.length > 0)
+        ? body.budgetRanges
+        : (currentSettings.budgetRanges && currentSettings.budgetRanges.length > 0)
+          ? currentSettings.budgetRanges
+          : DEFAULT_BUDGET_RANGES,
       whatYouGet: body.whatYouGet || currentSettings.whatYouGet || DEFAULT_WHAT_YOU_GET,
+      whatYouGetEnabled: body.whatYouGetEnabled !== undefined ? body.whatYouGetEnabled : (currentSettings.whatYouGetEnabled !== undefined ? currentSettings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled),
+      whoThisIsFor: body.whoThisIsFor || currentSettings.whoThisIsFor || DEFAULT_WHO_THIS_IS_FOR,
+      whoThisIsForEnabled: body.whoThisIsForEnabled !== undefined ? body.whoThisIsForEnabled : (currentSettings.whoThisIsForEnabled !== undefined ? currentSettings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled),
       googleMeetRoom: newMeetRoom,
       // Update last changed date if Meet room link was changed
       googleMeetRoomLastChanged: meetRoomChanged 
@@ -286,11 +362,18 @@ export async function POST(request: NextRequest) {
 
     // Ensure tiers are saved correctly
     if (!settings.tiers || settings.tiers.length === 0) {
-      console.warn('Warning: Attempting to save settings with empty tiers array')
       // Don't allow saving empty tiers - use current or defaults
       settings.tiers = currentSettings.tiers && currentSettings.tiers.length > 0 
         ? currentSettings.tiers 
         : DEFAULT_TIERS
+    }
+    
+    // Ensure budget ranges are saved correctly
+    if (!settings.budgetRanges || settings.budgetRanges.length === 0) {
+      // Don't allow saving empty budget ranges - use current or defaults
+      settings.budgetRanges = currentSettings.budgetRanges && currentSettings.budgetRanges.length > 0
+        ? currentSettings.budgetRanges
+        : DEFAULT_BUDGET_RANGES
     }
 
     await writeDataFile('labs-settings.json', settings)

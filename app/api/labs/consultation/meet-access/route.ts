@@ -149,16 +149,24 @@ export async function GET(request: NextRequest) {
     let canJoin = false
     let message = ''
     let timeRemaining = ''
+    let meetingHasPassed = false
 
-    if (now < joinWindowStart) {
+    // First check if the meeting end time has passed (this is the key check)
+    if (now > meetingEnd) {
+      // Meeting has already ended
+      meetingHasPassed = true
+      canJoin = false
+      message = `This meeting has already passed. Your scheduled time slot was ${formatDate(consultation.preferredDate)} from ${formatTime(consultation.preferredTime)}. Please contact us if you need to reschedule.`
+    } else if (now < joinWindowStart) {
       // Too early
       canJoin = false
       message = `Your meeting is scheduled for ${formatDate(consultation.preferredDate)} at ${formatTime(consultation.preferredTime)}. Please join during your scheduled time.`
       timeRemaining = formatTimeRemaining(joinWindowStart)
     } else if (now > joinWindowEnd) {
-      // Too late
+      // Too late (past extended window, but this shouldn't happen if meetingEnd check is first)
       canJoin = false
       message = `Your meeting time slot has ended. The meeting window was ${formatDate(consultation.preferredDate)} at ${formatTime(consultation.preferredTime)}. Please contact us if you need to reschedule.`
+      meetingHasPassed = true
     } else {
       // Within join window
       canJoin = true
@@ -178,7 +186,9 @@ export async function GET(request: NextRequest) {
       canJoin,
       message,
       timeRemaining,
+      meetingHasPassed,
       scheduledTime: `${formatDate(consultation.preferredDate)} at ${formatTime(consultation.preferredTime)}`,
+      meetingEndTime: meetingEnd.toISOString(),
     })
   } catch (error: any) {
     console.error('Error checking meeting access:', error)

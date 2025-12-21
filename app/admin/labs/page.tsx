@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
-import type { PricingTier, LabsSettings, WhatYouGetContent } from '@/app/api/admin/labs/route'
+import AdminBackButton from '@/components/AdminBackButton'
+import type { PricingTier, LabsSettings, WhatYouGetContent, WhoThisIsForContent, BudgetRange } from '@/app/api/admin/labs/route'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
@@ -14,6 +15,13 @@ const generateId = () => {
     return crypto.randomUUID()
   }
   return `tier-${Math.random().toString(36).slice(2, 10)}`
+}
+
+const generateBudgetRangeId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `budget-${Math.random().toString(36).slice(2, 10)}`
 }
 
 const blankTier = (): PricingTier => ({
@@ -41,6 +49,13 @@ export default function AdminLabs() {
       clientSatisfactionRate: 0,
       businessesTransformed: 0,
     },
+    statisticsEnabled: true,
+    budgetRanges: [
+      { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+      { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+      { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+    ],
+    whatYouGetEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -62,6 +77,13 @@ export default function AdminLabs() {
       clientSatisfactionRate: 0,
       businessesTransformed: 0,
     },
+    statisticsEnabled: true,
+    budgetRanges: [
+      { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+      { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+      { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+    ],
+    whatYouGetEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -69,6 +91,12 @@ export default function AdminLabs() {
       whatYouGetItems: [],
       whyThisWorksTitle: 'Why this works for service providers',
       whyThisWorksItems: [],
+    },
+    whoThisIsForEnabled: true,
+    whoThisIsFor: {
+      title: 'Who This is For',
+      subtitle: 'This system is for service providers who:',
+      items: [],
     },
     googleMeetRoom: '',
     googleMeetRoomLastChanged: new Date().toISOString(),
@@ -147,6 +175,15 @@ export default function AdminLabs() {
           clientSatisfactionRate: 0,
           businessesTransformed: 0,
         },
+        statisticsEnabled: data.statisticsEnabled !== undefined ? data.statisticsEnabled : true,
+        budgetRanges: (data.budgetRanges && Array.isArray(data.budgetRanges) && data.budgetRanges.length > 0)
+          ? data.budgetRanges
+          : [
+              { id: '100k-150k', label: '100K–150K KES', value: '100k-150k' },
+              { id: '150k-250k', label: '150K–250K KES', value: '150k-250k' },
+              { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
+            ],
+        whatYouGetEnabled: data.whatYouGetEnabled !== undefined ? data.whatYouGetEnabled : true,
         whatYouGet: data.whatYouGet || {
           title: 'What You Get',
           subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -154,6 +191,12 @@ export default function AdminLabs() {
           whatYouGetItems: [],
           whyThisWorksTitle: 'Why this works for service providers',
           whyThisWorksItems: [],
+        },
+        whoThisIsForEnabled: data.whoThisIsForEnabled !== undefined ? data.whoThisIsForEnabled : true,
+        whoThisIsFor: data.whoThisIsFor || {
+          title: 'Who This is For',
+          subtitle: 'This system is for service providers who:',
+          items: [],
         },
       }
       setSettings(settingsWithDefaults)
@@ -314,6 +357,7 @@ export default function AdminLabs() {
   return (
     <div className="min-h-screen bg-baby-pink-light py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AdminBackButton />
         <div className="mb-8">
           <h1 className="text-3xl font-display text-brown mb-2">LashDiary Labs Management</h1>
           <p className="text-gray-600">Manage consultation fee and pricing tiers</p>
@@ -674,8 +718,29 @@ export default function AdminLabs() {
 
         {/* Statistics Section */}
         <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
-          <h2 className="text-2xl font-display text-brown mb-6">Statistics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display text-brown">Statistics</h2>
+            <div className="flex items-center gap-3">
+              <label htmlFor="statisticsEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Statistics Section:
+              </label>
+              <input
+                type="checkbox"
+                id="statisticsEnabled"
+                checked={settings.statisticsEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    statisticsEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown focus:ring-brown rounded cursor-pointer"
+              />
+            </div>
+          </div>
+          
+          {settings.statisticsEnabled !== false && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block font-semibold text-gray-700 mb-2">
                 Consultations Completed:
@@ -802,11 +867,158 @@ export default function AdminLabs() {
               />
             </div>
           </div>
+          )}
+        </div>
+
+        {/* Budget Ranges Section */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display text-brown">Budget Ranges</h2>
+            <button
+              onClick={() => {
+                const newRange: BudgetRange = {
+                  id: generateBudgetRangeId(),
+                  label: 'New Budget Range',
+                  value: 'new-range',
+                }
+                setSettings(prev => ({
+                  ...prev,
+                  budgetRanges: [...(prev.budgetRanges || []), newRange],
+                }))
+              }}
+              className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors font-semibold"
+            >
+              + Add Range
+            </button>
+          </div>
+
+          {(!settings.budgetRanges || settings.budgetRanges.length === 0) ? (
+            <p className="text-gray-600 text-center py-8">No budget ranges yet. Click "Add Range" to create one.</p>
+          ) : (
+            <div className="space-y-4">
+              {settings.budgetRanges.map((range, index) => (
+                <div
+                  key={range.id}
+                  className="border-2 border-brown-light rounded-lg p-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block font-semibold text-gray-700 mb-2">Label (Display Text):</label>
+                      <input
+                        type="text"
+                        value={range.label}
+                        onChange={(e) => {
+                          setSettings(prev => ({
+                            ...prev,
+                            budgetRanges: (prev.budgetRanges || []).map(r =>
+                              r.id === range.id ? { ...r, label: e.target.value } : r
+                            ),
+                          }))
+                        }}
+                        className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                        placeholder="e.g., 100K–150K KES"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-gray-700 mb-2">Value (Form Value):</label>
+                      <input
+                        type="text"
+                        value={range.value}
+                        onChange={(e) => {
+                          setSettings(prev => ({
+                            ...prev,
+                            budgetRanges: (prev.budgetRanges || []).map(r =>
+                              r.id === range.id ? { ...r, value: e.target.value } : r
+                            ),
+                          }))
+                        }}
+                        className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                        placeholder="e.g., 100k-150k"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (index > 0) {
+                            setSettings(prev => {
+                              const newRanges = [...(prev.budgetRanges || [])]
+                              ;[newRanges[index], newRanges[index - 1]] = [newRanges[index - 1], newRanges[index]]
+                              return { ...prev, budgetRanges: newRanges }
+                            })
+                          }
+                        }}
+                        disabled={index === 0}
+                        className="text-brown hover:text-brown-dark disabled:opacity-30 disabled:cursor-not-allowed px-3 py-2"
+                        title="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (index < (settings.budgetRanges?.length || 0) - 1) {
+                            setSettings(prev => {
+                              const newRanges = [...(prev.budgetRanges || [])]
+                              ;[newRanges[index], newRanges[index + 1]] = [newRanges[index + 1], newRanges[index]]
+                              return { ...prev, budgetRanges: newRanges }
+                            })
+                          }
+                        }}
+                        disabled={index === (settings.budgetRanges?.length || 0) - 1}
+                        className="text-brown hover:text-brown-dark disabled:opacity-30 disabled:cursor-not-allowed px-3 py-2"
+                        title="Move down"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => {
+                          if ((settings.budgetRanges?.length || 0) <= 1) {
+                            alert('You must have at least one budget range. Add a new one before removing this.')
+                            return
+                          }
+                          if (confirm('Are you sure you want to remove this budget range?')) {
+                            setSettings(prev => ({
+                              ...prev,
+                              budgetRanges: (prev.budgetRanges || []).filter(r => r.id !== range.id),
+                            }))
+                          }
+                        }}
+                        disabled={(settings.budgetRanges?.length || 0) <= 1}
+                        className="text-red-600 hover:text-red-800 font-semibold px-3 py-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* What You Get Content Section */}
         <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
-          <h2 className="text-2xl font-display text-brown mb-6">What You Get Content</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display text-brown">What You Get Content</h2>
+            <div className="flex items-center gap-3">
+              <label htmlFor="whatYouGetEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable What You Get Section:
+              </label>
+              <input
+                type="checkbox"
+                id="whatYouGetEnabled"
+                checked={settings.whatYouGetEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    whatYouGetEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
           
           <div className="space-y-6">
             {/* Main Title and Subtitle */}
@@ -916,6 +1128,89 @@ export default function AdminLabs() {
                 rows={6}
                 className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown font-mono text-sm"
                 placeholder="No more lost bookings - everything is organized in one place&#10;Payment confusion eliminated - clients pay directly to your connected accounts&#10;..."
+              />
+              <p className="text-xs text-gray-500 mt-1">Enter each item on a new line</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Who This is For Content Section */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display text-brown">Who This is For Content</h2>
+            <div className="flex items-center gap-3">
+              <label htmlFor="whoThisIsForEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Who This is For Section:
+              </label>
+              <input
+                type="checkbox"
+                id="whoThisIsForEnabled"
+                checked={settings.whoThisIsForEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    whoThisIsForEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            {/* Main Title */}
+            <div>
+              <label className="block text-sm font-semibold text-brown mb-2">Section Title</label>
+              <input
+                type="text"
+                value={settings.whoThisIsFor?.title || ''}
+                onChange={(e) => setSettings(prev => ({
+                  ...prev,
+                  whoThisIsFor: {
+                    ...prev.whoThisIsFor!,
+                    title: e.target.value,
+                  },
+                }))}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                placeholder="Who This is For"
+              />
+            </div>
+
+            {/* Subtitle */}
+            <div>
+              <label className="block text-sm font-semibold text-brown mb-2">Subtitle</label>
+              <textarea
+                value={settings.whoThisIsFor?.subtitle || ''}
+                onChange={(e) => setSettings(prev => ({
+                  ...prev,
+                  whoThisIsFor: {
+                    ...prev.whoThisIsFor!,
+                    subtitle: e.target.value,
+                  },
+                }))}
+                rows={2}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                placeholder="This system is for service providers who:"
+              />
+            </div>
+
+            {/* Items */}
+            <div>
+              <label className="block text-sm font-semibold text-brown mb-2">
+                Items (one per line)
+              </label>
+              <textarea
+                value={settings.whoThisIsFor?.items?.join('\n') || ''}
+                onChange={(e) => setSettings(prev => ({
+                  ...prev,
+                  whoThisIsFor: {
+                    ...prev.whoThisIsFor!,
+                    items: e.target.value.split('\n').filter(line => line.trim()),
+                  },
+                }))}
+                rows={10}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown font-mono text-sm"
+                placeholder="Struggle to keep track of client bookings and constantly worry about scheduling mistakes.&#10;Get frustrated trying to chase deposits or payments from clients.&#10;..."
               />
               <p className="text-xs text-gray-500 mt-1">Enter each item on a new line</p>
             </div>
