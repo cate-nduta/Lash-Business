@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import AdminBackButton from '@/components/AdminBackButton'
@@ -361,6 +362,19 @@ export default function AdminLabs() {
         <div className="mb-8">
           <h1 className="text-3xl font-display text-brown mb-2">LashDiary Labs Management</h1>
           <p className="text-gray-600">Manage consultation fee and pricing tiers</p>
+        </div>
+
+        {/* Consultation Availability Link */}
+        <div className="mb-6">
+          <Link
+            href="/admin/labs/consultation-availability"
+            className="inline-block bg-brown-dark text-white px-6 py-3 rounded-lg hover:bg-brown transition-colors font-semibold"
+          >
+            📅 Manage Consultation Availability
+          </Link>
+          <p className="text-sm text-gray-600 mt-2">
+            Set which days are available for consultations and block specific dates
+          </p>
         </div>
 
         {message && (

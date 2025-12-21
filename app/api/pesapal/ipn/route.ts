@@ -55,6 +55,16 @@ async function verifyPaymentStatus(orderTrackingId: string): Promise<any> {
 // This endpoint receives IPN (Instant Payment Notification) from Pesapal
 export async function POST(request: NextRequest) {
   try {
+    // Check if Pesapal is configured
+    if (!PESAPAL_CONSUMER_KEY || !PESAPAL_CONSUMER_SECRET) {
+      console.error('Pesapal IPN: API credentials not configured')
+      // Still return 200 to prevent Pesapal from retrying
+      return NextResponse.json({ 
+        message: 'Pesapal API credentials not configured',
+        error: 'Configuration required'
+      }, { status: 200 })
+    }
+
     const body = await request.json()
     
     // Log the IPN for debugging

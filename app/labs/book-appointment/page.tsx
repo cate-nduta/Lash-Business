@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -23,6 +23,192 @@ const PHONE_COUNTRY_CODES = [
   { code: 'UG', dialCode: '+256', label: 'Uganda (+256)' },
   { code: 'TZ', dialCode: '+255', label: 'Tanzania (+255)' },
 ]
+
+// Simple Calendar Picker Component for Labs Consultations
+function LabsCalendarPicker({
+  selectedDate,
+  onDateSelect,
+  availableDates,
+  blockedDates,
+  loading,
+}: {
+  selectedDate: string
+  onDateSelect: (date: string) => void
+  availableDates: string[]
+  blockedDates: string[]
+  loading: boolean
+}) {
+  const [viewMonth, setViewMonth] = useState(new Date())
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const formatDateKey = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const { daysInMonth, startingDayOfWeek } = useMemo(() => {
+    const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
+    const last = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0)
+    return {
+      daysInMonth: last.getDate(),
+      startingDayOfWeek: first.getDay()
+    }
+  }, [viewMonth])
+
+  const goToPreviousMonth = () => {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+  }
+
+  const goToNextMonth = () => {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+  }
+
+  const isDateAvailable = (dateStr: string): boolean => {
+    if (blockedDates.includes(dateStr)) return false
+    if (availableDates.length === 0) return true // If no availability set, allow all
+    return availableDates.includes(dateStr)
+  }
+
+  const isDateInPast = (date: Date): boolean => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return date < today
+  }
+
+  const days = []
+  // Add empty cells for days before the first day of the month
+  for (let i = 0; i < startingDayOfWeek; i++) {
+    days.push(null)
+  }
+  // Add days of the month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
+    days.push(date)
+  }
+
+  if (loading) {
+    return (
+      <div className="w-full p-8 text-center text-[var(--color-text)]/70">
+        Loading calendar...
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{__html: `
+        /* UNAVAILABLE DATES - Force grey styling */
+        .labs-calendar-day[data-available="false"],
+        .labs-calendar-day[data-available="false"]:hover,
+        .labs-calendar-day[data-available="false"]:focus,
+        .labs-calendar-day[data-available="false"]:active,
+        .labs-calendar-day:disabled {
+          background-color: #d1d5db !important;
+          background: #d1d5db !important;
+          color: #6b7280 !important;
+          cursor: not-allowed !important;
+          opacity: 0.6 !important;
+          border-color: #9ca3af !important;
+        }
+        /* AVAILABLE DATES - White background */
+        .labs-calendar-day[data-available="true"]:not([data-selected="true"]):not(:disabled) {
+          background-color: #ffffff !important;
+          background: #ffffff !important;
+          color: #374151 !important;
+          cursor: pointer !important;
+          opacity: 1 !important;
+        }
+        /* SELECTED DATE - Primary color */
+        .labs-calendar-day[data-selected="true"] {
+          background-color: var(--color-primary) !important;
+          background: var(--color-primary) !important;
+          color: var(--color-on-primary) !important;
+          opacity: 1 !important;
+        }
+      `}} />
+      <div className="w-full bg-[var(--color-surface)] rounded-lg border border-[var(--color-primary)]/20 p-4">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            type="button"
+            onClick={goToPreviousMonth}
+            className="p-2 hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
+            aria-label="Previous month"
+          >
+            <svg className="w-5 h-5 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h3 className="text-lg font-semibold text-[var(--color-text)]">
+            {monthNames[viewMonth.getMonth()]} {viewMonth.getFullYear()}
+          </h3>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            className="p-2 hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
+            aria-label="Next month"
+          >
+            <svg className="w-5 h-5 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Day Headers */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {dayNames.map((day) => (
+            <div key={day} className="text-center text-xs font-semibold text-[var(--color-text)] py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {days.map((date, index) => {
+            if (!date) {
+              return <div key={`empty-${index}`} className="aspect-square" />
+            }
+            const dateStr = formatDateKey(date)
+            const isAvailable = isDateAvailable(dateStr)
+            const isPast = isDateInPast(date)
+            const isSelected = selectedDate === dateStr
+            const isDisabled = !isAvailable || isPast
+            // For styling: a date is "available" only if it's not past AND is in availableDates
+            const isActuallyAvailable = isAvailable && !isPast
+
+            return (
+              <button
+                key={dateStr}
+                type="button"
+                onClick={() => {
+                  if (!isDisabled) {
+                    onDateSelect(dateStr)
+                  }
+                }}
+                disabled={isDisabled}
+                data-available={isActuallyAvailable}
+                data-selected={isSelected}
+                className={`labs-calendar-day aspect-square rounded-lg border transition-colors text-sm font-medium ${
+                  isDisabled || !isActuallyAvailable
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                    : isSelected
+                    ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
+                    : 'bg-white text-gray-700 hover:bg-[var(--color-primary)]/10 hover:border-[var(--color-primary)]'
+                }`}
+              >
+                {date.getDate()}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
 
 export default function LabsBookAppointment() {
   const { currency } = useCurrency()
@@ -94,6 +280,9 @@ export default function LabsBookAppointment() {
           const data = await response.json()
           setBookedDates(data.bookedDates || []) // For backward compatibility
           setBookedSlots(data.bookedSlots || []) // New: specific date+time combinations
+          setAvailableDates(data.availableDates || [])
+          setTimeSlots(data.timeSlots || [])
+          setBlockedDates(data.blockedDates || [])
         }
       } catch (error) {
         console.error('Error loading booked slots:', error)
@@ -136,6 +325,9 @@ export default function LabsBookAppointment() {
   })
   const [bookedDates, setBookedDates] = useState<string[]>([])
   const [bookedSlots, setBookedSlots] = useState<Array<{ date: string; time: string }>>([])
+  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [timeSlots, setTimeSlots] = useState<Array<{ hour: number; minute: number; label: string }>>([])
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
   const [loadingAvailability, setLoadingAvailability] = useState(false)
 
   const [loading, setLoading] = useState(false)
@@ -523,6 +715,9 @@ export default function LabsBookAppointment() {
           if (data) {
             setBookedDates(data.bookedDates || [])
             setBookedSlots(data.bookedSlots || [])
+            setAvailableDates(data.availableDates || [])
+            setTimeSlots(data.timeSlots || [])
+            setBlockedDates(data.blockedDates || [])
           }
         })
         .catch(error => {
@@ -1063,27 +1258,42 @@ export default function LabsBookAppointment() {
                 <label htmlFor="preferredDate" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
                   Consultation Date <span className="text-red-500">*</span>
                 </label>
+                
+                {/* Custom Calendar Picker for Labs Consultations */}
+                <div className="w-full">
+                  <LabsCalendarPicker
+                    selectedDate={formData.preferredDate}
+                    onDateSelect={(date) => {
+                      // Check if date is available and not blocked
+                      if (blockedDates.includes(date)) {
+                        setSubmitStatus({
+                          type: 'error',
+                          message: 'This date is blocked and not available for consultations.',
+                        })
+                        return
+                      }
+                      if (availableDates.length > 0 && !availableDates.includes(date)) {
+                        setSubmitStatus({
+                          type: 'error',
+                          message: 'This date is not available for consultations. Please select an available date.',
+                        })
+                        return
+                      }
+                      setFormData(prev => ({ ...prev, preferredDate: date }))
+                      setSubmitStatus({ type: null, message: '' })
+                    }}
+                    availableDates={availableDates}
+                    blockedDates={blockedDates}
+                    loading={loadingAvailability}
+                  />
+                </div>
+                
+                {/* Hidden input for form validation */}
                 <input
-                  type="date"
+                  type="hidden"
                   id="preferredDate"
                   name="preferredDate"
                   value={formData.preferredDate}
-                  onChange={handleInputChange}
-                  onClick={(e) => {
-                    // Open calendar picker when clicking anywhere on the input
-                    // Only call showPicker on direct user click (user gesture required)
-                    try {
-                      if (e.currentTarget.showPicker && typeof e.currentTarget.showPicker === 'function') {
-                        e.currentTarget.showPicker()
-                      }
-                    } catch (error) {
-                      // If showPicker fails (e.g., not supported or no user gesture), 
-                      // the native date input will still work normally
-                      console.debug('showPicker not available:', error)
-                    }
-                  }}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors cursor-pointer"
                   required
                 />
                 {bookedSlots.some(slot => slot.date === formData.preferredDate) && (
@@ -1110,37 +1320,69 @@ export default function LabsBookAppointment() {
                   disabled={!formData.preferredDate}
                 >
                   <option value="">Select time</option>
-                  {!bookedSlots.some(slot => {
-                    const slotDate = normalizeDateForComparison(slot.date)
-                    const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                    const slotTime = normalizeTimeForComparison(slot.time)
-                    return slotDate === selectedDate && slotTime === 'morning'
-                  }) && (
-                    <option value="morning">
-                      Morning (9 AM - 12 PM)
-                    </option>
+                  {timeSlots.length > 0 ? (
+                    // Use configured time slots from availability settings
+                    timeSlots
+                      .filter(slot => {
+                        // Check if this specific time slot is already booked
+                        const slotTimeLabel = slot.label.toLowerCase()
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        return !bookedSlots.some(booked => {
+                          const bookedDate = normalizeDateForComparison(booked.date)
+                          const bookedTime = normalizeTimeForComparison(booked.time)
+                          // Match if date matches and time label matches
+                          return bookedDate === selectedDate && 
+                                 (bookedTime === slotTimeLabel || 
+                                  bookedTime.includes(slotTimeLabel) ||
+                                  slotTimeLabel.includes(bookedTime))
+                        })
+                      })
+                      .map(slot => (
+                        <option key={slot.label} value={slot.label}>
+                          {slot.label}
+                        </option>
+                      ))
+                  ) : (
+                    // Fallback to old system if no time slots configured
+                    <>
+                      {!bookedSlots.some(slot => {
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'morning'
+                      }) && (
+                        <option value="morning">
+                          Morning (9 AM - 12 PM)
+                        </option>
+                      )}
+                      {!bookedSlots.some(slot => {
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'afternoon'
+                      }) && (
+                        <option value="afternoon">
+                          Afternoon (12 PM - 4 PM)
+                        </option>
+                      )}
+                      {!bookedSlots.some(slot => {
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'evening'
+                      }) && (
+                        <option value="evening">
+                          Evening (4 PM - 7 PM)
+                        </option>
+                      )}
+                    </>
                   )}
-                  {!bookedSlots.some(slot => {
-                    const slotDate = normalizeDateForComparison(slot.date)
-                    const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                    const slotTime = normalizeTimeForComparison(slot.time)
-                    return slotDate === selectedDate && slotTime === 'afternoon'
-                  }) && (
-                    <option value="afternoon">
-                      Afternoon (12 PM - 4 PM)
-                    </option>
-                  )}
-                  {!bookedSlots.some(slot => {
-                    const slotDate = normalizeDateForComparison(slot.date)
-                    const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                    const slotTime = normalizeTimeForComparison(slot.time)
-                    return slotDate === selectedDate && slotTime === 'evening'
-                  }) && (
-                    <option value="evening">
-                      Evening (4 PM - 7 PM)
-                    </option>
-                  )}
-                  {formData.preferredDate && bookedSlots.filter(slot => slot.date === formData.preferredDate).length === 3 && (
+                  {formData.preferredDate && timeSlots.length > 0 && 
+                   bookedSlots.filter(slot => {
+                     const slotDate = normalizeDateForComparison(slot.date)
+                     const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                     return slotDate === selectedDate
+                   }).length >= timeSlots.length && (
                     <option value="" disabled>
                       All time slots are booked for this date
                     </option>

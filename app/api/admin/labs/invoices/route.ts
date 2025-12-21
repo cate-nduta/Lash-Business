@@ -47,13 +47,13 @@ function formatCurrency(amount: number, currency: string): string {
   return `KSH ${Math.round(amount).toLocaleString('en-KE')}`
 }
 
-async function generateInvoiceEmailHTML(invoice: ConsultationInvoice): Promise<string> {
+async function generateInvoiceEmailHTML(invoice: ConsultationInvoice, paymentUrl?: string): Promise<string> {
   // Import the template from the utility file
   const { createInvoiceEmailTemplate } = await import('@/lib/invoice-email-template')
-  return createInvoiceEmailTemplate(invoice)
+  return createInvoiceEmailTemplate(invoice, paymentUrl)
 }
 
-async function generateInvoiceEmailText(invoice: ConsultationInvoice): Promise<string> {
+async function generateInvoiceEmailText(invoice: ConsultationInvoice, paymentUrl?: string): Promise<string> {
   // Use public route with token for email links (bypasses admin auth requirement)
   const pdfUrl = invoice.viewToken 
     ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
@@ -89,8 +89,13 @@ ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 
 View PDF Invoice: ${pdfUrl}
 
+${paymentUrl && invoice.status !== 'paid' ? `\n💳 Pay Now: ${paymentUrl}\nYou can pay using your card or M-Pesa via PesaPal.\n` : ''}
+
 ${invoice.expirationDate ? `\nIMPORTANT: This invoice is valid for 7 days (expires ${formatDate(invoice.expirationDate)}). If unpaid, your project slot will be released.\n` : ''}Payment Instructions:
 Please make payment by the due date (${formatDate(invoice.dueDate)}). If you have any questions about this invoice, please contact us at hello@lashdiary.co.ke.
+
+🚀 Website Building Timeline:
+Once payment has been made, we will immediately begin building your website. Our team will start working on your project as soon as payment is confirmed.
 
 This invoice was sent to ${invoice.email}
 LashDiary Labs - Professional System Setup Services
@@ -277,13 +282,42 @@ export async function POST(request: NextRequest) {
     invoices.push(invoice)
     await writeDataFile('labs-invoices.json', invoices)
 
-    // Automatically send invoice email to client
+    // Automatically send invoice email to client with payment link
     try {
+      // Generate PesaPal payment link if invoice is not paid
+      let paymentUrl: string | undefined = undefined
+      if (invoice.status !== 'paid') {
+        try {
+          const { generateInvoicePaymentLink } = await import('@/lib/pesapal-invoice-utils')
+          const paymentResult = await generateInvoicePaymentLink({
+            invoiceId: invoice.invoiceId,
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            currency: invoice.currency,
+            email: invoice.email,
+            phone: invoice.phone,
+            contactName: invoice.contactName,
+            address: invoice.address,
+            businessName: invoice.businessName,
+          })
+          
+          if (paymentResult.success && paymentResult.paymentUrl) {
+            paymentUrl = paymentResult.paymentUrl
+            console.log(`✅ Payment link generated for invoice ${invoice.invoiceNumber}: ${paymentUrl}`)
+          } else {
+            console.warn(`⚠️ Failed to generate payment link for invoice ${invoice.invoiceNumber}:`, paymentResult.error)
+          }
+        } catch (error) {
+          // If payment link generation fails, continue without it (non-blocking)
+          console.warn('Failed to generate payment link for invoice:', error)
+        }
+      }
+
       const sendResult = await sendEmailViaZoho({
         to: invoice.email,
         subject: `Invoice ${invoice.invoiceNumber} from LashDiary Labs`,
-        html: await generateInvoiceEmailHTML(invoice),
-        text: await generateInvoiceEmailText(invoice),
+        html: await generateInvoiceEmailHTML(invoice, paymentUrl),
+        text: await generateInvoiceEmailText(invoice, paymentUrl),
       })
 
       if (sendResult.success) {

@@ -31,8 +31,47 @@ function normalizeTime(timeStr: string | null | undefined): string | null {
   return timeStr.toLowerCase().trim()
 }
 
+// Calculate day of week from date components in Nairobi timezone (UTC+3)
+// Returns 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+function getDayOfWeek(year: number, month: number, day: number): number {
+  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  const dateInNairobi = new Date(`${dateStr}T12:00:00+03:00`)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Nairobi',
+    weekday: 'long',
+  })
+  const weekdayName = formatter.format(dateInNairobi)
+  const weekdayMap: { [key: string]: number } = {
+    'Sunday': 0,
+    'Monday': 1,
+    'Tuesday': 2,
+    'Wednesday': 3,
+    'Thursday': 4,
+    'Friday': 5,
+    'Saturday': 6,
+  }
+  return weekdayMap[weekdayName] ?? 0
+}
+
 export async function GET(request: NextRequest) {
   try {
+    // Load availability settings
+    const availabilityData = await readDataFile('labs-consultation-availability.json', {
+      availableDays: {
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
+        saturday: false,
+        sunday: false,
+      },
+      timeSlots: {
+        weekdays: [],
+      },
+      blockedDates: [],
+    })
+
     // Load all consultations
     const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
     
@@ -43,11 +82,8 @@ export async function GET(request: NextRequest) {
         if (!consultation.preferredDate || !consultation.preferredTime) return false
         
         // Must be confirmed (not pending, not cancelled, and not undefined/null)
-        // Only count consultations that are explicitly confirmed
         const status = consultation.status?.toLowerCase()
         if (status === 'cancelled') return false
-        // If status is undefined/null, assume it's confirmed (for backward compatibility with old data)
-        // If status is 'pending', don't count it as booked yet
         if (status === 'pending') return false
         
         return true
@@ -61,9 +97,9 @@ export async function GET(request: NextRequest) {
           time: normalizedTime || consultation.preferredTime,
         }
       })
-      .filter(slot => slot.date && slot.time) // Remove any invalid entries
+      .filter(slot => slot.date && slot.time)
 
-    // Also keep bookedDates for backward compatibility (dates that are fully booked)
+    // Also keep bookedDates for backward compatibility
     const bookedDates = consultationsData.consultations
       .filter(consultation => {
         if (!consultation.preferredDate) return false
@@ -74,11 +110,53 @@ export async function GET(request: NextRequest) {
       })
       .map(consultation => normalizeDate(consultation.preferredDate) || consultation.preferredDate)
       .filter((date): date is string => !!date)
-      .filter((date, index, self) => self.indexOf(date) === index) // Remove duplicates
+      .filter((date, index, self) => self.indexOf(date) === index)
+
+    // Generate available dates based on availability settings
+    const availableDates: string[] = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const endDate = new Date(today)
+    endDate.setDate(endDate.getDate() + 90) // Next 90 days
+
+    const blockedDatesSet = new Set<string>(availabilityData.blockedDates || [])
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+    let currentDate = new Date(today)
+    while (currentDate <= endDate) {
+      const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`
+      
+      // Skip if blocked
+      if (blockedDatesSet.has(dateStr)) {
+        currentDate.setDate(currentDate.getDate() + 1)
+        continue
+      }
+
+      // Check if day is available
+      const dayOfWeek = getDayOfWeek(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1,
+        currentDate.getDate()
+      )
+      const dayName = dayNames[dayOfWeek]
+      const dayAvailable = availabilityData.availableDays?.[dayName as keyof typeof availabilityData.availableDays] === true
+
+      if (dayAvailable) {
+        availableDates.push(dateStr)
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    // Get available time slots
+    const timeSlots = availabilityData.timeSlots?.weekdays || []
 
     return NextResponse.json({
       bookedDates, // For backward compatibility
-      bookedSlots, // New: specific date+time combinations
+      bookedSlots, // Specific date+time combinations
+      availableDates, // Dates that are available based on settings
+      timeSlots, // Available time slots
+      blockedDates: availabilityData.blockedDates || [], // Blocked dates
     }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
@@ -89,7 +167,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error loading consultation availability:', error)
     return NextResponse.json(
-      { error: 'Failed to load availability', bookedDates: [], bookedSlots: [] },
+      { error: 'Failed to load availability', bookedDates: [], bookedSlots: [], availableDates: [], timeSlots: [], blockedDates: [] },
       { status: 500 }
     )
   }

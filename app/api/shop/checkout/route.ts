@@ -177,6 +177,11 @@ export async function POST(request: NextRequest) {
       const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || ''
       const PESAPAL_ENVIRONMENT = process.env.PESAPAL_ENVIRONMENT || 'sandbox'
       
+      // Check if Pesapal is configured
+      if (!PESAPAL_CONSUMER_KEY || !PESAPAL_CONSUMER_SECRET) {
+        throw new Error('Pesapal API credentials not configured. Please add PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET to your environment variables.')
+      }
+      
       const getBaseUrl = (): string => {
         const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
         if (typeof raw === 'string' && raw.trim().length > 0) {
