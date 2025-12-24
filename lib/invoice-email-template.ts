@@ -28,9 +28,6 @@ function formatCurrency(amount: number, currency: string): string {
   if (currency === 'USD') {
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
-  if (currency === 'EUR') {
-    return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
   return `KSH ${Math.round(amount).toLocaleString('en-KE')}`
 }
 
@@ -207,13 +204,13 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, payment
                   💳 Pay Now
                 </h2>
                 <p style="margin:0 0 20px 0; font-size:15px; color:${textPrimary}; line-height:1.6;">
-                  Click the button below to pay this invoice securely via PesaPal. You can pay using your card or M-Pesa.
+                  Click the button below to pay this invoice securely.
                 </p>
                 <a href="${paymentUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; text-decoration:none; padding:18px 40px; border-radius:8px; font-size:18px; font-weight:600; font-family:'Playfair Display', Georgia, serif; letter-spacing:0.5px; box-shadow:0 4px 12px rgba(124,75,49,0.3);">
                   Pay ${formatCurrency(invoice.total, invoice.currency)} →
                 </a>
                 <p style="margin:16px 0 0 0; font-size:13px; color:${textSecondary};">
-                  Secure payment via PesaPal (Card or M-Pesa)
+                  Secure payment processing
                 </p>
               </div>
             </td>

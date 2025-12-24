@@ -1,0 +1,113 @@
+{
+  "courses": [
+    {
+      "id": "course-booking-website",
+      "title": "How to Build a Client-Booking Website That Accepts Payments",
+      "slug": "how-to-build-a-client-booking-website-that-accepts-payments",
+      "subtitle": "Become a Full-Stack Web Developer with just ONE course. HTML, CSS, Javascript, Node, React, PostgreSQL, Web3 and DApps",
+      "description": "A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required! Build fully-fledged websites and web apps for your startup or business.\n\n**🎓 Certificate of Completion**\n\nUpon completing this course, you will receive an official Certificate of Completion issued by LashDiary Labs. The certificate will be personalized with your name and can be downloaded or printed for your portfolio.",
+      "priceUSD": 0,
+      "originalPriceUSD": 0,
+      "imageUrl": "https://xvrfpvdgzekdkmplcbwq.supabase.co/storage/v1/object/public/gallery/gallery/1766428090946-Desk_Inspo.jpg",
+      "duration": "25-35 hours",
+      "level": "intermediate",
+      "category": "Web Development",
+      "isActive": false,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2025-12-23T10:51:57.313Z",
+      "instructor": {
+        "name": "Catherine Kuria",
+        "title": "Developer and Lead Instructor"
+      },
+      "rating": 4.7,
+      "ratingsCount": 460205,
+      "learnersCount": 1522123,
+      "whatYoullLearn": [
+        "Build 16 web development projects for your portfolio, ready to apply for junior developer jobs.",
+        "Learn the latest technologies, including Javascript, React, Node and even Web3 development.",
+        "After the course you will be able to build ANY website you want.",
+        "Build fully-fledged websites and web apps for your startup or business.",
+        "Work as a freelance web developer.",
+        "Master frontend development with React",
+        "Master backend development with Node",
+        "Learn professional developer best practices."
+      ],
+      "languages": [
+        "English",
+        "Arabic"
+      ],
+      "lastUpdated": "11/2025",
+      "lectures": 70,
+      "totalHours": "62 total hours",
+      "premium": false,
+      "couponCode": "CM251222G1",
+      "discountPercent": 10,
+      "discountExpiry": "",
+      "discountExpiryDate": ""
+    },
+    {
+      "id": "course-ai-booking-website",
+      "title": "Build a Professional Booking Website with AI: From Zero to Launch",
+      "slug": "build-a-professional-booking-website-with-ai-from-zero-to-launch",
+      "subtitle": "Learn how to build a complete booking website like lashdiary.co.ke using AI-powered development tools. No coding experience needed - perfect for beginners! Coming from someone who doesn't like to code that much!",
+      "description": "This comprehensive course teaches you how to build a professional booking website from scratch using modern AI-powered development tools. You'll learn every step of the process, from setting up your development environment to deploying your live website with a custom domain.\n\n**What You'll Build:**\n\nYou'll create a fully-functional booking website similar to lashdiary.co.ke, complete with:\n\n- Beautiful, responsive frontend design\n- Complete booking system with calendar integration\n- Payment processing integration\n- Client accounts and authentication\n- Admin dashboard for managing bookings\n- Email notifications and automated reminders\n- Google Calendar integration\n- Professional email setup\n- Database integration\n\n**Perfect for Beginners:**\n\nThis course is designed so that even a 12-year-old can follow along. Every step is explained in detail, with screenshots and exact prompts you'll use. No prior coding experience is required!\n\n**What Makes This Course Special:**\n\n- **Every Single Prompt:** You'll get access to every prompt used to build this website\n- **Step-by-Step Instructions:** Detailed instructions for every process\n- **Real-World Setup:** Learn how to buy domains, set up hosting, configure email, and more\n- **Complete Transparency:** See exactly how a professional booking website is built\n- **Lifetime Access:** Learn at your own pace with lifetime access to all materials\n\n**🎓 Certificate of Completion**\n\nUpon completing this course, you will receive an official Certificate of Completion issued by LashDiary Labs. The certificate will be personalized with your name and can be downloaded or printed for your portfolio.",
+      "priceUSD": 49.99,
+      "originalPriceUSD": 0,
+      "imageUrl": "https://xvrfpvdgzekdkmplcbwq.supabase.co/storage/v1/object/public/gallery/gallery/1766427209424-Pink_Aesthetic_Minimalist_Desk_Setup_with_Cityscape_View_Tech___Gadgets.jpg",
+      "duration": "40-50 hours",
+      "level": "beginner",
+      "category": "Web Development",
+      "isActive": true,
+      "createdAt": "2025-01-20T00:00:00.000Z",
+      "updatedAt": "2025-12-23T10:51:57.313Z",
+      "instructor": {
+        "name": "Catherine Kuria",
+        "title": "Founder & Lead Instructor"
+      },
+      "rating": 5,
+      "ratingsCount": 1,
+      "learnersCount": 1,
+      "bestseller": false,
+      "whatYoullLearn": [
+        "Build a complete booking website from scratch using AI-powered development tools",
+        "Set up and configure your development environment step-by-step (GitHub, Cursor, hosting)",
+        "Use AI coding assistants to write code without prior programming experience",
+        "Design a clean, modern, and responsive frontend with full control over colors, layout, and theme",
+        "Create essential website pages (Homepage, About, Services, Contact, Booking)",
+        "Build a functional booking or contact system based on your website needs",
+        "Integrate Google Calendar to manage availability and prevent double bookings",
+        "Set up professional email communication using Zoho or Google email",
+        "Configure automated email notifications for form submissions and bookings",
+        "Store and manage website data using a Supabase database",
+        "Securely connect external services using environment variables",
+        "Integrate online payments using PayPal, Stripe and Pesapal (for African countries)",
+        "Purchase and connect a custom domain name to your website",
+        "Deploy your website to Netlify with proper build and security configuration",
+        "Enable SSL (HTTPS) for a professional and secure website",
+        "Understand every AI prompt and technical process used in building your website",
+        "Test, review, and fix errors using Cursor’s AI assistance"
+      ],
+      "lastUpdated": "12/2025",
+      "lectures": 60,
+      "totalHours": "40-50 total hours",
+      "premium": true,
+      "discountPercent": 15,
+      "discountExpiry": "",
+      "discountExpiryDate": "2025-12-30T00:00:00.000Z"
+    }
+  ],
+  "discounts": [
+    {
+      "id": "9e9b47ed-2eab-457d-8864-e45529cd61fd",
+      "courseId": "course-ai-booking-website",
+      "type": "percentage",
+      "value": 10,
+      "startDate": "2025-12-23",
+      "endDate": "2025-12-30",
+      "isActive": true,
+      "createdAt": "2025-12-23T10:18:42.229Z"
+    }
+  ],
+  "coursesDiscountBannerEnabled": false,
+  "coursesDiscountBannerCourseId": "course-ai-booking-website"
+}

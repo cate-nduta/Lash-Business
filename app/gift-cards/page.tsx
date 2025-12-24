@@ -192,27 +192,32 @@ export default function GiftCards() {
       const firstName = nameParts[0] || purchaserName
       const lastName = nameParts.slice(1).join(' ') || firstName
 
-      const response = await fetch('/api/pesapal/submit-order', {
+      // Initialize Paystack payment
+      const response = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount,
-          currency: currency,
-          phoneNumber: purchaserPhone || '',
           email: purchaserEmail,
-          firstName,
-          lastName,
-          description: `LashDiary Gift Card - ${getDisplayAmount(amount)}`,
-          bookingReference: `GiftCard-${Date.now()}`,
+          amount: amount,
+          currency: currency === 'USD' ? 'USD' : 'KES',
+          metadata: {
+            payment_type: 'gift_card',
+            gift_card_amount: amount,
+            recipient_name: recipientName,
+            recipient_email: recipientEmail,
+            message: recipientMessage,
+          },
+          customerName: purchaserName,
+          phone: purchaserPhone,
         }),
       })
 
       const data = await response.json()
 
-      if (response.ok && data.success && data.redirectUrl) {
-        // Redirect to Pesapal payment page
-        window.location.href = data.redirectUrl
-        return { success: true, orderTrackingId: data.orderTrackingId }
+      if (response.ok && data.success && data.authorizationUrl) {
+        // Redirect to Paystack payment page
+        window.location.href = data.authorizationUrl
+        return { success: true, reference: data.reference }
       } else {
         setMpesaStatus({
           loading: false,
@@ -255,8 +260,6 @@ export default function GiftCards() {
       // If currency is USD, convert to KES
       if (currency === 'USD') {
         amount = Math.round(customValue / DEFAULT_EXCHANGE_RATES.usdToKes)
-      } else if (currency === 'EUR') {
-        amount = Math.round(customValue / DEFAULT_EXCHANGE_RATES.eurToKes)
       } else {
         amount = customValue
       }

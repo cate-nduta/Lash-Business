@@ -13,6 +13,7 @@ export type ActivityModule =
   | 'discounts'
   | 'email_marketing'
   | 'partner_onboarding'
+  | 'courses'
   | 'general'
 
 export type ActivityAction =

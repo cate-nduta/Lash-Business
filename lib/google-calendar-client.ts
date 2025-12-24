@@ -3,7 +3,7 @@
  * This reduces initial bundle size by only loading googleapis when actually needed
  */
 
-let calendarClientPromise: Promise<any> | null = null
+const calendarClientPromise: Promise<any> | null = null
 let googleModule: any = null
 
 /**

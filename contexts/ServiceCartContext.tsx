@@ -92,7 +92,7 @@ export function ServiceCartProvider({ children }: { children: ReactNode }) {
       if (currency === 'USD' && item.priceUSD !== undefined) {
         return total + item.priceUSD
       }
-      // For EUR or USD without priceUSD, convert from KES
+      // For USD without priceUSD, convert from KES
       return total + convertCurrency(item.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
     }, 0)
   }

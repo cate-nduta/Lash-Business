@@ -34,7 +34,6 @@ interface Settings {
   }
   exchangeRates?: {
     usdToKes?: number
-    eurToKes?: number
   }
 }
 
@@ -66,7 +65,6 @@ export default function AdminSettings() {
     },
     exchangeRates: {
       usdToKes: 130,
-      eurToKes: 140,
     },
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -156,13 +154,10 @@ export default function AdminSettings() {
         }
         // Ensure exchange rates exist
         if (!loaded.exchangeRates) {
-          loaded.exchangeRates = { usdToKes: 130, eurToKes: 140 }
+          loaded.exchangeRates = { usdToKes: 130 }
         } else {
           if (typeof loaded.exchangeRates.usdToKes !== 'number' || loaded.exchangeRates.usdToKes <= 0) {
             loaded.exchangeRates.usdToKes = 130
-          }
-          if (typeof loaded.exchangeRates.eurToKes !== 'number' || loaded.exchangeRates.eurToKes <= 0) {
-            loaded.exchangeRates.eurToKes = 140
           }
         }
         setSettings(loaded)
@@ -969,36 +964,7 @@ export default function AdminSettings() {
                 </p>
               </div>
               
-              <div>
-                <label className="block text-sm font-semibold text-brown-dark mb-2">
-                  EUR to KES Rate
-                </label>
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-600">1 EUR =</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={settings.exchangeRates?.eurToKes ?? 140}
-                    onChange={(e) => {
-                      const value = Math.max(1, Number(e.target.value))
-                      setSettings(prev => ({
-                        ...prev,
-                        exchangeRates: {
-                          ...prev.exchangeRates,
-                          eurToKes: value,
-                        }
-                      }))
-                      setHasUnsavedChanges(true)
-                    }}
-                    className="w-32 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                  />
-                  <span className="text-brown-dark font-semibold">KES</span>
-                </div>
-                <p className="text-xs text-gray-600 mt-2">
-                  Example: If 1 EUR = 140 KES, enter 140. This means 1 Euro equals 140 Kenyan Shillings.
-                </p>
-              </div>
+              
             </div>
           </div>
 

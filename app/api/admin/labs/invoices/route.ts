@@ -41,9 +41,6 @@ function formatCurrency(amount: number, currency: string): string {
   if (currency === 'USD') {
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
-  if (currency === 'EUR') {
-    return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
   return `KSH ${Math.round(amount).toLocaleString('en-KE')}`
 }
 
@@ -89,7 +86,7 @@ ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 
 View PDF Invoice: ${pdfUrl}
 
-${paymentUrl && invoice.status !== 'paid' ? `\n💳 Pay Now: ${paymentUrl}\nYou can pay using your card or M-Pesa via PesaPal.\n` : ''}
+${paymentUrl && invoice.status !== 'paid' ? `\n💳 Pay Now: ${paymentUrl}\n` : ''}
 
 ${invoice.expirationDate ? `\nIMPORTANT: This invoice is valid for 7 days (expires ${formatDate(invoice.expirationDate)}). If unpaid, your project slot will be released.\n` : ''}Payment Instructions:
 Please make payment by the due date (${formatDate(invoice.dueDate)}). If you have any questions about this invoice, please contact us at hello@lashdiary.co.ke.
@@ -282,27 +279,31 @@ export async function POST(request: NextRequest) {
     invoices.push(invoice)
     await writeDataFile('labs-invoices.json', invoices)
 
-    // Automatically send invoice email to client with payment link
+    // Automatically send invoice email to client
     try {
-      // Generate PesaPal payment link if invoice is not paid
+      // Generate Paystack payment link if invoice is not paid
       let paymentUrl: string | undefined = undefined
       if (invoice.status !== 'paid') {
         try {
-          const { generateInvoicePaymentLink } = await import('@/lib/pesapal-invoice-utils')
-          const paymentResult = await generateInvoicePaymentLink({
-            invoiceId: invoice.invoiceId,
-            invoiceNumber: invoice.invoiceNumber,
-            total: invoice.total,
-            currency: invoice.currency,
+          const { initializeTransaction } = await import('@/lib/paystack-utils')
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'
+          
+          const paymentResult = await initializeTransaction({
             email: invoice.email,
+            amount: invoice.total,
+            currency: invoice.currency || 'KES',
+            metadata: {
+              payment_type: 'invoice',
+              invoice_id: invoice.invoiceId,
+              invoice_number: invoice.invoiceNumber,
+            },
+            customerName: invoice.contactName || invoice.businessName,
             phone: invoice.phone,
-            contactName: invoice.contactName,
-            address: invoice.address,
-            businessName: invoice.businessName,
+            callbackUrl: `${baseUrl}/api/paystack/callback`,
           })
           
-          if (paymentResult.success && paymentResult.paymentUrl) {
-            paymentUrl = paymentResult.paymentUrl
+          if (paymentResult.success && paymentResult.authorizationUrl) {
+            paymentUrl = paymentResult.authorizationUrl
             console.log(`✅ Payment link generated for invoice ${invoice.invoiceNumber}: ${paymentUrl}`)
           } else {
             console.warn(`⚠️ Failed to generate payment link for invoice ${invoice.invoiceNumber}:`, paymentResult.error)

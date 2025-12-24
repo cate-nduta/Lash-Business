@@ -25,6 +25,7 @@ export interface ConsultationSubmission {
   email: string
   phone: string
   businessType: string
+  isBusinessRegistered?: string
   serviceType: string
   currentWebsite: string
   hasWebsite: string
@@ -47,10 +48,10 @@ export interface ConsultationSubmission {
   source: string
   status?: 'pending' | 'pending_payment' | 'confirmed' | 'cancelled'
   paymentStatus?: 'pending' | 'pending_payment' | 'paid'
-  pesapalOrderTrackingId?: string | null
+  paymentOrderTrackingId?: string | null
   paymentMethod?: string | null
   paidAt?: string
-  pesapalTransactionId?: string
+  paymentTransactionId?: string
   consultationId?: string
   meetLink?: string // Store the actual Google Meet link
   outcome?: 'build-now' | 'fix-first' | 'don\'t-build' | 'not-interested' | 'follow-up' // Consultation outcome
@@ -248,15 +249,51 @@ export async function POST(request: NextRequest) {
       meetingBuilding: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingBuilding, { fieldName: 'Meeting building', maxLength: 200, optional: true }) || '') : '',
       meetingStreet: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingStreet, { fieldName: 'Meeting street', maxLength: 200, optional: true }) || '') : '',
       consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 7000,
-      currency: (body.currency === 'USD' || body.currency === 'EUR' || body.currency === 'KES') ? body.currency : 'KES',
+      currency: (body.currency === 'USD' || body.currency === 'KES') ? body.currency : 'KES',
       submittedAt: body.submittedAt || new Date().toISOString(),
       source: body.source || 'labs-consultation',
-      status: body.paymentStatus === 'pending_payment' ? 'pending_payment' : 'confirmed',
       consultationId,
       paymentStatus: body.paymentStatus || 'pending',
-      pesapalOrderTrackingId: body.pesapalOrderTrackingId || null,
+      paymentOrderTrackingId: body.paymentOrderTrackingId || null,
       paymentMethod: body.paymentMethod || null,
     }
+
+    // Check if consultation is free (0 KSH) - if so, create immediately without payment
+    const consultationPrice = consultationData.consultationPrice || 0
+    const isFree = consultationPrice === 0
+
+    // If NOT free and payment is required, store as pending consultation instead of creating immediately
+    if (!isFree && (body.paymentStatus === 'pending_payment' || body.paymentMethod === 'paystack')) {
+      // Store pending consultation data - will be created after payment confirmation
+      const pendingConsultations = await readDataFile<Array<{
+        consultationId: string
+        consultationData: ConsultationSubmission
+        createdAt: string
+      }>>('pending-consultations.json', [])
+
+      pendingConsultations.push({
+        consultationId,
+        consultationData: {
+          ...consultationData,
+          status: 'pending_payment',
+        },
+        createdAt: new Date().toISOString(),
+      })
+
+      await writeDataFile('pending-consultations.json', pendingConsultations)
+
+      // Return success but indicate consultation is pending payment
+      return NextResponse.json({
+        success: true,
+        consultationId,
+        pendingPayment: true,
+        message: 'Consultation will be created after payment confirmation',
+      })
+    }
+
+    // For free consultations or legacy support, create immediately
+    consultationData.status = isFree ? 'confirmed' : (body.paymentStatus === 'pending_payment' ? 'pending_payment' : 'confirmed')
+    consultationData.paymentStatus = isFree ? 'not_required' : (body.paymentStatus || 'pending')
 
     // Only send email if payment is already completed (for rebooking or manual confirmations)
     // For new consultations with pending payment, email will be sent after IPN confirms payment

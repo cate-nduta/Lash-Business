@@ -129,10 +129,15 @@ function createOrderConfirmationEmailTemplate(data: {
   amount: number
   subtotal: number
   transportationFee: number
-  deliveryOption: 'pickup' | 'delivery'
+  deliveryOption: 'pickup' | 'delivery' | 'digital'
   deliveryAddress?: string
   pickupLocation: string
   pickupDays: string[]
+  digitalDownloads?: Array<{
+    productName: string
+    downloadUrl: string
+    fileName?: string
+  }>
 }) {
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   const pickupDaysText =
@@ -195,7 +200,23 @@ function createOrderConfirmationEmailTemplate(data: {
                 </table>
               </div>
 
-              ${data.deliveryOption === 'pickup'
+              ${data.digitalDownloads && data.digitalDownloads.length > 0
+                ? `<div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:2px solid ${brand};">
+                    <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand}; font-weight:600;">📥 Download Your Digital Products</h2>
+                    <p style="margin:0 0 16px 0; font-size:15px; color:${textPrimary}; line-height:1.6;">
+                      Your digital products are ready for download! Click the links below to download your files.
+                    </p>
+                    ${data.digitalDownloads.map((download, index) => `
+                      <div style="background:${card}; border-radius:8px; padding:16px; margin:${index > 0 ? '12px' : '0'} 0; border:1px solid ${accent};">
+                        <p style="margin:0 0 8px 0; font-size:15px; color:${textPrimary}; font-weight:600;">${download.productName}</p>
+                        <a href="${download.downloadUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600; font-size:15px; margin-top:8px;">Download ${download.fileName || 'File'}</a>
+                      </div>
+                    `).join('')}
+                    <p style="margin:16px 0 0 0; font-size:13px; color:${textSecondary}; line-height:1.6;">
+                      💡 <strong>Tip:</strong> Save these download links! You can access your files anytime using the links above.
+                    </p>
+                  </div>`
+                : data.deliveryOption === 'pickup'
                 ? `<div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:1px solid ${accent};">
                     <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand}; font-weight:600;">Pickup Information</h2>
                     <p style="margin:0 0 12px 0; font-size:15px; color:${textPrimary};">
@@ -208,7 +229,8 @@ function createOrderConfirmationEmailTemplate(data: {
                       You'll receive another email when your order is ready for pickup at the location. Please bring a valid ID when collecting your order.
                     </p>
                   </div>`
-                : `<div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:1px solid ${accent};">
+                : data.deliveryOption === 'delivery'
+                ? `<div style="background:${background}; border-radius:12px; padding:20px; margin:20px 0; border:1px solid ${accent};">
                     <h2 style="margin:0 0 16px 0; font-size:18px; color:${brand}; font-weight:600;">Delivery Information</h2>
                     <p style="margin:0 0 12px 0; font-size:15px; color:${textPrimary};">
                       <strong>Delivery Address:</strong> ${data.deliveryAddress || 'Not provided'}
@@ -216,7 +238,8 @@ function createOrderConfirmationEmailTemplate(data: {
                     <p style="margin:12px 0 0 0; font-size:14px; color:${textSecondary}; line-height:1.6;">
                       We'll deliver your order directly to your home address. You'll receive another email when your order is ready for delivery. Our delivery partner (Pick up Mtaani) will coordinate the delivery with you.
                     </p>
-                  </div>`}
+                  </div>`
+                : ''}
 
               <p style="margin:20px 0 0 0; font-size:14px; color:${textSecondary};">
                 If you have any questions, feel free to reply to this email or contact us at <a href="mailto:${OWNER_EMAIL}" style="color:${brand}; text-decoration:none; font-weight:600;">${OWNER_EMAIL}</a>.
@@ -247,10 +270,15 @@ export async function sendShopOrderConfirmationEmail(data: {
   amount: number
   subtotal: number
   transportationFee: number
-  deliveryOption: 'pickup' | 'delivery'
+  deliveryOption: 'pickup' | 'delivery' | 'digital'
   deliveryAddress?: string
   pickupLocation: string
   pickupDays: string[]
+  digitalDownloads?: Array<{
+    productName: string
+    downloadUrl: string
+    fileName?: string
+  }>
 }): Promise<void> {
   if (!zohoTransporter) {
     console.warn('Email transporter not configured. Cannot send order confirmation email.')

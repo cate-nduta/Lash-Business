@@ -116,7 +116,7 @@ export default function Booking() {
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'none' | string>('none')
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | string>('card')
   const [paymentSettings, setPaymentSettings] = useState<any>(null)
   const [loadingPaymentSettings, setLoadingPaymentSettings] = useState(true)
 
@@ -1654,24 +1654,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
   }, [])
 
-  // Initiate M-Pesa payment via PesaPal (for deposit payment)
-  const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string, isFullPayment: boolean = false) => {
+  // Initiate payment via Paystack (for both M-Pesa and Card)
+  const initiatePayment = async (amount: number, bookingReference: string, isFullPayment: boolean = false) => {
     const formattedAmount = formatCurrencyContext(amount)
     setMpesaStatus({ loading: true, success: null, message: `Initiating payment...` })
     
     try {
-      // Validate and format phone number
-      const cleanPhone = phone.replace(/\s+/g, '').replace(/^\+/, '')
-      if (!cleanPhone || cleanPhone.length < 9) {
-        return { 
-          success: false, 
-          error: 'Invalid phone number. Please enter a valid phone number.' 
-        }
-      }
-
-      const nameParts = formData.name.trim().split(' ')
-      const firstName = nameParts[0] || formData.name
-      const lastName = nameParts.slice(1).join(' ') || firstName
+      const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
 
       if (!formData.email || !formData.email.includes('@')) {
         return { 
@@ -1680,52 +1669,53 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         }
       }
 
-      const response = await fetch('/api/pesapal/submit-order', {
+      // Initialize Paystack payment
+      const response = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount,
-          currency: 'KES', // M-Pesa only supports KES
-          phoneNumber: cleanPhone,
           email: formData.email,
-          firstName,
-          lastName,
-          description: isFullPayment
-            ? `LashDiary Full Payment - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`
-            : `LashDiary Deposit - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
-          bookingReference,
+          amount: amount,
+          currency: currency === 'USD' ? 'USD' : 'KES',
+          metadata: {
+            payment_type: 'booking',
+            booking_reference: bookingReference,
+            service_names: selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service',
+            is_full_payment: isFullPayment,
+          },
+          customerName: formData.name,
+          phone: fullPhone,
         }),
       })
 
       const data = await response.json()
 
-      if (response.ok && data.success && data.redirectUrl) {
+      if (response.ok && data.success && data.authorizationUrl) {
         setMpesaStatus({
           loading: false,
           success: true,
           message: 'Redirecting to secure payment page...',
-          orderTrackingId: data.orderTrackingId,
+          orderTrackingId: data.reference,
         })
-        // Redirect to PesaPal payment page (customer can choose M-Pesa or Card)
-        // Use setTimeout to ensure state updates before redirect
+        // Redirect to Paystack payment page
         setTimeout(() => {
-          window.location.href = data.redirectUrl
+          window.location.href = data.authorizationUrl
         }, 100)
-        return { success: true, orderTrackingId: data.orderTrackingId }
+        return { success: true, orderTrackingId: data.reference, reference: data.reference }
       } else {
-        const errorMessage = data.error || data.details || data.message || 'Failed to initiate payment. Please check your details and try again.'
+        const errorMessage = data.error || 'Failed to initiate payment. Please check your details and try again.'
         setMpesaStatus({
           loading: false,
           success: false,
           message: errorMessage,
         })
-        console.error('PesaPal payment initiation failed:', data)
+        console.error('Paystack payment initiation failed:', data)
         return { success: false, error: errorMessage }
       }
     } catch (error: any) {
-      console.error('Error initiating M-Pesa payment:', error)
+      console.error('Error initiating payment:', error)
       setMpesaStatus({
         loading: false,
         success: false,
@@ -1735,61 +1725,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
   }
 
-  // Initiate card payment via Pesapal (full payment required)
+  // Legacy function names for compatibility (both use Paystack now)
+  const initiateMpesaPayment = async (phone: string, amount: number, bookingReference: string, isFullPayment: boolean = false) => {
+    return initiatePayment(amount, bookingReference, isFullPayment)
+  }
+
   const initiateCardPayment = async (amount: number, bookingReference: string) => {
-    setMpesaStatus({ loading: true, success: null, message: `Redirecting to secure payment page...` })
-    
-    try {
-      const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
-      const nameParts = formData.name.trim().split(' ')
-      const firstName = nameParts[0] || formData.name
-      const lastName = nameParts.slice(1).join(' ') || firstName
-
-      const response = await fetch('/api/pesapal/submit-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount,
-          currency: currency,
-          phoneNumber: fullPhone,
-          email: formData.email,
-          firstName,
-          lastName,
-          description: `LashDiary Full Payment - ${selectedServiceNames.length > 0 ? selectedServiceNames.join(' + ') : 'Service'}`,
-          bookingReference,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success && data.redirectUrl) {
-        setMpesaStatus({
-          loading: false,
-          success: true,
-          message: 'Redirecting to secure payment page...',
-          orderTrackingId: data.orderTrackingId,
-        })
-        // Redirect to Pesapal payment page
-        window.location.href = data.redirectUrl
-        return { success: true, orderTrackingId: data.orderTrackingId }
-      } else {
-        setMpesaStatus({
-          loading: false,
-          success: false,
-          message: data.error || data.details || 'Failed to initiate card payment. Please try again or contact us.',
-        })
-        return { success: false, error: data.error || data.details }
-      }
-    } catch (error: any) {
-      setMpesaStatus({
-        loading: false,
-        success: false,
-        message: 'Failed to initiate card payment. Please try again or contact us.',
-      })
-      return { success: false, error: error.message }
-    }
+    return initiatePayment(amount, bookingReference, true) // Card always requires full payment
   }
 
 
@@ -1957,7 +1899,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             promoCodeType: referralType,
             salonReferral: salonReferralContext,
             giftCardCode: giftCardData?.valid ? giftCardData.code : null,
-            paymentMethod: 'pesapal',
+            paymentMethod: 'paystack',
             paymentStatus: 'pending_payment',
             currency: currency,
             desiredLook: 'Custom',
@@ -1974,18 +1916,19 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           paymentResult = { ...cardResult }
           
           if (cardResult.success && cardResult.orderTrackingId) {
-            // Update booking with PesaPal tracking ID
+            // Update booking with Paystack reference
             try {
-              await fetch(`/api/booking/update-pesapal-tracking`, {
+              await fetch(`/api/booking/update-payment-tracking`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   bookingId: createdBookingId,
-                  pesapalOrderTrackingId: cardResult.orderTrackingId,
+                  paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
+                  paymentMethod: 'paystack',
                 }),
               })
             } catch (error) {
-              console.error('Error updating booking with PesaPal tracking ID:', error)
+              console.error('Error updating booking with Paystack reference:', error)
             }
             
             setLoading(false)
@@ -2010,7 +1953,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         }
       }
       
-      // At this point, paymentMethod is 'mpesa' or 'none' (card already returned above)
+      // At this point, paymentMethod is 'mpesa' (card already returned above)
       if (paymentMethod === 'mpesa') {
         // Validate phone number first
         const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
@@ -2078,9 +2021,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             promoCodeType: referralType,
             salonReferral: salonReferralContext,
             giftCardCode: giftCardData?.valid ? giftCardData.code : null,
-            paymentMethod: 'pesapal',
+            paymentMethod: 'paystack',
             paymentStatus: 'pending_payment',
-            pesapalOrderTrackingId: mpesaResult.orderTrackingId, // Store tracking ID immediately
+            paymentOrderTrackingId: mpesaResult.orderTrackingId || mpesaResult.reference, // Store Paystack reference
             currency: 'KES', // M-Pesa only supports KES
             desiredLook: 'Custom',
           }),
@@ -2104,279 +2047,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           setLoading(false)
           return
         }
-      } else {
-        // No payment - booking will be created without payment
-        // User will be notified to pay later (only if deposit allowed by admin)
-        if (requiresFullPayment) {
-          // Full payment required - cannot book without payment
-          setSubmitStatus({
-            type: 'error',
-            message: 'Payment Required',
-            details: `Full payment is required to book your appointment. Please select Card or M-Pesa payment method and complete the payment to confirm your booking.`,
-          })
-          setLoading(false)
-          return
-        }
-        // Deposit option allows pay later (if admin allows)
-        paymentResult = { success: true }
       }
-
-      // Proceed with booking creation (with or without payment)
-      // Note: Card and M-Pesa payments via PesaPal redirect, so booking is created via callback
-      // At this point, paymentMethod can only be 'none' (card and mpesa already returned above)
-      if (paymentMethod === 'none' && !requiresFullPayment) {
-        // Proceed with booking creation
-        const timestamp = Date.now()
-        const response = await fetch(`/api/calendar/book?t=${timestamp}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...formData,
-            service: selectedServiceNames.length > 0 
-              ? selectedServiceNames.join(' + ') 
-              : formData.service || 'Lash Service',
-            services: selectedServiceNames, // Array of service names
-            serviceDetails: cartItems.map(item => ({
-              serviceId: item.serviceId,
-              name: item.name,
-              price: item.price,
-              priceUSD: item.priceUSD,
-              duration: item.duration,
-              categoryId: item.categoryId,
-              categoryName: item.categoryName,
-            })),
-            location: STUDIO_LOCATION,
-            isFirstTimeClient: effectiveIsFirstTimeClient === true,
-            originalPrice: pricingDetails.originalPrice,
-            discount: pricingDetails.discount,
-            finalPrice: pricingDetails.finalPrice,
-            deposit: pricingDetails.deposit, // M-Pesa or 'none' always uses deposit
-            paymentType: 'deposit', // Only 'none' reaches here (card and mpesa redirect to PesaPal), so always deposit
-            discountType: pricingDetails.discountType,
-            promoCode: promoCodeData?.code || null,
-            promoCodeType: referralType,
-            salonReferral: salonReferralContext,
-            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
-            mpesaCheckoutRequestID: paymentResult.checkoutRequestID || null,
-            pesapalOrderTrackingId: paymentResult.orderTrackingId || null,
-            paymentMethod: 'none', // Only 'none' reaches here, card and mpesa redirect to PesaPal
-            currency: currency,
-            desiredLook: 'Custom',
-          }),
-        })
-
-        const data = await response.json()
-
-
-        if (response.ok && data.success) {
-        // Format the date and time for display
-        const appointmentDate = new Date(formData.date)
-        const appointmentTime = new Date(formData.timeSlot)
-        const formattedDate = appointmentDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-        const formattedTime = appointmentTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        })
-        
-        // Calculate end time based on total service duration
-        const serviceDuration = getTotalDuration() || 90 // Default to 90 minutes
-        const endTime = new Date(appointmentTime)
-        endTime.setMinutes(endTime.getMinutes() + serviceDuration)
-        const formattedEndTime = endTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        })
-        
-        // Calculate pricing for display
-        const summaryPricing = pricingDetails
-        const depositFormatted = summaryPricing.deposit > 0 ? formatCurrencyContext(summaryPricing.deposit) : 'N/A'
-        const originalPriceFormatted = formatCurrencyContext(summaryPricing.originalPrice)
-        const discountFormatted = summaryPricing.discount > 0 ? formatCurrencyContext(summaryPricing.discount) : formatCurrencyContext(0)
-        const finalPriceFormatted = formatCurrencyContext(summaryPricing.finalPrice)
-        
-        const bookingSummary = {
-          name: formData.name,
-          email: formData.email,
-          date: formattedDate,
-          time: formattedTime,
-          endTime: formattedEndTime,
-          service: selectedServiceNames.length > 0 
-            ? selectedServiceNames.join(' + ') 
-            : 'Lash Service',
-          deposit: depositFormatted,
-          originalPrice: originalPriceFormatted,
-          discount: discountFormatted,
-          finalPrice: finalPriceFormatted,
-          paymentType: (requiresFullPayment ? 'full' : 'deposit') as 'deposit' | 'full',
-          isFullPayment: requiresFullPayment,
-          returningClientEligible:
-            appliedReturningDiscountPercent > 0 ||
-            promoCodeData?.isReferral === true,
-          isNewUser: data.isNewUser === true,
-        }
-        
-        // Store booking details for modal
-        setBookingDetails(bookingSummary)
-        if (
-          bookingSummary.returningClientEligible &&
-          (!referralDetails || referralDetails.code === '')
-        ) {
-          try {
-            const referralResponse = await fetch('/api/promo-codes/create-referral', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                referrerEmail: bookingSummary.email,
-                referrerName: bookingSummary.name,
-              }),
-            })
-            const referralData = await referralResponse.json()
-            if (referralResponse.ok && referralData.success && referralData.promoCode?.code) {
-              setReferralDetails({
-                code: referralData.promoCode.code,
-                friendUsesRemaining:
-                  typeof referralData.promoCode.friendUsesRemaining === 'number'
-                    ? referralData.promoCode.friendUsesRemaining
-                    : null,
-              })
-              setReferralMessage(
-                referralData.reused
-                  ? 'We resent your referral code to your email.'
-                  : 'A fresh referral code is on its way to your email.',
-              )
-            }
-          } catch (error) {
-            console.error('Failed to auto-generate referral code:', error)
-          }
-        }
-        
-        // Show success modal
-        setShowSuccessModal(true)
-        
-        // Also show status message
-        let emailStatus = ''
-        if (data.emailSent) {
-          emailStatus = 'Confirmation emails have been sent to you and the customer.'
-        } else if (data.emailError) {
-          emailStatus = `Note: There was an issue sending the confirmation email. Please check your email (${formData.email}) or contact us directly.`
-        } else {
-          emailStatus = 'Note: Email notifications may not be configured. Please check your email or contact us directly.'
-        }
-        
-        const paymentNotice = paymentMethod === 'none' 
-          ? (requiresFullPayment
-              ? ' ⚠️ Full payment is required to book your appointment. Please select M-Pesa payment and complete the payment to confirm your booking.'
-              : ' ⚠️ Payment Required: Please note that payment is required to secure your appointment. We will contact you shortly with payment instructions.')
-          : requiresFullPayment
-          ? ' ✅ Full payment has been processed. Your appointment is fully paid and confirmed.'
-          : ''
-        
-        setSubmitStatus({
-          type: 'success',
-          message: '🎉 Appointment Booked Successfully!',
-          details: `${data.message || 'Your appointment has been confirmed.'}${paymentNotice} ${emailStatus} If the email isn't in your inbox within a few minutes, please check your spam or promotions folder and mark it as not spam.`,
-        })
-
-        if (promoCodeData?.valid && promoCodeData.code) {
-          try {
-            const redeemResponse = await fetch('/api/promo-codes/redeem', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code: promoCodeData.code,
-                email: formData.email,
-                bookingId: data.bookingId,
-                clientName: formData.name,
-                service: selectedServiceNames.length > 0 
-                  ? selectedServiceNames.join(' + ') 
-                  : formData.service || 'Lash Service',
-                appointmentDate: formData.date,
-                appointmentTime: formData.timeSlot,
-                originalPrice: pricingDetails.originalPrice,
-                finalPrice: pricingDetails.finalPrice,
-                discount: pricingDetails.discount,
-                salonName: promoCodeData.salonName,
-                salonEmail: promoCodeData.salonEmail,
-                salonCommissionPercent: promoCodeData.salonCommissionPercent,
-                clientDiscountPercent: promoCodeData.clientDiscountPercent ?? promoCodeData.discountValue ?? null,
-              }),
-            })
-            if (!redeemResponse.ok) {
-              const redeemData = await redeemResponse.json().catch(() => ({}))
-              console.error('Failed to mark promo code as redeemed:', redeemData)
-            }
-          } catch (error) {
-            console.error('Failed to mark promo code as redeemed:', error)
-          }
-        }
-
-        setPromoCode('')
-        setPromoCodeData(null)
-        setPromoError('')
-        setReferralStatus('idle')
-        setReferralMessage('')
-        setReferralError('')
-        
-        // Clear service cart after successful booking
-        clearCart()
-        
-        // Reset form
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          service: '',
-          lastFullSetDate: '',
-          date: '',
-          timeSlot: '',
-          notes: '',
-          appointmentPreference: '',
-        })
-        setTimeSlots([])
-        setTermsAccepted(false)
-        setTermsAcknowledgementError(false)
-        
-        // Refresh available dates and time slots after booking
-        // This ensures the booked slot disappears and dates update if fully booked
-        const timestamp = Date.now()
-        const refreshResponse = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { cache: 'no-store' })
-        const refreshData = await refreshResponse.json()
-        if (refreshData.dates) {
-          setAvailableDates(refreshData.dates)
-          const dateStrings = refreshData.dates.map((d: AvailableDate) => d.value)
-          setAvailableDateStrings(dateStrings)
-        }
-        if (refreshData.fullyBookedDates) {
-          setFullyBookedDates(refreshData.fullyBookedDates)
-        }
-        
-        // Refresh time slots for the selected date if it still exists
-        if (formData.date) {
-          fetchTimeSlots(formData.date)
-        }
-      } else {
-        setSubmitStatus({
-          type: 'error',
-          message: data.error || 'Failed to book appointment. Please try again.',
-          details: data.details,
-        })
-      }
-    } else {
-      // Payment failed
-      setSubmitStatus({
-        type: 'error',
-        message: paymentResult.error || 'Payment failed. Please try again.',
-      })
-    }
     } catch (error: any) {
       console.error('Failed to book appointment:', error)
       setSubmitStatus({
@@ -3188,31 +2859,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-normal">(KES only)</span>}
                     </div>
                     <div className="text-sm text-brown-dark/70 mt-1">
-                      Deposit payment • KES only • Pay balance later
+                      Deposit payment • KES only
                     </div>
                   </div>
                 </label>
 
-                {/* Pay Later Option (only if deposit allowed) */}
-                {!requiresFullPayment && (
-                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
-                    style={{ borderColor: paymentMethod === 'none' ? '#7C4B31' : '#E5D5C8' }}>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="none"
-                      checked={paymentMethod === 'none'}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="h-5 w-5 accent-brown-dark flex-shrink-0"
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold text-base text-brown-dark">Pay Later</div>
-                      <div className="text-sm text-brown-dark/70 mt-1">
-                        We'll contact you with payment instructions
-                      </div>
-                    </div>
-                  </label>
-                )}
               </div>
 
               {/* M-Pesa Phone Number Input */}
@@ -3246,7 +2897,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     />
                   </div>
                   <p className="text-xs text-brown-dark/60 mt-2">
-                    We'll redirect you to PesaPal where you can complete your M-Pesa payment
+                    We'll redirect you to Paystack where you can complete your M-Pesa payment
                   </p>
                 </div>
               )}
@@ -3258,7 +2909,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     <span className="text-lg">ℹ️</span>
                     <div className="text-sm text-blue-900">
                       <p className="font-medium mb-1">Secure Payment</p>
-                      <p>You'll be redirected to PesaPal's secure payment page to complete your card payment. We accept both KES and USD.</p>
+                      <p>You'll be redirected to Paystack's secure payment page to complete your card payment. We accept both KES and USD.</p>
                     </div>
                   </div>
                 </div>
@@ -3327,7 +2978,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 mpesaStatus.loading ||
                 !termsAccepted ||
                 (currency === 'USD' && paymentMethod === 'mpesa') ||
-                (requiresFullPayment && paymentMethod === 'none')
+                !paymentMethod || (paymentMethod !== 'card' && paymentMethod !== 'mpesa')
               }
               className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-4 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group min-h-[56px] sm:min-h-[52px]"
             >
@@ -3343,9 +2994,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       ? 'Book Appointment & Pay Full Amount (Card)'
                       : paymentMethod === 'mpesa'
                       ? 'Book Appointment & Pay Deposit (M-Pesa)'
-                      : requiresFullPayment
-                      ? 'Book Appointment & Pay Full Amount'
-                      : 'Book Appointment (Pay Deposit Later)'}
+                      : 'Book Appointment & Pay'}
                     <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
                   </>
                 )}

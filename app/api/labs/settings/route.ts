@@ -54,6 +54,7 @@ export interface LabsSettings {
   whatYouGetEnabled?: boolean // Enable/disable What You Get section display
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
+  courseSectionEnabled?: boolean // Enable/disable Course section display
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
 }
@@ -155,6 +156,7 @@ const DEFAULT_SETTINGS: LabsSettings = {
   statisticsEnabled: true, // Statistics section enabled by default
   budgetRanges: DEFAULT_BUDGET_RANGES,
   whatYouGetEnabled: true, // What You Get section enabled by default
+  courseSectionEnabled: true, // Course section enabled by default
   whatYouGet: {
     title: 'What You Get',
     subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -198,7 +200,13 @@ const DEFAULT_SETTINGS: LabsSettings = {
 // Public GET endpoint - no authentication required
 export async function GET(request: NextRequest) {
   try {
-    const settings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
+    let settings: LabsSettings
+    try {
+      settings = await readDataFile<LabsSettings>('labs-settings.json', DEFAULT_SETTINGS)
+    } catch (readError) {
+      console.error('Error reading labs-settings.json, using defaults:', readError)
+      settings = DEFAULT_SETTINGS
+    }
     
     // Ensure all required fields are present with defaults
     const completeSettings: LabsSettings = {
@@ -215,6 +223,7 @@ export async function GET(request: NextRequest) {
       whatYouGetEnabled: settings.whatYouGetEnabled !== undefined ? settings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled,
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
+      courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
@@ -243,16 +252,33 @@ export async function GET(request: NextRequest) {
         'Expires': '0',
       },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error loading labs settings:', error)
-    // Return defaults on error with no-cache headers
-    return NextResponse.json(DEFAULT_SETTINGS, {
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      },
-    })
+    // Return defaults on error with no-cache headers - ensure it's always valid JSON
+    try {
+      return NextResponse.json(DEFAULT_SETTINGS, {
+        status: 200, // Return 200 even on error to prevent page crashes
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      })
+    } catch (jsonError) {
+      // Last resort - return minimal valid response
+      console.error('Error serializing DEFAULT_SETTINGS:', jsonError)
+      return NextResponse.json({
+        consultationFeeKES: 7000,
+        tiers: DEFAULT_TIERS,
+      }, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      })
+    }
   }
 }
 

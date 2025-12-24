@@ -41,7 +41,9 @@ export default function ClientAuthMonitor() {
       try {
         const response = await fetch('/api/client/auth/me', {
           cache: 'no-store',
+          credentials: 'include',
         })
+        // 401 is expected when not logged in - not an error
         const isAuthenticated = response.ok
 
         if (isAuthenticated) {
@@ -51,7 +53,7 @@ export default function ClientAuthMonitor() {
         }
       } catch (error) {
         // Silently fail - don't interrupt user experience
-        // Only log if it's not a 401 (which is expected when logged out)
+        // Network errors are handled here, 401 responses are expected and handled above
       } finally {
         // Reset the checking flag after a delay
         setTimeout(() => {

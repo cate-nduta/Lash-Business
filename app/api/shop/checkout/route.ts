@@ -11,6 +11,10 @@ interface Product {
   imageUrl?: string
   createdAt?: string
   updatedAt?: string
+  type?: 'physical' | 'digital'
+  downloadUrl?: string
+  downloadFileName?: string
+  category?: string
 }
 
 interface ProductsPayload {
@@ -38,7 +42,8 @@ const DEFAULT_PRODUCTS: ProductsPayload = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { productId, items, paymentMethod, phoneNumber, email, deliveryOption, deliveryAddress } = body
+    const { productId, items, paymentMethod, phoneNumber, email, deliveryAddress } = body
+    let { deliveryOption } = body
 
     // Support both single product and cart checkout
     const isCartCheckout = Array.isArray(items) && items.length > 0
@@ -50,15 +55,6 @@ export async function POST(request: NextRequest) {
 
     if (!paymentMethod || !['mpesa', 'card'].includes(paymentMethod)) {
       return NextResponse.json({ error: 'Valid payment method is required (mpesa or card)' }, { status: 400 })
-    }
-
-    // Validate delivery option
-    if (!deliveryOption || !['pickup', 'delivery', 'lash_suite'].includes(deliveryOption)) {
-      return NextResponse.json({ error: 'Invalid delivery option. Must be "pickup", "delivery", or "lash_suite"' }, { status: 400 })
-    }
-
-    if (deliveryOption === 'delivery' && (!deliveryAddress || !deliveryAddress.trim())) {
-      return NextResponse.json({ error: 'Delivery address is required for home delivery' }, { status: 400 })
     }
 
     const data = await readDataFile<ProductsPayload>('shop-products.json', DEFAULT_PRODUCTS)
@@ -75,6 +71,8 @@ export async function POST(request: NextRequest) {
 
     let checkoutItems: Array<{ product: Product; quantity: number }> = []
     let subtotal = 0
+    let hasDigitalProducts = false
+    let hasPhysicalProducts = false
 
     if (isCartCheckout) {
       // Process cart items
@@ -89,7 +87,13 @@ export async function POST(request: NextRequest) {
         }
 
         const product = products[productIndex]
-        if (product.quantity < item.quantity) {
+        if (product.type === 'digital') {
+          hasDigitalProducts = true
+        } else {
+          hasPhysicalProducts = true
+        }
+        
+        if (product.quantity < item.quantity && product.type !== 'digital') {
           return NextResponse.json({ error: `Insufficient stock for ${product.name}` }, { status: 400 })
         }
 
@@ -103,14 +107,36 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
       }
       const product = products[productIndex]
-      if (product.quantity <= 0) {
-        return NextResponse.json({ error: 'Product is out of stock' }, { status: 400 })
+      if (product.type === 'digital') {
+        hasDigitalProducts = true
+      } else {
+        hasPhysicalProducts = true
+        if (product.quantity <= 0) {
+          return NextResponse.json({ error: 'Product is out of stock' }, { status: 400 })
+        }
       }
       checkoutItems.push({ product, quantity: 1 })
       subtotal = product.price
     }
 
-    const transportCost = deliveryOption === 'lash_suite' ? 0 : deliveryOption === 'pickup' ? transportationFee : 0
+    // Validate delivery option (only required for physical products)
+    if (hasPhysicalProducts) {
+      if (!deliveryOption || !['pickup', 'delivery', 'lash_suite'].includes(deliveryOption)) {
+        return NextResponse.json({ error: 'Invalid delivery option. Must be "pickup", "delivery", or "lash_suite"' }, { status: 400 })
+      }
+
+      if (deliveryOption === 'delivery' && (!deliveryAddress || !deliveryAddress.trim())) {
+        return NextResponse.json({ error: 'Delivery address is required for home delivery' }, { status: 400 })
+      }
+    } else {
+      // Digital products don't need delivery option
+      deliveryOption = 'digital' as any
+    }
+
+    // Calculate transport cost (only for physical products)
+    const transportCost = hasPhysicalProducts
+      ? (deliveryOption === 'lash_suite' ? 0 : deliveryOption === 'pickup' ? transportationFee : 0)
+      : 0
     const total = subtotal + transportCost
 
     // Validate contact info
@@ -200,14 +226,14 @@ export async function POST(request: NextRequest) {
         ? 'https://pay.pesapal.com/v3'
         : 'https://cybqa.pesapal.com/pesapalv3'
 
-      // Get access token
+      // Get access token - Pesapal v3 uses Basic authentication (not Bearer)
       const auth = Buffer.from(`${PESAPAL_CONSUMER_KEY}:${PESAPAL_CONSUMER_SECRET}`).toString('base64')
       const tokenResponse = await fetch(`${PESAPAL_BASE_URL}/api/Auth/RequestToken`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth}`,
+          'Authorization': `Basic ${auth}`, // Changed from Bearer to Basic
         },
         body: JSON.stringify({}),
       })

@@ -58,6 +58,7 @@ export interface LabsSettings {
   whatYouGetEnabled?: boolean // Enable/disable What You Get section display
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
+  courseSectionEnabled?: boolean // Enable/disable Course section display
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
 }
@@ -198,6 +199,7 @@ const DEFAULT_SETTINGS: LabsSettings = {
   whatYouGetEnabled: true, // What You Get section enabled by default
   whoThisIsFor: DEFAULT_WHO_THIS_IS_FOR,
   whoThisIsForEnabled: true, // Who This is For section enabled by default
+  courseSectionEnabled: true, // Course section enabled by default
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
 }
@@ -221,6 +223,7 @@ export async function GET(request: NextRequest) {
       whatYouGetEnabled: settings.whatYouGetEnabled !== undefined ? settings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled,
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
+      courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
@@ -353,6 +356,7 @@ export async function POST(request: NextRequest) {
       whatYouGetEnabled: body.whatYouGetEnabled !== undefined ? body.whatYouGetEnabled : (currentSettings.whatYouGetEnabled !== undefined ? currentSettings.whatYouGetEnabled : DEFAULT_SETTINGS.whatYouGetEnabled),
       whoThisIsFor: body.whoThisIsFor || currentSettings.whoThisIsFor || DEFAULT_WHO_THIS_IS_FOR,
       whoThisIsForEnabled: body.whoThisIsForEnabled !== undefined ? body.whoThisIsForEnabled : (currentSettings.whoThisIsForEnabled !== undefined ? currentSettings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled),
+      courseSectionEnabled: body.courseSectionEnabled !== undefined ? body.courseSectionEnabled : (currentSettings.courseSectionEnabled !== undefined ? currentSettings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled),
       googleMeetRoom: newMeetRoom,
       // Update last changed date if Meet room link was changed
       googleMeetRoomLastChanged: meetRoomChanged 

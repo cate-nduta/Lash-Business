@@ -1,0 +1,51 @@
+{
+  "title": "How to Build a Client-Booking Website",
+  "subtitle": "That Accepts Payments (Without a Developer)",
+  "description": "A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required!",
+  "overview": {
+    "modules": 10,
+    "hours": "25-35",
+    "format": "100% Text-Based (No Videos)"
+  },
+  "introText": "This course will teach you how to build a complete booking website similar to this one. You'll learn step-by-step, starting with the basics and building up to a fully functional website with payment processing, email notifications, and admin dashboard.",
+  "perfectFor": "Business owners, service providers, entrepreneurs, and anyone who wants to accept online bookings without hiring a developer.",
+  "cta": {
+    "title": "Ready to Start Learning?",
+    "subtitle": "Begin with Module 1 and follow along step-by-step",
+    "buttonText": "Start Course Now",
+    "buttonSubtext": "Begin with Module 1 to understand why booking websites are essential for service providers"
+  },
+  "features": [
+    {
+      "icon": "📅",
+      "title": "Online Booking System",
+      "description": "Clients can book appointments 24/7"
+    },
+    {
+      "icon": "💳",
+      "title": "Payment Processing",
+      "description": "Accept deposits and full payments"
+    },
+    {
+      "icon": "📧",
+      "title": "Email Notifications",
+      "description": "Automated confirmations and reminders"
+    },
+    {
+      "icon": "👥",
+      "title": "Client Accounts",
+      "description": "Registration and booking history"
+    },
+    {
+      "icon": "🎨",
+      "title": "Admin Dashboard",
+      "description": "Manage bookings and clients"
+    },
+    {
+      "icon": "📱",
+      "title": "Responsive Design",
+      "description": "Works on all devices"
+    }
+  ]
+}
+

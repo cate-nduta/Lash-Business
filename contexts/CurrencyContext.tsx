@@ -18,7 +18,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedCurrency = localStorage.getItem('preferredCurrency') as Currency | null
-      if (savedCurrency && (savedCurrency === 'KES' || savedCurrency === 'USD' || savedCurrency === 'EUR')) {
+      if (savedCurrency && (savedCurrency === 'KES' || savedCurrency === 'USD')) {
         setCurrencyState(savedCurrency)
       }
     }
@@ -39,7 +39,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const formatCurrency = (amount: number): string => {
     const config = CURRENCIES[currency]
     
-    if (currency === 'USD' || currency === 'EUR') {
+    if (currency === 'USD') {
       return `${config.symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
     

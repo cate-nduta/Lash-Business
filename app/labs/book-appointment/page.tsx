@@ -66,10 +66,14 @@ function LabsCalendarPicker({
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
   }
 
+  // Create sets for O(1) lookup instead of O(n) array search - MUCH FASTER
+  const availableDatesSet = useMemo(() => new Set(availableDates), [availableDates])
+  const blockedDatesSet = useMemo(() => new Set(blockedDates), [blockedDates])
+
   const isDateAvailable = (dateStr: string): boolean => {
-    if (blockedDates.includes(dateStr)) return false
-    if (availableDates.length === 0) return true // If no availability set, allow all
-    return availableDates.includes(dateStr)
+    if (blockedDatesSet.has(dateStr)) return false
+    if (availableDatesSet.size === 0) return true // If no availability set, allow all
+    return availableDatesSet.has(dateStr)
   }
 
   const isDateInPast = (date: Date): boolean => {
@@ -78,24 +82,19 @@ function LabsCalendarPicker({
     return date < today
   }
 
-  const days = []
-  // Add empty cells for days before the first day of the month
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    days.push(null)
-  }
-  // Add days of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
-    days.push(date)
-  }
+  // Memoize days calculation for performance
+  const days = useMemo(() => {
+    const result: (Date | null)[] = []
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      result.push(null)
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      result.push(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day))
+    }
+    return result
+  }, [viewMonth, daysInMonth, startingDayOfWeek])
 
-  if (loading) {
-    return (
-      <div className="w-full p-8 text-center text-[var(--color-text)]/70">
-        Loading calendar...
-      </div>
-    )
-  }
+  // Don't show loading - render calendar immediately, it will update when data loads
 
   return (
     <>
@@ -264,37 +263,57 @@ export default function LabsBookAppointment() {
     loadSettings()
   }, [tierIdFromUrl])
 
-  // Load booked dates and time slots for consultation
+  // Load availability immediately on page load (optimized for speed)
   useEffect(() => {
-    const loadBookedSlots = async () => {
-      setLoadingAvailability(true)
+    let mounted = true
+    
+    // Don't set loading to true - render calendar immediately
+    const loadAvailability = async () => {
       try {
+        // Use cache for faster initial load
         const response = await fetch('/api/labs/consultation/availability', { 
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
+          cache: 'default', // Allow browser cache for faster loads
         })
         if (response.ok) {
           const data = await response.json()
-          setBookedDates(data.bookedDates || []) // For backward compatibility
-          setBookedSlots(data.bookedSlots || []) // New: specific date+time combinations
-          setAvailableDates(data.availableDates || [])
-          setTimeSlots(data.timeSlots || [])
-          setBlockedDates(data.blockedDates || [])
+          if (mounted) {
+            setBookedDates(data.bookedDates || [])
+            setBookedSlots(data.bookedSlots || [])
+            setAvailableDates(data.availableDates || [])
+            setTimeSlots(data.timeSlots || [])
+            setBlockedDates(data.blockedDates || [])
+          }
         }
       } catch (error) {
-        console.error('Error loading booked slots:', error)
-      } finally {
-        setLoadingAvailability(false)
+        console.error('Error loading availability:', error)
       }
     }
-    loadBookedSlots()
     
-    // Refresh availability every 30 seconds to catch new bookings
-    const interval = setInterval(loadBookedSlots, 30000)
-    return () => clearInterval(interval)
+    // Load immediately (non-blocking)
+    loadAvailability()
+    
+    // Refresh in background every 30 seconds (non-blocking)
+    const interval = setInterval(() => {
+      fetch('/api/labs/consultation/availability', { 
+        cache: 'no-store',
+      })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (mounted && data) {
+            setBookedDates(data.bookedDates || [])
+            setBookedSlots(data.bookedSlots || [])
+            setAvailableDates(data.availableDates || [])
+            setTimeSlots(data.timeSlots || [])
+            setBlockedDates(data.blockedDates || [])
+          }
+        })
+        .catch(() => {}) // Silent fail for background refresh
+    }, 30000)
+    
+    return () => {
+      mounted = false
+      clearInterval(interval)
+    }
   }, [])
   
   const [formData, setFormData] = useState({
@@ -302,6 +321,7 @@ export default function LabsBookAppointment() {
     contactName: '',
     email: '',
     businessType: '',
+    isBusinessRegistered: '',
     serviceType: '',
     currentWebsite: '',
     hasWebsite: '',
@@ -344,7 +364,7 @@ export default function LabsBookAppointment() {
     orderTrackingId?: string
   }>({ loading: false, success: null, message: '' })
 
-  const [exchangeRates, setExchangeRates] = useState<{ usdToKes: number; eurToKes: number } | null>(null)
+  const [exchangeRates, setExchangeRates] = useState<{ usdToKes: number } | null>(null)
 
   useEffect(() => {
     const loadExchangeRates = async () => {
@@ -355,7 +375,6 @@ export default function LabsBookAppointment() {
           if (data.exchangeRates) {
             setExchangeRates({
               usdToKes: data.exchangeRates.usdToKes || 130,
-              eurToKes: data.exchangeRates.eurToKes || 140,
             })
           }
         }
@@ -367,21 +386,15 @@ export default function LabsBookAppointment() {
   }, [])
 
   const formatPrice = (priceKES: number) => {
-    if (currency === 'USD' || currency === 'EUR') {
+    if (currency === 'USD') {
       if (!exchangeRates) {
-        // Fallback to default rates if not loaded yet
-        const defaultRates = { usdToKes: 130, eurToKes: 140 }
-        const convertedPrice = currency === 'USD'
-          ? priceKES / defaultRates.usdToKes
-          : priceKES / defaultRates.eurToKes
-        const symbol = currency === 'USD' ? '$' : '€'
-        return `${symbol}${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        // Fallback to default rate if not loaded yet
+        const defaultRate = 130
+        const convertedPrice = priceKES / defaultRate
+        return `$${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       }
-      const convertedPrice = currency === 'USD'
-        ? priceKES / exchangeRates.usdToKes
-        : priceKES / exchangeRates.eurToKes
-      const symbol = currency === 'USD' ? '$' : '€'
-      return `${symbol}${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const convertedPrice = priceKES / exchangeRates.usdToKes
+      return `$${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
     return `${priceKES.toLocaleString('en-US')} KSH`
   }
@@ -570,66 +583,24 @@ export default function LabsBookAppointment() {
       
       // Convert consultation fee to the selected currency
       let consultationPrice = consultationFeeKES
-      if (currency === 'USD' || currency === 'EUR') {
+      if (currency === 'USD') {
         if (exchangeRates) {
-          consultationPrice = currency === 'USD'
-            ? consultationFeeKES / exchangeRates.usdToKes
-            : consultationFeeKES / exchangeRates.eurToKes
+          consultationPrice = consultationFeeKES / exchangeRates.usdToKes
           // Round to 2 decimal places
           consultationPrice = Math.round(consultationPrice * 100) / 100
         } else {
-          // Fallback to default rates
-          const defaultRates = { usdToKes: 130, eurToKes: 140 }
-          consultationPrice = currency === 'USD'
-            ? consultationFeeKES / defaultRates.usdToKes
-            : consultationFeeKES / defaultRates.eurToKes
+          // Fallback to default rate
+          const defaultRate = 130
+          consultationPrice = consultationFeeKES / defaultRate
           consultationPrice = Math.round(consultationPrice * 100) / 100
         }
       }
 
       // Initiate payment FIRST before creating consultation
-      setPaymentStatus({ loading: true, success: null, message: 'Processing payment...' })
+      setPaymentStatus({ loading: true, success: null, message: 'Initializing payment...' })
       
-      const nameParts = formData.contactName.trim().split(' ')
-      const firstName = nameParts[0] || formData.contactName
-      const lastName = nameParts.slice(1).join(' ') || firstName
-
-      // Submit order to PesaPal
-      const paymentResponse = await fetch('/api/pesapal/submit-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: consultationPrice,
-          currency: currency === 'USD' ? 'USD' : 'KES',
-          phoneNumber: paymentMethod === 'mpesa' ? fullPhone : undefined,
-          email: formData.email,
-          firstName,
-          lastName,
-          description: `LashDiary Labs Consultation - ${formData.businessName}`,
-          bookingReference: `Consultation-${Date.now()}`,
-        }),
-      })
-
-      const paymentData = await paymentResponse.json()
-
-      if (!paymentResponse.ok || !paymentData.success || !paymentData.redirectUrl) {
-        setPaymentStatus({
-          loading: false,
-          success: false,
-          message: paymentData.error || paymentData.details || 'Failed to initiate payment. Please try again.',
-        })
-        setSubmitStatus({
-          type: 'error',
-          message: paymentData.error || paymentData.details || 'Payment initiation failed. Please try again.',
-        })
-        setLoading(false)
-        return
-      }
-
-      // Payment initiated successfully - create consultation with pending payment status
-      const submissionData = {
+      // Create consultation with pending payment status first
+      const consultationData = {
         ...formData,
         phone: fullPhone,
         consultationPrice: consultationPrice,
@@ -638,40 +609,100 @@ export default function LabsBookAppointment() {
         source: 'labs-consultation',
         interestedTier: selectedTier ? selectedTier.name : (formData.interestedTier || ''),
         paymentStatus: 'pending_payment',
-        pesapalOrderTrackingId: paymentData.orderTrackingId,
-        paymentMethod: 'pesapal',
+        paymentOrderTrackingId: null,
+        paymentMethod: null,
       }
 
-      const response = await fetch('/api/labs/consultation', {
+      // Create consultation first
+      const consultationResponse = await fetch('/api/labs/consultation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(submissionData),
+        body: JSON.stringify(consultationData),
       })
 
-      const result = await response.json()
+      const consultationResult = await consultationResponse.json()
 
-      if (!response.ok) {
+      if (!consultationResponse.ok) {
         setPaymentStatus({
           loading: false,
           success: false,
-          message: 'Payment initiated but consultation creation failed. Please contact us.',
+          message: consultationResult.error || 'Failed to create consultation request',
         })
-        throw new Error(result.error || 'Failed to submit consultation request')
+        setSubmitStatus({
+          type: 'error',
+          message: consultationResult.error || 'Failed to submit consultation request',
+        })
+        setLoading(false)
+        return
       }
 
-      // Payment initiated and consultation created - redirect to payment page
+      const consultationId = consultationResult.consultation?.consultationId
+
+      // Initialize Paystack payment
+      setPaymentStatus({ loading: true, success: null, message: 'Processing payment...' })
+
+      const paymentResponse = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          amount: consultationPrice,
+          currency: currency === 'USD' ? 'USD' : 'KES',
+          metadata: {
+            payment_type: 'consultation',
+            consultation_id: consultationId,
+            business_name: formData.businessName,
+          },
+          customerName: formData.contactName,
+          phone: fullPhone,
+        }),
+      })
+
+      const paymentData = await paymentResponse.json()
+
+      if (!paymentResponse.ok || !paymentData.success || !paymentData.authorizationUrl) {
+        setPaymentStatus({
+          loading: false,
+          success: false,
+          message: paymentData.error || 'Failed to initialize payment',
+        })
+        setSubmitStatus({
+          type: 'error',
+          message: paymentData.error || 'Payment initialization failed. Please try again.',
+        })
+        setLoading(false)
+        return
+      }
+
+      // Update consultation with payment reference
+      if (consultationId && paymentData.reference) {
+        await fetch(`/api/labs/consultation`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            consultationId,
+            paymentOrderTrackingId: paymentData.reference,
+            paymentMethod: 'paystack',
+          }),
+        }).catch(err => console.error('Error updating consultation with payment reference:', err))
+      }
+
+      // Payment initialized successfully - redirect to Paystack
       setPaymentStatus({
         loading: false,
         success: true,
         message: 'Redirecting to secure payment page...',
-        orderTrackingId: paymentData.orderTrackingId,
       })
       
-      // Redirect to PesaPal payment page
+      // Redirect to Paystack payment page
       setTimeout(() => {
-        window.location.href = paymentData.redirectUrl
+        window.location.href = paymentData.authorizationUrl
       }, 500)
 
       // Reset form immediately for better UX
@@ -680,6 +711,7 @@ export default function LabsBookAppointment() {
         contactName: '',
         email: '',
         businessType: '',
+        isBusinessRegistered: '',
         serviceType: '',
         currentWebsite: '',
         hasWebsite: '',
@@ -945,6 +977,25 @@ export default function LabsBookAppointment() {
               </div>
 
               <div>
+                <label htmlFor="isBusinessRegistered" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
+                  Is your business registered? <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="isBusinessRegistered"
+                  name="isBusinessRegistered"
+                  value={formData.isBusinessRegistered}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                >
+                  <option value="">Select an option</option>
+                  <option value="yes">Yes, my business is registered</option>
+                  <option value="no">No, my business is not registered</option>
+                  <option value="in-progress">Registration in progress</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="serviceType" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
                   What services do you offer? <span className="text-red-500">*</span>
                 </label>
@@ -1087,7 +1138,7 @@ export default function LabsBookAppointment() {
                   placeholder="Tell us about the biggest challenges you face: lost bookings, payment confusion, client communication issues, time management problems, etc. (Minimum 50 characters)"
                 />
                 <p className="text-xs text-[var(--color-text)]/60 mt-1">
-                  {formData.mainPainPoints.length}/50 minimum characters
+                  min characters: 50
                 </p>
               </div>
             </div>
@@ -1533,7 +1584,7 @@ export default function LabsBookAppointment() {
                       />
                     </div>
                     <p className="text-xs text-[var(--color-text)]/60 mt-2">
-                      We'll redirect you to PesaPal where you can complete your M-Pesa payment
+                      We'll redirect you to the secure payment page to complete your payment
                     </p>
                   </div>
                 )}

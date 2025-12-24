@@ -76,14 +76,13 @@ export default function AdminLabsConsultations() {
         if (data.exchangeRates) {
           setExchangeRates({
             usdToKes: data.exchangeRates.usdToKes || 130,
-            eurToKes: data.exchangeRates.eurToKes || 140,
           })
         }
       }
     } catch (error) {
       console.error('Error loading exchange rates:', error)
-      // Set default rates on error
-      setExchangeRates({ usdToKes: 130, eurToKes: 140 })
+      // Set default rate on error
+      setExchangeRates({ usdToKes: 130 })
     }
   }
 
@@ -175,12 +174,12 @@ export default function AdminLabsConsultations() {
           
           // Tier price is always stored in KES - convert to consultation currency
           let tierPriceInCurrency = tier.priceKES
-          if (currency === 'USD' || currency === 'EUR') {
+          if (currency === 'USD') {
             if (exchangeRates) {
               tierPriceInCurrency = convertCurrency(tier.priceKES, 'KES', currency as Currency, exchangeRates)
             } else {
-              // Fallback to default rates
-              const defaultRates = { usdToKes: 130, eurToKes: 140 }
+              // Fallback to default rate
+              const defaultRates = { usdToKes: 130 }
               tierPriceInCurrency = convertCurrency(tier.priceKES, 'KES', currency as Currency, defaultRates)
             }
           }
@@ -310,9 +309,6 @@ export default function AdminLabsConsultations() {
   const formatCurrency = (amount: number, currency: Currency | string) => {
     if (currency === 'USD') {
       return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    }
-    if (currency === 'EUR') {
-      return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
     return `KSH ${Math.round(amount).toLocaleString('en-KE')}`
   }
@@ -830,16 +826,12 @@ export default function AdminLabsConsultations() {
                       {tier.name} - {(() => {
                         const consultationCurrency = selectedConsultation?.currency || 'KES'
                         let tierPriceInCurrency = tier.priceKES
-                        if (consultationCurrency === 'USD' || consultationCurrency === 'EUR') {
+                        if (consultationCurrency === 'USD') {
                           if (exchangeRates) {
-                            tierPriceInCurrency = consultationCurrency === 'USD'
-                              ? tier.priceKES / exchangeRates.usdToKes
-                              : tier.priceKES / exchangeRates.eurToKes
+                            tierPriceInCurrency = tier.priceKES / exchangeRates.usdToKes
                           } else {
-                            const defaultRates = { usdToKes: 130, eurToKes: 140 }
-                            tierPriceInCurrency = consultationCurrency === 'USD'
-                              ? tier.priceKES / defaultRates.usdToKes
-                              : tier.priceKES / defaultRates.eurToKes
+                            const defaultRate = 130
+                            tierPriceInCurrency = tier.priceKES / defaultRate
                           }
                         }
                         return formatCurrency(tierPriceInCurrency, consultationCurrency as Currency)
@@ -982,16 +974,12 @@ export default function AdminLabsConsultations() {
                   
                   // Tier price is always in KES - convert to consultation currency for comparison
                   let tierTotalInCurrency = tier.priceKES
-                  if (consultationCurrency === 'USD' || consultationCurrency === 'EUR') {
+                  if (consultationCurrency === 'USD') {
                     if (exchangeRates) {
-                      tierTotalInCurrency = consultationCurrency === 'USD'
-                        ? tier.priceKES / exchangeRates.usdToKes
-                        : tier.priceKES / exchangeRates.eurToKes
+                      tierTotalInCurrency = tier.priceKES / exchangeRates.usdToKes
                     } else {
-                      const defaultRates = { usdToKes: 130, eurToKes: 140 }
-                      tierTotalInCurrency = consultationCurrency === 'USD'
-                        ? tier.priceKES / defaultRates.usdToKes
-                        : tier.priceKES / defaultRates.eurToKes
+                      const defaultRate = 130
+                      tierTotalInCurrency = tier.priceKES / defaultRate
                     }
                   }
                   
@@ -1146,16 +1134,12 @@ export default function AdminLabsConsultations() {
                   {availableTiers.map((tier) => {
                     const consultationCurrency = selectedConsultation.currency || 'KES'
                     let tierPriceInCurrency = tier.priceKES
-                    if (consultationCurrency === 'USD' || consultationCurrency === 'EUR') {
+                    if (consultationCurrency === 'USD') {
                       if (exchangeRates) {
-                        tierPriceInCurrency = consultationCurrency === 'USD'
-                          ? tier.priceKES / exchangeRates.usdToKes
-                          : tier.priceKES / exchangeRates.eurToKes
+                        tierPriceInCurrency = tier.priceKES / exchangeRates.usdToKes
                       } else {
-                        const defaultRates = { usdToKes: 130, eurToKes: 140 }
-                        tierPriceInCurrency = consultationCurrency === 'USD'
-                          ? tier.priceKES / defaultRates.usdToKes
-                          : tier.priceKES / defaultRates.eurToKes
+                        const defaultRate = 130
+                        tierPriceInCurrency = tier.priceKES / defaultRate
                       }
                     }
                     return (

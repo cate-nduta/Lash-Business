@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
       newsletter: newsletter || { discountPercentage: 10 },
       exchangeRates: {
         usdToKes: typeof exchangeRates.usdToKes === 'number' ? exchangeRates.usdToKes : 130,
-        eurToKes: typeof exchangeRates.eurToKes === 'number' ? exchangeRates.eurToKes : 140,
       },
     })
   } catch (error: any) {
@@ -134,9 +133,6 @@ export async function POST(request: NextRequest) {
         usdToKes: typeof exchangeRates?.usdToKes === 'number' && exchangeRates.usdToKes > 0 
           ? exchangeRates.usdToKes 
           : 130,
-        eurToKes: typeof exchangeRates?.eurToKes === 'number' && exchangeRates.eurToKes > 0 
-          ? exchangeRates.eurToKes 
-          : 140,
       },
     }
 

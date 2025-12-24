@@ -55,8 +55,8 @@ function getDayOfWeek(year: number, month: number, day: number): number {
 
 export async function GET(request: NextRequest) {
   try {
-    // Load availability settings
-    const availabilityData = await readDataFile('labs-consultation-availability.json', {
+    // Load availability settings - support both old and new structure
+    const availabilityData: any = await readDataFile('labs-consultation-availability.json', {
       availableDays: {
         monday: true,
         tuesday: true,
@@ -72,102 +72,97 @@ export async function GET(request: NextRequest) {
       blockedDates: [],
     })
 
-    // Load all consultations
-    const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+    // Load consultations in parallel (non-blocking)
+    const consultationsPromise = readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
     
-    // Extract booked date+time combinations - only count confirmed consultations (not pending or cancelled)
-    const bookedSlots = consultationsData.consultations
-      .filter(consultation => {
-        // Must have both date and time
-        if (!consultation.preferredDate || !consultation.preferredTime) return false
-        
-        // Must be confirmed (not pending, not cancelled, and not undefined/null)
-        const status = consultation.status?.toLowerCase()
-        if (status === 'cancelled') return false
-        if (status === 'pending') return false
-        
-        return true
-      })
-      .map(consultation => {
-        const normalizedDate = normalizeDate(consultation.preferredDate)
-        const normalizedTime = normalizeTime(consultation.preferredTime)
-        
-        return {
-          date: normalizedDate || consultation.preferredDate,
-          time: normalizedTime || consultation.preferredTime,
-        }
-      })
-      .filter(slot => slot.date && slot.time)
-
-    // Also keep bookedDates for backward compatibility
-    const bookedDates = consultationsData.consultations
-      .filter(consultation => {
-        if (!consultation.preferredDate) return false
-        const status = consultation.status?.toLowerCase()
-        if (status === 'cancelled') return false
-        if (status === 'pending') return false
-        return true
-      })
-      .map(consultation => normalizeDate(consultation.preferredDate) || consultation.preferredDate)
-      .filter((date): date is string => !!date)
-      .filter((date, index, self) => self.indexOf(date) === index)
-
-    // Generate available dates based on availability settings
+    // Generate available dates FIRST (fast, synchronous calculation)
     const availableDates: string[] = []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const endDate = new Date(today)
-    endDate.setDate(endDate.getDate() + 90) // Next 90 days
+    endDate.setDate(endDate.getDate() + 90)
 
     const blockedDatesSet = new Set<string>(availabilityData.blockedDates || [])
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+    // Support both old structure (availableDays) and new structure (dailyAvailability)
+    const getDayAvailable = (dayName: string): boolean => {
+      // Try new structure first
+      if (availabilityData.dailyAvailability?.[dayName]?.enabled === true) {
+        const timeSlots = availabilityData.dailyAvailability[dayName].timeSlots || []
+        return timeSlots.length > 0
+      }
+      // Fall back to old structure
+      return availabilityData.availableDays?.[dayName as keyof typeof availabilityData.availableDays] === true
+    }
 
     let currentDate = new Date(today)
     while (currentDate <= endDate) {
       const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`
       
-      // Skip if blocked
       if (blockedDatesSet.has(dateStr)) {
         currentDate.setDate(currentDate.getDate() + 1)
         continue
       }
 
-      // Check if day is available
       const dayOfWeek = getDayOfWeek(
         currentDate.getFullYear(),
         currentDate.getMonth() + 1,
         currentDate.getDate()
       )
       const dayName = dayNames[dayOfWeek]
-      const dayAvailable = availabilityData.availableDays?.[dayName as keyof typeof availabilityData.availableDays] === true
-
-      if (dayAvailable) {
+      
+      if (getDayAvailable(dayName)) {
         availableDates.push(dateStr)
       }
 
       currentDate.setDate(currentDate.getDate() + 1)
     }
 
-    // Get available time slots
-    const timeSlots = availabilityData.timeSlots?.weekdays || []
+    // Load consultations (already started in parallel)
+    const consultationsData = await consultationsPromise
+    
+    // Extract booked slots (optimized)
+    const bookedSlots = consultationsData.consultations
+      .filter(c => {
+        if (!c.preferredDate || !c.preferredTime) return false
+        const status = c.status?.toLowerCase()
+        return status !== 'cancelled' && status !== 'pending'
+      })
+      .map(c => ({
+        date: normalizeDate(c.preferredDate) || c.preferredDate,
+        time: normalizeTime(c.preferredTime) || c.preferredTime,
+      }))
+      .filter(slot => slot.date && slot.time)
+
+    const bookedDates = Array.from(new Set(
+      consultationsData.consultations
+        .filter(c => c.preferredDate && c.status?.toLowerCase() !== 'cancelled' && c.status?.toLowerCase() !== 'pending')
+        .map(c => normalizeDate(c.preferredDate) || c.preferredDate)
+        .filter((date): date is string => !!date)
+    ))
+
+    // Get time slots (support both structures)
+    const timeSlots = availabilityData.dailyAvailability?.monday?.timeSlots || 
+                     availabilityData.timeSlots?.weekdays || 
+                     []
 
     return NextResponse.json({
-      bookedDates, // For backward compatibility
-      bookedSlots, // Specific date+time combinations
-      availableDates, // Dates that are available based on settings
-      timeSlots, // Available time slots
-      blockedDates: availabilityData.blockedDates || [], // Blocked dates
+      bookedDates,
+      bookedSlots,
+      availableDates,
+      timeSlots,
+      blockedDates: availabilityData.blockedDates || [],
+      minimumBookingDate: availabilityData.minimumBookingDate || null,
     }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60', // Cache for faster loads
       },
     })
   } catch (error: any) {
     console.error('Error loading consultation availability:', error)
     return NextResponse.json(
-      { error: 'Failed to load availability', bookedDates: [], bookedSlots: [], availableDates: [], timeSlots: [], blockedDates: [] },
+      { error: 'Failed to load availability', bookedDates: [], bookedSlots: [], availableDates: [], timeSlots: [], blockedDates: [], minimumBookingDate: null },
       { status: 500 }
     )
   }

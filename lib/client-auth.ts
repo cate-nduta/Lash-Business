@@ -11,30 +11,36 @@ type ClientSession = {
 }
 
 const loadClientSession = (): ClientSession | null => {
-  const cookieStore = cookies()
-  const authCookie = cookieStore.get(CLIENT_AUTH_COOKIE)?.value
-  if (authCookie !== 'authenticated') {
-    return null
-  }
+  try {
+    const cookieStore = cookies()
+    const authCookie = cookieStore.get(CLIENT_AUTH_COOKIE)?.value
+    if (authCookie !== 'authenticated') {
+      return null
+    }
 
-  const userId = cookieStore.get(CLIENT_USER_COOKIE)?.value
-  if (!userId) {
-    return null
-  }
+    const userId = cookieStore.get(CLIENT_USER_COOKIE)?.value
+    if (!userId) {
+      return null
+    }
 
-  const lastActiveRaw = cookieStore.get(CLIENT_LAST_ACTIVE_COOKIE)?.value
-  const lastActive = lastActiveRaw ? Number(lastActiveRaw) : NaN
-  if (!Number.isFinite(lastActive)) {
-    return null
-  }
+    const lastActiveRaw = cookieStore.get(CLIENT_LAST_ACTIVE_COOKIE)?.value
+    const lastActive = lastActiveRaw ? Number(lastActiveRaw) : NaN
+    if (!Number.isFinite(lastActive)) {
+      return null
+    }
 
-  if (Date.now() - lastActive > CLIENT_SESSION_MAX_IDLE_MS) {
-    return null
-  }
+    if (Date.now() - lastActive > CLIENT_SESSION_MAX_IDLE_MS) {
+      return null
+    }
 
-  return {
-    userId,
-    lastActive,
+    return {
+      userId,
+      lastActive,
+    }
+  } catch (error) {
+    // Cookies API might not be available in all contexts
+    console.error('Error loading client session:', error)
+    return null
   }
 }
 

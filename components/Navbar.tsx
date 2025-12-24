@@ -82,11 +82,21 @@ export default function Navbar() {
           timeoutId = null
         }
         
+        // 401 is expected if user is not logged in - this is normal and not an error
+        if (res.status === 401) {
+          if (isMounted) {
+            setIsAuthenticated(false)
+          }
+          return
+        }
+        
         if (isMounted && !currentController.signal.aborted) {
+          // 401 is expected when not logged in - not an error
           setIsAuthenticated(res.ok)
         }
       } catch (error: any) {
         // Silently handle errors (network issues, timeouts, aborts, etc.)
+        // 401 responses are expected and handled above, so we don't need to log them
         // AbortError is expected when request is cancelled or times out
         if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
           // This is expected during cleanup or timeout, just ignore
@@ -217,7 +227,7 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'KES'
                     ? 'bg-brown-dark text-white'
-                    : currency === 'USD' || currency === 'EUR'
+                    : currency === 'USD'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
@@ -230,25 +240,12 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'USD'
                     ? 'bg-amber-500 text-white shadow-md brightness-110'
-                    : currency === 'KES' || currency === 'EUR'
+                    : currency === 'KES'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
               >
                 USD
-              </button>
-              <span className="text-brown-dark/40">|</span>
-              <button
-                onClick={() => setCurrency('EUR')}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
-                  currency === 'EUR'
-                    ? 'bg-blue-600 text-white shadow-md brightness-110'
-                    : currency === 'KES' || currency === 'USD'
-                    ? 'bg-gray-200 text-gray-500 opacity-60'
-                    : 'text-brown-dark hover:bg-brown-light/30'
-                }`}
-              >
-                EUR
               </button>
             </div>
             
@@ -389,7 +386,7 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'KES'
                     ? 'bg-brown-dark text-white'
-                    : currency === 'USD' || currency === 'EUR'
+                    : currency === 'USD'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
@@ -405,28 +402,12 @@ export default function Navbar() {
                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
                   currency === 'USD'
                     ? 'bg-amber-500 text-white shadow-md brightness-110'
-                    : currency === 'KES' || currency === 'EUR'
+                    : currency === 'KES'
                     ? 'bg-gray-200 text-gray-500 opacity-60'
                     : 'text-brown-dark hover:bg-brown-light/30'
                 }`}
               >
                 USD
-              </button>
-              <span className="text-brown-dark/40">|</span>
-              <button
-                onClick={() => {
-                  setCurrency('EUR')
-                  setIsOpen(false)
-                }}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
-                  currency === 'EUR'
-                    ? 'bg-blue-600 text-white shadow-md brightness-110'
-                    : currency === 'KES' || currency === 'USD'
-                    ? 'bg-gray-200 text-gray-500 opacity-60'
-                    : 'text-brown-dark hover:bg-brown-light/30'
-                }`}
-              >
-                EUR
               </button>
             </div>
           </div>

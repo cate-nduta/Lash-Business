@@ -104,11 +104,10 @@ export default function AdminBookings() {
   }
 
   const [sendingRequest, setSendingRequest] = useState(false)
-  const [sendingPayment, setSendingPayment] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash')
-  const [cashAmount, setCashAmount] = useState('')
-  const [mpesaPhone, setMpesaPhone] = useState('')
-  const [markingPaid, setMarkingPaid] = useState(false)
+  const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false)
+  const [paymentLink, setPaymentLink] = useState<string | null>(null)
+  const [paymentLinkBookingId, setPaymentLinkBookingId] = useState<string | null>(null) // Track which booking the link is for
+  const [customPaymentAmount, setCustomPaymentAmount] = useState<string>('')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellationReason, setCancellationReason] = useState('')
@@ -347,26 +346,6 @@ export default function AdminBookings() {
     setSelectedBooking(found)
   }, [searchParams, bookings])
 
-  // Auto-fill cash amount with final price for walk-in bookings when cash/card payment is selected
-  useEffect(() => {
-    if (selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card') && selectedBooking.finalPrice) {
-      // Convert to current currency if viewing in USD
-      const convertedAmount = currency === 'USD' 
-        ? convertCurrency(selectedBooking.finalPrice, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
-        : selectedBooking.finalPrice
-      setCashAmount(convertedAmount.toString())
-    } else if (!selectedBooking?.isWalkIn && (paymentMethod === 'cash' || paymentMethod === 'card')) {
-      // For regular bookings, set to balance if available
-      const currentBalance = calculateBalance(selectedBooking)
-      if (currentBalance > 0) {
-        // Convert to current currency if viewing in USD
-        const convertedBalance = currency === 'USD'
-          ? convertCurrency(currentBalance, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
-          : currentBalance
-        setCashAmount(convertedBalance.toString())
-      }
-    }
-  }, [selectedBooking?.isWalkIn, selectedBooking?.finalPrice, paymentMethod, selectedBooking, currency])
 
   useEffect(() => {
     let isMounted = true
@@ -916,176 +895,60 @@ export default function AdminBookings() {
     }
   }
 
-  const handleMarkAsPaid = async (booking: Booking, amount: number, method: 'cash' | 'card' = 'cash') => {
+
+  const generateBalancePaymentLink = async (booking: Booking, customAmount?: number) => {
     if (booking.status !== 'confirmed') {
-      setMessage({ type: 'error', text: 'You can only record payments for active bookings.' })
+      setMessage({ type: 'error', text: 'Only confirmed bookings can receive payment links.' })
       return
     }
 
-    setMarkingPaid(true)
+    setGeneratingPaymentLink(true)
     setMessage(null)
+    setPaymentLink(null)
 
-    const balance = calculateBalance(booking)
+    // Calculate default amount (balance or full price for walk-ins)
+    const defaultAmount = booking.isWalkIn ? (booking.finalPrice || 0) : calculateBalance(booking)
+    
+    // Use custom amount if provided, otherwise use default
+    const amountToPay = customAmount !== undefined ? customAmount : defaultAmount
 
-    if (amount <= 0) {
-      setMessage({ type: 'error', text: 'Please enter a valid amount' })
-      setMarkingPaid(false)
-      return
-    }
-
-    // For walk-ins, validate against finalPrice; for regular bookings, validate against balance
-    const maxAmount = booking.isWalkIn ? booking.finalPrice : balance
-    if (amount > maxAmount) {
-      const errorAmount = booking.isWalkIn ? booking.finalPrice : balance
-      setMessage({ type: 'error', text: `Amount cannot exceed ${booking.isWalkIn ? 'final price' : 'balance due'} (${formatCurrencyContext(convertBookingPrice(errorAmount))})` })
-      setMarkingPaid(false)
+    if (amountToPay <= 0) {
+      setMessage({ type: 'error', text: 'Payment amount must be greater than 0' })
+      setGeneratingPaymentLink(false)
       return
     }
 
     try {
-      const response = await authorizedFetch('/api/admin/bookings/payment', {
+      const response = await authorizedFetch('/api/admin/bookings/balance-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingId: booking.id,
-          amount: amount,
-          paymentMethod: method,
+          amount: amountToPay, // Send the amount (custom or default)
         }),
       })
 
       const data = await response.json()
 
-      if (response.ok && data.success) {
-        const methodLabel = method === 'card' ? 'Card' : 'Cash'
-        let updatedBooking: Booking | null = null
-        
-        if (data.booking) {
-          updatedBooking = normalizeBooking(data.booking)
-          setSelectedBooking(updatedBooking)
-          setBookings((prev) => prev.map((bk) => (bk.id === updatedBooking!.id ? updatedBooking! : bk)))
-        } else {
-          const newDeposit = (booking.deposit || 0) + amount
-          const isPaidInFull = newDeposit >= booking.finalPrice
-          const paidTimestamp = isPaidInFull ? new Date().toISOString() : booking.paidInFullAt ?? null
-          const updatedStatus: Booking['status'] = isPaidInFull ? 'paid' : booking.status
-          updatedBooking = {
-            ...booking,
-            deposit: newDeposit,
-            status: updatedStatus,
-            paidInFullAt: paidTimestamp,
-          }
-          setSelectedBooking(updatedBooking)
-          setBookings((prev) => prev.map((bk) => (bk.id === booking.id ? updatedBooking! : bk)))
-        }
-        
-        // Check if booking is now fully paid and send aftercare email
-        const finalBooking = updatedBooking || booking
-        const isPaidInFull = (finalBooking.deposit || 0) >= finalBooking.finalPrice
-        const wasPaidInFull = (booking.deposit || 0) >= booking.finalPrice
-        
-        if (isPaidInFull && !wasPaidInFull && finalBooking.email) {
-          try {
-            const aftercareResponse = await authorizedFetch('/api/booking/aftercare', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bookingId: finalBooking.id }),
-            })
-            const aftercareData = await aftercareResponse.json()
-            if (aftercareResponse.ok && aftercareData.success) {
-              setMessage({ type: 'success', text: `${methodLabel} payment recorded and aftercare email sent to ${finalBooking.email}` })
-            } else {
-              setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
-            }
-          } catch (error) {
-            console.error('Error sending aftercare email:', error)
-            setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
-          }
-        } else {
-          setMessage({ type: 'success', text: `${methodLabel} payment of ${formatCurrencyContext(convertBookingPrice(amount))} recorded successfully` })
-        }
-        
-        loadBookings()
-        setCashAmount('')
+      if (response.ok && data.success && data.authorizationUrl) {
+        setPaymentLink(data.authorizationUrl)
+        setPaymentLinkBookingId(booking.id) // Remember which booking this link is for
+        setMessage({ 
+          type: 'success', 
+          text: `Payment link generated! Share this link with the client to pay ${formatCurrencyContext(convertBookingPrice(amountToPay))}` 
+        })
+        // Clear custom amount after successful generation
+        setCustomPaymentAmount('')
+        // Don't reload bookings immediately - it might clear the payment link
+        // The booking will be updated via webhook when payment is made
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to record payment' })
+        setMessage({ type: 'error', text: data.error || 'Failed to generate payment link' })
       }
     } catch (error) {
-      console.error('Error recording payment:', error)
-      setMessage({ type: 'error', text: 'An error occurred' })
+      console.error('Error generating balance payment link:', error)
+      setMessage({ type: 'error', text: 'An error occurred while generating payment link' })
     } finally {
-      setMarkingPaid(false)
-    }
-  }
-
-  const sendBalancePayment = async (booking: Booking, phone: string) => {
-    if (booking.status !== 'confirmed') {
-      setMessage({ type: 'error', text: 'Only confirmed bookings can receive payment prompts.' })
-      return
-    }
-
-    setSendingPayment(true)
-    setMessage(null)
-
-    // For walk-ins, they pay the full final price after appointment, not just the balance
-    const amountToPay = booking.isWalkIn ? (booking.finalPrice || 0) : calculateBalance(booking)
-
-    if (amountToPay <= 0) {
-      setMessage({ type: 'error', text: 'No amount due for this booking' })
-      setSendingPayment(false)
-      return
-    }
-
-    if (!phone || phone.trim() === '') {
-      setMessage({ type: 'error', text: 'Please enter a phone number' })
-      setSendingPayment(false)
-      return
-    }
-
-    try {
-      const response = await authorizedFetch('/api/mpesa/stk-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: phone.trim(),
-          amount: amountToPay,
-          accountReference: booking.isWalkIn ? `WalkIn-${booking.id}` : `Balance-${booking.id}`,
-          transactionDesc: booking.isWalkIn 
-            ? `LashDiary Walk-In Full Payment - ${booking.service}`
-            : `LashDiary Balance Payment - ${booking.service}`,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        // Save the checkout request ID to the booking for tracking
-        try {
-          await authorizedFetch('/api/admin/bookings/payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              bookingId: booking.id,
-              amount: 0, // Will be updated when callback is received
-              paymentMethod: 'mpesa',
-              mpesaCheckoutRequestID: data.checkoutRequestID,
-            }),
-          })
-        } catch (err) {
-          console.error('Error saving checkout request ID:', err)
-        }
-
-        setMessage({ type: 'success', text: `M-Pesa prompt sent to ${phone.trim()} for ${formatCurrencyContext(convertBookingPrice(balance))}` })
-        setMpesaPhone('')
-        // Reload bookings to get updated data
-        loadBookings()
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to send M-Pesa prompt' })
-      }
-    } catch (error) {
-      console.error('Error sending balance payment:', error)
-      setMessage({ type: 'error', text: 'An error occurred' })
-    } finally {
-      setSendingPayment(false)
+      setGeneratingPaymentLink(false)
     }
   }
 
@@ -1322,16 +1185,22 @@ export default function AdminBookings() {
     }
   }
 
-  // Update M-Pesa phone when booking changes
+  // Update payment amount field when booking ID changes (not just booking object)
+  const selectedBookingId = selectedBooking?.id
   useEffect(() => {
     if (selectedBooking) {
-      setMpesaPhone(selectedBooking.phone)
-      const additionalServicesTotal = (selectedBooking.additionalServices || []).reduce((sum, s) => sum + s.price, 0)
-      const fineAmount = selectedBooking.fine?.amount || 0
-      const balance = selectedBooking.finalPrice - selectedBooking.deposit
-      setCashAmount(balance > 0 ? balance.toString() : '')
+      const balance = selectedBooking.isWalkIn 
+        ? (selectedBooking.finalPrice || 0)
+        : (selectedBooking.finalPrice || 0) - (selectedBooking.deposit || 0)
+      // Reset custom amount when booking changes
+      setCustomPaymentAmount('')
+      // Only clear payment link if a DIFFERENT booking is selected
+      if (selectedBooking.id !== paymentLinkBookingId) {
+        setPaymentLink(null)
+        setPaymentLinkBookingId(null)
+      }
     }
-  }, [selectedBooking])
+  }, [selectedBookingId, paymentLinkBookingId]) // Only trigger when booking ID changes, not when booking data updates
 
   const handleServiceSelect = (serviceId: string) => {
     setSelectedServiceId(serviceId)
@@ -2329,160 +2198,119 @@ export default function AdminBookings() {
                 </div>
               )}
 
-              {/* Payment Section - Show for walk-ins even if balance is 0 (to allow payment recording) */}
+              {/* Payment Section - Generate Paystack Payment Link */}
               {selectedBooking.status === 'confirmed' && (balance > 0 || selectedBooking.isWalkIn) && (
                 <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
                   <h3 className="text-xl font-semibold text-brown-dark mb-4">
-                    {selectedBooking.isWalkIn ? 'Record Payment (Post-Appointment)' : 'Record Payment'}
+                    {selectedBooking.isWalkIn ? 'Collect Payment (Post-Appointment)' : 'Collect Balance Payment'}
                   </h3>
                   
-                  {/* Payment Method Selection */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-semibold text-brown-dark mb-2">
-                      Payment Method
-                    </label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="cash"
-                          checked={paymentMethod === 'cash'}
-                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa')}
-                          className="mr-2"
-                        />
-                        <span className="text-brown-dark">Cash</span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="mpesa"
-                          checked={paymentMethod === 'mpesa'}
-                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa' | 'card')}
-                          className="mr-2"
-                        />
-                        <span className="text-brown-dark">M-Pesa</span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="card"
-                          checked={paymentMethod === 'card'}
-                          onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'mpesa' | 'card')}
-                          className="mr-2"
-                        />
-                        <span className="text-brown-dark">Card</span>
-                      </label>
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-800 mb-2">
+                        <strong>Balance Due:</strong> {formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))}
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        Generate a Paystack payment link to send to the client. They can pay via Card or M-Pesa.
+                      </p>
                     </div>
+
+                    {/* Amount Input */}
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-2">
+                        Payment Amount ({currency})
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={customPaymentAmount}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setCustomPaymentAmount(value)
+                          }}
+                          placeholder={`Default: ${(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance).toString()}`}
+                          min="0"
+                          step="0.01"
+                          className="flex-1 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                        />
+                        <button
+                          onClick={() => {
+                            const defaultAmount = selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance
+                            setCustomPaymentAmount(defaultAmount.toString())
+                          }}
+                          className="px-4 py-3 border-2 border-brown-light rounded-lg bg-brown-light/30 text-brown-dark hover:bg-brown-light/50 transition-colors text-sm font-semibold whitespace-nowrap"
+                        >
+                          Use Balance
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Enter the amount to collect, or leave empty to use balance ({formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))})
+                      </p>
+                    </div>
+
+                    {paymentLink ? (
+                      <div className="space-y-3">
+                        <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                          <p className="text-sm font-semibold text-green-800 mb-2">Payment Link Generated!</p>
+                          <div className="flex gap-2 mb-3">
+                            <input
+                              type="text"
+                              value={paymentLink}
+                              readOnly
+                              className="flex-1 px-3 py-2 border border-green-300 rounded bg-white text-sm text-gray-700"
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(paymentLink)
+                                setMessage({ type: 'success', text: 'Payment link copied to clipboard!' })
+                              }}
+                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm font-semibold"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => window.open(paymentLink, '_blank')}
+                              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-semibold"
+                            >
+                              Open Payment Page
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPaymentLink(null)
+                                setPaymentLinkBookingId(null)
+                                const amount = customPaymentAmount ? parseFloat(customPaymentAmount) : undefined
+                                generateBalancePaymentLink(selectedBooking, amount)
+                              }}
+                              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm font-semibold"
+                            >
+                              New Link
+                            </button>
+                          </div>
+                          <p className="text-xs text-green-700 mt-2">
+                            Share this link with {selectedBooking.name} ({selectedBooking.email}) to complete payment. Or click "Open Payment Page" to test it.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          // If custom amount is provided, use it; otherwise use undefined to use default balance
+                          const amount = customPaymentAmount.trim() ? parseFloat(customPaymentAmount) : undefined
+                          if (amount !== undefined && (isNaN(amount) || amount <= 0)) {
+                            setMessage({ type: 'error', text: 'Please enter a valid amount greater than 0' })
+                            return
+                          }
+                          generateBalancePaymentLink(selectedBooking, amount)
+                        }}
+                        disabled={generatingPaymentLink}
+                        className="w-full px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {generatingPaymentLink ? 'Generating Payment Link...' : 'Generate Paystack Payment Link'}
+                      </button>
+                    )}
                   </div>
-
-                  {/* Cash Payment */}
-                  {paymentMethod === 'cash' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-brown-dark mb-2">
-                          Amount Paid ({currency})
-                        </label>
-                        <input
-                          type="number"
-                          value={cashAmount}
-                          onChange={(e) => setCashAmount(e.target.value)}
-                          placeholder={selectedBooking.isWalkIn 
-                            ? `Full Price: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}`
-                            : `Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
-                          min="0"
-                          max={selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance}
-                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          {selectedBooking.isWalkIn 
-                            ? `Full price due: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))} (walk-in booking)`
-                            : `Balance due: ${formatCurrencyContext(convertBookingPrice(balance))}`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleMarkAsPaid(selectedBooking, parseFloat(cashAmount) || 0)}
-                        disabled={markingPaid || !cashAmount || parseFloat(cashAmount) <= 0}
-                        className="w-full px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {markingPaid ? 'Recording...' : 'Mark as Paid'}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* M-Pesa Payment */}
-                  {paymentMethod === 'mpesa' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-brown-dark mb-2">
-                          Phone Number
-                        </label>
-                        <input
-                          type="text"
-                          value={mpesaPhone}
-                          onChange={(e) => setMpesaPhone(e.target.value)}
-                          placeholder="2547XXXXXXXX"
-                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Default: {selectedBooking.phone} • You can change this if needed
-                        </p>
-                      </div>
-                      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
-                        <p className="text-sm text-blue-800">
-                          <strong>Amount:</strong> {formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))}
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1">
-                          {selectedBooking.isWalkIn 
-                            ? 'An M-Pesa STK push will be sent for the full payment amount (walk-in booking)'
-                            : 'An M-Pesa STK push will be sent to the phone number above'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => sendBalancePayment(selectedBooking, mpesaPhone)}
-                        disabled={sendingPayment || !mpesaPhone.trim()}
-                        className="w-full px-6 py-3 rounded-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {sendingPayment ? 'Sending M-Pesa Prompt...' : `Send M-Pesa Prompt (${formatCurrencyContext(convertBookingPrice(selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance))})`}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Card Payment */}
-                  {paymentMethod === 'card' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-brown-dark mb-2">
-                          Amount Paid ({currency})
-                        </label>
-                        <input
-                          type="number"
-                          value={cashAmount}
-                          onChange={(e) => setCashAmount(e.target.value)}
-                          placeholder={selectedBooking.isWalkIn 
-                            ? `Full Price: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))}`
-                            : `Balance: ${formatCurrencyContext(convertBookingPrice(balance))}`}
-                          min="0"
-                          max={selectedBooking.isWalkIn ? selectedBooking.finalPrice : balance}
-                          className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          {selectedBooking.isWalkIn 
-                            ? `Full price due: ${formatCurrencyContext(convertBookingPrice(selectedBooking.finalPrice))} (walk-in booking)`
-                            : `Balance due: ${formatCurrencyContext(convertBookingPrice(balance))}`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleMarkAsPaid(selectedBooking, parseFloat(cashAmount) || 0, 'card')}
-                        disabled={markingPaid || !cashAmount || parseFloat(cashAmount) <= 0}
-                        className="w-full px-6 py-3 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {markingPaid ? 'Recording...' : 'Paid in Card'}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 

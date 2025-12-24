@@ -11,6 +11,10 @@ interface Product {
   images?: string[]
   createdAt?: string
   updatedAt?: string
+  type?: 'physical' | 'digital' // Product type: physical (default) or digital
+  downloadUrl?: string // URL to downloadable file for digital products
+  downloadFileName?: string // Original filename for download
+  category?: string // Category for organizing products (e.g., "Guides", "Templates", "Tutorials")
 }
 
 interface ProductsPayload {
@@ -60,13 +64,14 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Error fetching products:', error)
+    // Return 200 with empty products instead of 500 to prevent page crashes
     return NextResponse.json({ 
       products: [], 
       transportationFee: 150,
       shopNotice: '',
       pickupLocation: 'Pick up Mtaani'
     }, { 
-      status: 500,
+      status: 200,
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',

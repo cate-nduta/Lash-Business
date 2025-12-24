@@ -607,7 +607,92 @@ export async function POST(request: NextRequest) {
       // Don't fail the booking if email fails
     }
 
-    // Save booking to bookings.json
+    // Check if booking is free (0 KSH) - if so, create immediately without payment
+    const finalPriceAmount = Number(finalPrice || originalPrice || 0)
+    const depositAmount = Number(deposit || 0)
+    const isFree = finalPriceAmount === 0 && depositAmount === 0
+
+    // If NOT free and payment is required, store as pending booking instead of creating immediately
+    if (!isFree && (body.paymentStatus === 'pending_payment' || body.paymentMethod === 'paystack')) {
+      // Store pending booking data - will be created after payment confirmation
+      const bookingReference = body.bookingReference || `LashDiary-${Date.now()}-${name.substring(0, 3).toUpperCase()}`
+      
+      const pendingBookings = await readDataFile<Array<{
+        bookingReference: string
+        bookingData: any
+        createdAt: string
+      }>>('pending-bookings.json', [])
+
+      // Store all booking data for later creation
+      const bookingData = {
+        name,
+        email,
+        phone,
+        service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
+        services: normalizedServices.length > 0 ? normalizedServices : service ? [service] : [],
+        serviceDetails: Array.isArray(serviceDetails) ? serviceDetails : null,
+        lastFullSetDate: typeof lastFullSetDate === 'string' ? lastFullSetDate : null,
+        lastFullSetDaysSince: typeof daysSinceLastFullSet === 'number' ? daysSinceLastFullSet : null,
+        date,
+        timeSlot,
+        location: bookingLocation,
+        desiredLook: desiredLookLabel,
+        desiredLookStatus: lashMapStatus,
+        desiredLookStatusMessage: lashMapStatusMessage,
+        desiredLookMatchesRecommendation,
+        notes: notes || '',
+        appointmentPreference: appointmentPreference || '',
+        originalPrice: originalPrice || 0,
+        discount: discount || 0,
+        finalPrice: finalPrice || originalPrice || 0,
+        deposit: deposit || 0,
+        discountType: body.discountType || null,
+        promoCode: promoCode || null,
+        referralType: promoCodeType || null,
+        salonReferral: salonReferral || null,
+        giftCardCode: giftCardCode || null,
+        paymentMethod: body.paymentMethod || 'paystack',
+        paymentOrderTrackingId: body.paymentOrderTrackingId || null,
+        isFirstTimeClient: isFirstTimeClient === true,
+        totalDuration,
+        isSalonReferral: body.isSalonReferral || false,
+        promoCodeData: body.promoCodeData || null,
+      }
+
+      pendingBookings.push({
+        bookingReference,
+        bookingData,
+        createdAt: new Date().toISOString(),
+      })
+
+      await writeDataFile('pending-bookings.json', pendingBookings)
+
+      // Reserve the slot temporarily
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/booking/reserve-slot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date,
+            timeSlot,
+            bookingReference,
+          }),
+        })
+      } catch (reserveError) {
+        console.error('Error reserving slot:', reserveError)
+      }
+
+      // Return success but indicate booking is pending payment
+      return NextResponse.json({
+        success: true,
+        bookingId: null, // No booking ID yet - will be created after payment
+        bookingReference,
+        pendingPayment: true,
+        message: 'Booking will be created after payment confirmation',
+      })
+    }
+
+    // Save booking to bookings.json (for free bookings or legacy support)
     try {
       const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
       const bookings = bookingsData.bookings || []
@@ -620,8 +705,12 @@ export async function POST(request: NextRequest) {
       const salonEarlyAmount = 0
       const salonFinalAmount = salonCommissionTotal
 
+      const bookingReference = body.bookingReference || `LashDiary-${Date.now()}-${name.substring(0, 3).toUpperCase()}`
+      
       const newBooking = {
         id: bookingId,
+        bookingId,
+        bookingReference,
         name,
         email,
         phone,
@@ -651,10 +740,15 @@ export async function POST(request: NextRequest) {
         giftCardRedeemed: giftCardRedeemed || false,
         giftCardRemainingBalance: giftCardRemainingBalance || 0,
         mpesaCheckoutRequestID: mpesaCheckoutRequestID || null,
+        paymentMethod: body.paymentMethod || null,
+        paymentStatus: isFree ? 'not_required' : (body.paymentStatus || (hasDeposit ? 'pending' : 'not_required')),
+        paymentOrderTrackingId: body.paymentOrderTrackingId || body.pesapalOrderTrackingId || null,
+        paymentTransactionId: null,
+        paidAt: null,
         createdAt,
         testimonialRequested: false,
         testimonialRequestedAt: null,
-        status: 'confirmed',
+        status: isFree ? 'confirmed' : (body.paymentStatus === 'pending_payment' ? 'pending' : 'confirmed'),
         calendarEventId: eventId || null,
         cancelledAt: null,
         cancelledBy: null,

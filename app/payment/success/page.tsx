@@ -1,0 +1,153 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+
+export default function PaymentSuccessPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [verifying, setVerifying] = useState(true)
+  const [verified, setVerified] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const reference = searchParams.get('reference')
+  const amount = searchParams.get('amount')
+  const currency = searchParams.get('currency') || 'KES'
+
+  useEffect(() => {
+    if (!reference) {
+      setError('No payment reference provided')
+      setVerifying(false)
+      return
+    }
+
+    // Verify the transaction
+    const verifyPayment = async () => {
+      try {
+        const response = await fetch(`/api/paystack/verify?reference=${reference}`)
+        const data = await response.json()
+
+        if (data.success && data.transaction?.status === 'success') {
+          setVerified(true)
+        } else {
+          setError(data.error || 'Payment verification failed')
+        }
+      } catch (err: any) {
+        setError('Failed to verify payment')
+        console.error('Payment verification error:', err)
+      } finally {
+        setVerifying(false)
+      }
+    }
+
+    verifyPayment()
+  }, [reference])
+
+  if (verifying) {
+    return (
+      <div className="min-h-screen bg-[#FDF9F4] flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#7C4B31] mx-auto"></div>
+          <p className="mt-4 text-[#6B4A3B]">Verifying your payment...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !verified) {
+    return (
+      <div className="min-h-screen bg-[#FDF9F4] flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-[#7C4B31] mb-2">Payment Verification Failed</h1>
+            <p className="text-[#6B4A3B]">{error || 'Unable to verify your payment'}</p>
+          </div>
+          <div className="space-y-3">
+            <Link
+              href="/"
+              className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
+            >
+              Return Home
+            </Link>
+            <p className="text-sm text-[#6B4A3B]">
+              If you believe this is an error, please contact us at{' '}
+              <a href="mailto:hello@lashdiary.co.ke" className="text-[#7C4B31] hover:underline">
+                hello@lashdiary.co.ke
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#FDF9F4] flex items-center justify-center px-4">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+        <div className="mb-6">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-[#7C4B31] mb-2">Payment Successful!</h1>
+          <p className="text-[#6B4A3B]">
+            Your payment has been processed successfully.
+          </p>
+        </div>
+
+        {amount && (
+          <div className="bg-[#F3E6DC] rounded-lg p-4 mb-6">
+            <p className="text-sm text-[#6B4A3B] mb-1">Amount Paid</p>
+            <p className="text-2xl font-bold text-[#7C4B31]">
+              {currency} {parseFloat(amount).toLocaleString()}
+            </p>
+            {reference && (
+              <p className="text-xs text-[#6B4A3B] mt-2">Reference: {reference}</p>
+            )}
+          </div>
+        )}
+
+        <div className="bg-[#F3E6DC] rounded-lg p-6 mb-6 text-left">
+          <h2 className="font-semibold text-[#7C4B31] mb-3">What Happens Next?</h2>
+          <ul className="space-y-2 text-sm text-[#3E2A20]">
+            <li className="flex items-start">
+              <span className="mr-2">✓</span>
+              <span>You'll receive a confirmation email shortly</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">✓</span>
+              <span>Your order will be processed</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">✓</span>
+              <span>Access will be granted (if applicable)</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="space-y-3">
+          <Link
+            href="/"
+            className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
+          >
+            Return Home
+          </Link>
+          <p className="text-sm text-[#6B4A3B]">
+            If you have any questions, please contact us at{' '}
+            <a href="mailto:hello@lashdiary.co.ke" className="text-[#7C4B31] hover:underline">
+              hello@lashdiary.co.ke
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+

@@ -117,7 +117,7 @@ const nextConfig = {
   },
   // Experimental features for better performance
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // Disabled to prevent CSS 404 errors in dev mode
   },
   // ESLint configuration
   eslint: {

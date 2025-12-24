@@ -57,6 +57,7 @@ export default function AdminLabs() {
       { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
     ],
     whatYouGetEnabled: true,
+    courseSectionEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -85,6 +86,7 @@ export default function AdminLabs() {
       { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
     ],
     whatYouGetEnabled: true,
+    courseSectionEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -185,6 +187,7 @@ export default function AdminLabs() {
               { id: '250k-300k+', label: '250K–300K+ KES', value: '250k-300k+' },
             ],
         whatYouGetEnabled: data.whatYouGetEnabled !== undefined ? data.whatYouGetEnabled : true,
+        courseSectionEnabled: data.courseSectionEnabled !== undefined ? data.courseSectionEnabled : true,
         whatYouGet: data.whatYouGet || {
           title: 'What You Get',
           subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -1144,6 +1147,35 @@ export default function AdminLabs() {
                 placeholder="No more lost bookings - everything is organized in one place&#10;Payment confusion eliminated - clients pay directly to your connected accounts&#10;..."
               />
               <p className="text-xs text-gray-500 mt-1">Enter each item on a new line</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Course Section Toggle */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-display text-brown mb-2">Course Section</h2>
+              <p className="text-gray-600 text-sm">
+                Control the visibility of the "Learn to Build Your Own Booking Website" section on the labs page.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="courseSectionEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Course Section:
+              </label>
+              <input
+                type="checkbox"
+                id="courseSectionEnabled"
+                checked={settings.courseSectionEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    courseSectionEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
             </div>
           </div>
         </div>

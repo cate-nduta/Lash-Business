@@ -121,7 +121,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       blogPages = blogData.posts
         .filter((post) => post?.slug && post?.published)
         .map((post) => ({
-          url: `${baseUrl}/blog/${post.slug}`,
+          url: `${baseUrl}/blog/${encodeURIComponent(post.slug!)}`,
           lastModified: post.updatedAt ? new Date(post.updatedAt) : (post.publishedAt ? new Date(post.publishedAt) : new Date()),
           changeFrequency: 'monthly' as const,
           priority: 0.7,
@@ -131,6 +131,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('Error loading blog posts for sitemap:', error)
   }
 
-  return [...staticPages, ...productPages, ...blogPages]
+  // Try to get courses for dynamic course pages
+  let coursePages: MetadataRoute.Sitemap = []
+  try {
+    const courseData = await readDataFile<{ courses?: Array<{ id?: string; title?: string; isActive?: boolean; updatedAt?: string }> }>('courses.json', { courses: [] })
+    if (Array.isArray(courseData?.courses)) {
+      const { generateCourseSlug } = await import('@/lib/courses-utils')
+      coursePages = courseData.courses
+        .filter((course) => course?.id && course?.title && course?.isActive)
+        .map((course) => {
+          const slug = generateCourseSlug(course.title!)
+          return {
+            url: `${baseUrl}/course/${encodeURIComponent(slug)}`,
+            lastModified: course.updatedAt ? new Date(course.updatedAt) : new Date(),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+          }
+        })
+    }
+  } catch (error) {
+    console.error('Error loading courses for sitemap:', error)
+  }
+
+  return [...staticPages, ...productPages, ...blogPages, ...coursePages]
 }
 
