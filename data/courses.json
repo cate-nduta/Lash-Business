@@ -14,7 +14,7 @@
       "category": "Web Development",
       "isActive": false,
       "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2025-12-24T21:36:57.706Z",
+      "updatedAt": "2025-12-24T22:29:09.065Z",
       "instructor": {
         "name": "Catherine Kuria",
         "title": "Developer and Lead Instructor"
@@ -51,7 +51,7 @@
       "slug": "build-a-professional-booking-website-with-ai-from-zero-to-launch",
       "subtitle": "Learn how to build a complete booking website like lashdiary.co.ke using AI-powered development tools. No coding experience needed - perfect for beginners! Coming from someone who doesn't like to code that much!",
       "description": "This comprehensive course teaches you how to build a professional booking website from scratch using modern AI-powered development tools. You'll learn every step of the process, from setting up your development environment to deploying your live website with a custom domain.\n\n**What You'll Build:**\n\nYou'll create a fully-functional booking website similar to lashdiary.co.ke, complete with:\n\n- Beautiful, responsive frontend design\n- Complete booking system with calendar integration\n- Payment processing integration\n- Client accounts and authentication\n- Admin dashboard for managing bookings\n- Email notifications and automated reminders\n- Google Calendar integration\n- Professional email setup\n- Database integration\n\n**Perfect for Beginners:**\n\nThis course is designed so that even a 12-year-old can follow along. Every step is explained in detail, with screenshots and exact prompts you'll use. No prior coding experience is required!\n\n**What Makes This Course Special:**\n\n- **Every Single Prompt:** You'll get access to every prompt used to build this website\n- **Step-by-Step Instructions:** Detailed instructions for every process\n- **Real-World Setup:** Learn how to buy domains, set up hosting, configure email, and more\n- **Complete Transparency:** See exactly how a professional booking website is built\n- **Lifetime Access:** Learn at your own pace with lifetime access to all materials\n\n**🎓 Certificate of Completion**\n\nUpon completing this course, you will receive an official Certificate of Completion issued by LashDiary Labs. The certificate will be personalized with your name and can be downloaded or printed for your portfolio.",
-      "priceUSD": 0.01,
+      "priceUSD": 1,
       "originalPriceUSD": 0,
       "imageUrl": "https://xvrfpvdgzekdkmplcbwq.supabase.co/storage/v1/object/public/gallery/gallery/1766427209424-Pink_Aesthetic_Minimalist_Desk_Setup_with_Cityscape_View_Tech___Gadgets.jpg",
       "duration": "40-50 hours",
@@ -59,7 +59,7 @@
       "category": "Web Development",
       "isActive": true,
       "createdAt": "2025-01-20T00:00:00.000Z",
-      "updatedAt": "2025-12-24T21:36:57.707Z",
+      "updatedAt": "2025-12-24T22:29:09.066Z",
       "instructor": {
         "name": "Catherine Kuria",
         "title": "Founder & Lead Instructor"
