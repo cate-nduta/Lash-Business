@@ -32,11 +32,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find consultation by payment reference
+    const transaction = verification.transaction!
+    const metadata = transaction.metadata || {}
+    const consultationId = metadata.consultation_id
+
+    // Load consultations data
     const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
-    const consultation = consultationsData.consultations.find(
-      c => c.paymentTransactionId === reference || c.paymentOrderTrackingId === reference
-    )
+    const consultations = consultationsData.consultations || []
+    
+    // First try to find by consultation_id from metadata (most reliable)
+    let consultation = consultationId 
+      ? consultations.find(c => c.consultationId === consultationId)
+      : null
+
+    // If not found, try to find by payment reference (check multiple fields)
+    if (!consultation) {
+      consultation = consultations.find(
+        c => c.paymentTransactionId === reference || 
+             c.paymentOrderTrackingId === reference ||
+             (c.paymentTransactionId && c.paymentTransactionId.toString() === reference) ||
+             (c.paymentOrderTrackingId && c.paymentOrderTrackingId.toString() === reference)
+      )
+    }
+
+    // Also try to find by customer email from transaction as fallback
+    if (!consultation && transaction.customer?.email) {
+      const customerEmail = transaction.customer.email.toLowerCase().trim()
+      // Find most recent consultation for this email
+      consultation = consultations
+        .filter(c => c.email && c.email.toLowerCase().trim() === customerEmail)
+        .sort((a, b) => {
+          const dateA = new Date(a.submittedAt || a.createdAt || 0).getTime()
+          const dateB = new Date(b.submittedAt || b.createdAt || 0).getTime()
+          return dateB - dateA // Most recent first
+        })[0]
+    }
 
     if (!consultation) {
       // Check pending consultations as well
@@ -46,9 +76,29 @@ export async function POST(request: NextRequest) {
         createdAt: string
       }>>('pending-consultations.json', [])
 
-      const pendingConsultation = pendingConsultations.find(
-        pc => pc.consultationData.paymentOrderTrackingId === reference
-      )
+      // Try to find by consultation_id first, then by payment reference
+      let pendingConsultation = consultationId
+        ? pendingConsultations.find(pc => pc.consultationId === consultationId)
+        : null
+      
+      if (!pendingConsultation) {
+        pendingConsultation = pendingConsultations.find(
+          pc => pc.consultationData?.paymentOrderTrackingId === reference ||
+                pc.consultationData?.paymentTransactionId === reference
+        )
+      }
+
+      // Try by email as fallback
+      if (!pendingConsultation && transaction.customer?.email) {
+        const customerEmail = transaction.customer.email.toLowerCase().trim()
+        pendingConsultation = pendingConsultations
+          .filter(pc => pc.consultationData?.email && pc.consultationData.email.toLowerCase().trim() === customerEmail)
+          .sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0).getTime()
+            const dateB = new Date(b.createdAt || 0).getTime()
+            return dateB - dateA // Most recent first
+          })[0]
+      }
 
       if (pendingConsultation) {
         // Move from pending to confirmed consultations
@@ -87,8 +137,21 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Log what we tried to find for debugging
+      console.error('❌ Consultation not found for payment reference:', {
+        reference,
+        consultationId,
+        customerEmail: transaction.customer?.email,
+        metadataKeys: Object.keys(metadata),
+        totalConsultations: consultations.length,
+        totalPending: pendingConsultations.length,
+      })
+
       return NextResponse.json(
-        { error: 'Consultation not found for this payment reference' },
+        { 
+          error: 'Consultation not found for this payment reference. Please contact support with your payment reference.',
+          details: 'Unable to locate consultation record. This may happen if the payment was not for a consultation booking.'
+        },
         { status: 404 }
       )
     }
