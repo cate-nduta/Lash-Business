@@ -181,14 +181,25 @@ async function handleConsultationPayment(transaction: any, metadata: any) {
         await writeDataFile('labs-consultations.json', consultations)
       }
 
-      // Send consultation confirmation email
+      // Send consultation confirmation email (ONLY after payment is confirmed)
       try {
         const { sendConsultationEmail } = await import('@/app/api/labs/consultation/email-utils')
+        console.log('Attempting to send consultation confirmation email for:', consultationId, {
+          email: existingConsultation.email,
+          preferredDate: existingConsultation.preferredDate,
+          preferredTime: existingConsultation.preferredTime,
+          paymentStatus: existingConsultation.paymentStatus,
+        })
         await sendConsultationEmail(existingConsultation)
-        console.log('Consultation confirmation email sent:', consultationId)
-      } catch (emailError) {
-        console.error('Error sending consultation confirmation email:', emailError)
-        // Don't fail the webhook if email fails
+        console.log('✅ Consultation confirmation email sent successfully:', consultationId, 'to:', existingConsultation.email)
+      } catch (emailError: any) {
+        console.error('❌ Error sending consultation confirmation email:', {
+          consultationId,
+          error: emailError?.message || emailError,
+          stack: emailError?.stack,
+          email: existingConsultation.email,
+        })
+        // Don't fail the webhook if email fails, but log it for debugging
       }
 
       console.log('Consultation payment processed (existing consultation):', consultationId)
@@ -222,14 +233,25 @@ async function handleConsultationPayment(transaction: any, metadata: any) {
         const updatedPending = pendingConsultations.filter(pc => pc.consultationId !== consultationId)
         await writeDataFile('pending-consultations.json', updatedPending)
 
-        // Send consultation confirmation email
+        // Send consultation confirmation email (ONLY after payment is confirmed)
         try {
           const { sendConsultationEmail } = await import('@/app/api/labs/consultation/email-utils')
+          console.log('Attempting to send consultation confirmation email for:', consultationId, {
+            email: consultationData.email,
+            preferredDate: consultationData.preferredDate,
+            preferredTime: consultationData.preferredTime,
+            paymentStatus: consultationData.paymentStatus,
+          })
           await sendConsultationEmail(consultationData)
-          console.log('Consultation confirmation email sent:', consultationId)
-        } catch (emailError) {
-          console.error('Error sending consultation confirmation email:', emailError)
-          // Don't fail the webhook if email fails
+          console.log('✅ Consultation confirmation email sent successfully:', consultationId, 'to:', consultationData.email)
+        } catch (emailError: any) {
+          console.error('❌ Error sending consultation confirmation email:', {
+            consultationId,
+            error: emailError?.message || emailError,
+            stack: emailError?.stack,
+            email: consultationData.email,
+          })
+          // Don't fail the webhook if email fails, but log it for debugging
         }
 
         console.log('Consultation created from pending data after payment confirmation:', consultationId)

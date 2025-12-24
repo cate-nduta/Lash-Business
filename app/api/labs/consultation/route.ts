@@ -47,7 +47,7 @@ export interface ConsultationSubmission {
   submittedAt: string
   source: string
   status?: 'pending' | 'pending_payment' | 'confirmed' | 'cancelled'
-  paymentStatus?: 'pending' | 'pending_payment' | 'paid'
+  paymentStatus?: 'pending' | 'pending_payment' | 'paid' | 'not_required'
   paymentOrderTrackingId?: string | null
   paymentMethod?: string | null
   paidAt?: string

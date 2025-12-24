@@ -515,6 +515,28 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
 </html>
     `.trim()
 
+    // Only send confirmation email to client if payment has been confirmed
+    // Payment is confirmed if: paymentStatus is 'paid' or 'not_required'
+    // We explicitly check to prevent sending confirmation before payment
+    const paymentConfirmed = data.paymentStatus === 'paid' || data.paymentStatus === 'not_required'
+    
+    if (!paymentConfirmed) {
+      console.warn('⚠️ Skipping client consultation confirmation email - payment not confirmed yet:', {
+        consultationId: data.consultationId,
+        email: data.email,
+        paymentStatus: data.paymentStatus,
+        status: data.status,
+        note: 'Business notification email was already sent above. Client confirmation will be sent after payment is confirmed.',
+      })
+      return
+    }
+    
+    console.log('✅ Sending client consultation confirmation email - payment confirmed:', {
+      consultationId: data.consultationId,
+      email: data.email,
+      paymentStatus: data.paymentStatus,
+    })
+
     await transporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: data.email,
