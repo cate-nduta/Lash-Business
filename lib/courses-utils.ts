@@ -4,13 +4,17 @@ import { type Course, type CourseDiscount, type CourseCatalog } from '@/types/co
  * Generate a URL-friendly slug from a course title
  */
 export const generateCourseSlug = (title: string): string => {
-  return title
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    return ''
+  }
+  const slug = title
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, '') // Remove special characters
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
     .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+  return slug || '' // Ensure we always return a string
 }
 
 /**
@@ -112,7 +116,10 @@ export const normalizeCourse = (raw: any): Course => {
       ? raw.title.trim() 
       : 'Untitled Course',
     slug: typeof raw?.title === 'string' && raw.title.trim().length > 0
-      ? generateCourseSlug(raw.title.trim())
+      ? (() => {
+          const slug = generateCourseSlug(raw.title.trim())
+          return slug && slug.length > 0 ? slug : undefined
+        })()
       : undefined,
     subtitle: typeof raw?.subtitle === 'string' && raw.subtitle.trim().length > 0 ? raw.subtitle.trim() : undefined,
     description: typeof raw?.description === 'string' ? raw.description : undefined,
@@ -146,7 +153,10 @@ export const normalizeCourse = (raw: any): Course => {
     couponCode: typeof raw?.couponCode === 'string' && raw.couponCode.trim().length > 0 ? raw.couponCode.trim() : undefined,
     discountPercent: typeof raw?.discountPercent === 'number' && raw.discountPercent >= 0 && raw.discountPercent <= 100 
       ? raw.discountPercent 
-      : (typeof raw?.discountPercent === 'string' ? parseFloat(raw.discountPercent) : undefined),
+      : (typeof raw?.discountPercent === 'string' ? (() => {
+          const parsed = parseFloat(raw.discountPercent)
+          return !isNaN(parsed) && parsed >= 0 && parsed <= 100 ? parsed : undefined
+        })() : undefined),
     discountExpiry: typeof raw?.discountExpiry === 'string' ? raw.discountExpiry : undefined,
     discountExpiryDate: typeof raw?.discountExpiryDate === 'string' ? raw.discountExpiryDate : undefined,
   }

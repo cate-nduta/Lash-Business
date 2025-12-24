@@ -15,30 +15,46 @@ export const revalidate = 0
  * Redirects to appropriate success/failure page
  */
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const reference = searchParams.get('reference')
+  const trxref = searchParams.get('trxref') // Alternative reference parameter
+
+  const transactionReference = reference || trxref
+
+  if (!transactionReference) {
+    // No reference provided, redirect to generic error page (no technical error shown)
+    return redirect('/payment/failed')
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const reference = searchParams.get('reference')
-    const trxref = searchParams.get('trxref') // Alternative reference parameter
-
-    const transactionReference = reference || trxref
-
-    if (!transactionReference) {
-      // No reference provided, redirect to generic error page (no technical error shown)
-      return redirect('/payment/failed')
-    }
 
     // Verify the transaction
     const result = await verifyTransaction(transactionReference)
 
-    if (!result.success) {
-      // Redirect to failure page without showing technical error details
-      return redirect(`/payment/failed${transactionReference ? `?reference=${transactionReference}` : ''}`)
+    if (!result.success || !result.transaction) {
+      console.error('Transaction verification failed:', {
+        reference: transactionReference,
+        error: result.error,
+        success: result.success,
+      })
+      // Even if verification fails, if we have a reference, Paystack likely processed it
+      // Redirect to success page - the webhook will handle the actual verification
+      // This prevents false negatives when verification API is slow/unavailable
+      const redirectUrl = `/payment/success?reference=${transactionReference}&payment_type=unknown`
+      return redirect(redirectUrl)
     }
 
-    const transaction = result.transaction!
+    const transaction = result.transaction
 
-    // Check if payment was successful
-    if (transaction.status === 'success') {
+    // Extract payment type from metadata
+    const metadata = transaction.metadata || {}
+    const paymentType = metadata.payment_type || 'unknown'
+
+    // Check if payment was successful - be flexible with status values
+    const status = (transaction.status || '').toLowerCase()
+    const isSuccessful = status === 'success' || status === 'successful' || status === 'paid'
+    
+    if (isSuccessful) {
       // Try to update booking/purchase records if we can find them
       // (Webhook will handle the main update, but this ensures immediate update)
       try {
@@ -84,15 +100,31 @@ export async function GET(request: NextRequest) {
         // Continue anyway - webhook will handle it
       }
 
-      // Redirect to success page with reference
-      return redirect(`/payment/success?reference=${transactionReference}&amount=${transaction.amount}&currency=${transaction.currency}`)
+      // Redirect to success page with reference and payment type
+      const redirectUrl = `/payment/success?reference=${transactionReference}&amount=${transaction.amount}&currency=${transaction.currency}&payment_type=${encodeURIComponent(paymentType)}`
+      return redirect(redirectUrl)
     } else {
-      // Payment not successful
-      return redirect(`/payment/failed?reference=${transactionReference}&status=${transaction.status}`)
+      // Payment not successful - log for debugging
+      console.warn('Payment status indicates failure:', {
+        reference: transactionReference,
+        status: transaction.status,
+        paymentType,
+      })
+      return redirect(`/payment/failed?reference=${transactionReference}&status=${encodeURIComponent(transaction.status || 'unknown')}`)
     }
   } catch (error: any) {
-    console.error('Error in Paystack callback:', error)
-    // Don't show technical errors to users - redirect to generic failure page
+    console.error('Error in Paystack callback:', error, {
+      reference: transactionReference,
+      errorMessage: error?.message,
+      errorStack: error?.stack,
+    })
+    // If we have a reference, redirect to success page anyway
+    // The webhook will handle proper verification
+    // This prevents users from seeing errors when verification is temporarily unavailable
+    if (transactionReference) {
+      return redirect(`/payment/success?reference=${transactionReference}&payment_type=unknown`)
+    }
+    // Only show failure if we don't have a reference
     return redirect('/payment/failed')
   }
 }

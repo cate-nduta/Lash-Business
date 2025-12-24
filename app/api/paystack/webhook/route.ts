@@ -181,6 +181,16 @@ async function handleConsultationPayment(transaction: any, metadata: any) {
         await writeDataFile('labs-consultations.json', consultations)
       }
 
+      // Send consultation confirmation email
+      try {
+        const { sendConsultationEmail } = await import('@/app/api/labs/consultation/email-utils')
+        await sendConsultationEmail(existingConsultation)
+        console.log('Consultation confirmation email sent:', consultationId)
+      } catch (emailError) {
+        console.error('Error sending consultation confirmation email:', emailError)
+        // Don't fail the webhook if email fails
+      }
+
       console.log('Consultation payment processed (existing consultation):', consultationId)
       return
     }
@@ -211,6 +221,16 @@ async function handleConsultationPayment(transaction: any, metadata: any) {
         // Remove from pending consultations
         const updatedPending = pendingConsultations.filter(pc => pc.consultationId !== consultationId)
         await writeDataFile('pending-consultations.json', updatedPending)
+
+        // Send consultation confirmation email
+        try {
+          const { sendConsultationEmail } = await import('@/app/api/labs/consultation/email-utils')
+          await sendConsultationEmail(consultationData)
+          console.log('Consultation confirmation email sent:', consultationId)
+        } catch (emailError) {
+          console.error('Error sending consultation confirmation email:', emailError)
+          // Don't fail the webhook if email fails
+        }
 
         console.log('Consultation created from pending data after payment confirmation:', consultationId)
         return

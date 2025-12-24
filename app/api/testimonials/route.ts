@@ -19,6 +19,9 @@ const UPLOAD_DIR = join(process.cwd(), 'public', 'uploads', 'testimonials')
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 
+export const runtime = 'nodejs'
+export const revalidate = 60 // Revalidate every 60 seconds
+
 export async function GET(request: NextRequest) {
   try {
     const data = await readDataFile<{ testimonials: Testimonial[] }>('testimonials.json', { testimonials: [] })
@@ -33,9 +36,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ testimonials: approvedTestimonials }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
     })
   } catch (error) {
@@ -43,9 +44,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ testimonials: [] }, { 
       status: 500,
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=60',
       },
     })
   }

@@ -175,7 +175,8 @@ export default function AdminCourses() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save courses')
+        const errorData = await response.json().catch(() => ({ error: 'Failed to save courses' }))
+        throw new Error(errorData.error || errorData.details || 'Failed to save courses')
       }
 
       setOriginalCatalog(catalog)
@@ -188,7 +189,8 @@ export default function AdminCourses() {
       await loadCourses()
     } catch (error) {
       console.error('Error saving courses:', error)
-      setMessage({ type: 'error', text: 'Failed to save courses' })
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save courses'
+      setMessage({ type: 'error', text: errorMessage })
     } finally {
       setSaving(false)
     }

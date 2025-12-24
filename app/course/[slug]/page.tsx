@@ -508,7 +508,7 @@ export default function CourseDetailPage({ params }: { params: { slug: string } 
                             </div>
                           )}
                         </div>
-                        {course.discountExpiryDate && (
+                        {hasDiscount && course.discountExpiryDate && (
                           <div className="mt-2">
                             <DiscountCountdown 
                               expiryDate={course.discountExpiryDate}
@@ -516,7 +516,7 @@ export default function CourseDetailPage({ params }: { params: { slug: string } 
                             />
                           </div>
                         )}
-                        {!course.discountExpiryDate && course.discountExpiry && (
+                        {hasDiscount && !course.discountExpiryDate && course.discountExpiry && (
                           <div className="text-xs text-red-600 font-semibold mt-1">
                             {course.discountExpiry}
                           </div>

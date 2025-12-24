@@ -39,6 +39,7 @@ export interface VerifyTransactionResponse {
     currency: string
     status: string
     paidAt?: string
+    metadata?: Record<string, any>
     customer?: {
       email: string
       first_name?: string
@@ -246,6 +247,7 @@ export async function verifyTransaction(
         currency: transaction.currency,
         status: transaction.status,
         paidAt: transaction.paid_at,
+        metadata: transaction.metadata || {},
         customer: transaction.customer
           ? {
               email: transaction.customer.email,

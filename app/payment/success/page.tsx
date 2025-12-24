@@ -14,6 +14,7 @@ export default function PaymentSuccessPage() {
   const reference = searchParams.get('reference')
   const amount = searchParams.get('amount')
   const currency = searchParams.get('currency') || 'KES'
+  const paymentType = searchParams.get('payment_type') || 'unknown'
 
   useEffect(() => {
     if (!reference) {
@@ -96,40 +97,67 @@ export default function PaymentSuccessPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-[#7C4B31] mb-2">Payment Successful!</h1>
+          <h1 className="text-2xl font-bold text-[#7C4B31] mb-2">
+            {paymentType === 'consultation' ? 'Payment Successful & Appointment Booked!' : 'Payment Successful!'}
+          </h1>
           <p className="text-[#6B4A3B]">
-            Your payment has been processed successfully.
+            {paymentType === 'consultation' 
+              ? 'Your payment was successful and your consultation appointment has been booked.' 
+              : 'Your payment has been processed successfully.'}
           </p>
         </div>
 
         {amount && (
           <div className="bg-[#F3E6DC] rounded-lg p-4 mb-6">
-            <p className="text-sm text-[#6B4A3B] mb-1">Amount Paid</p>
+            <p className="text-sm text-[#6B4A3B] mb-1">
+              {paymentType === 'consultation' ? 'You paid' : 'Amount Paid'}
+            </p>
             <p className="text-2xl font-bold text-[#7C4B31]">
               {currency} {parseFloat(amount).toLocaleString()}
             </p>
+            {paymentType === 'consultation' && (
+              <p className="text-sm text-[#6B4A3B] mt-2">to LASHDIARY LABS</p>
+            )}
             {reference && (
               <p className="text-xs text-[#6B4A3B] mt-2">Reference: {reference}</p>
             )}
+            <p className="text-xs text-[#6B4A3B] mt-1 text-center">Secured by Paystack</p>
           </div>
         )}
 
         <div className="bg-[#F3E6DC] rounded-lg p-6 mb-6 text-left">
           <h2 className="font-semibold text-[#7C4B31] mb-3">What Happens Next?</h2>
-          <ul className="space-y-2 text-sm text-[#3E2A20]">
-            <li className="flex items-start">
-              <span className="mr-2">✓</span>
-              <span>You'll receive a confirmation email shortly</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">✓</span>
-              <span>Your order will be processed</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">✓</span>
-              <span>Access will be granted (if applicable)</span>
-            </li>
-          </ul>
+          {paymentType === 'consultation' ? (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>You'll receive a confirmation email with your consultation details shortly</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your consultation appointment has been confirmed</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>We'll contact you soon to finalize the details and schedule your session</span>
+              </li>
+            </ul>
+          ) : (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>You'll receive a confirmation email shortly</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your order will be processed</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Access will be granted (if applicable)</span>
+              </li>
+            </ul>
+          )}
         </div>
 
         <div className="space-y-3">
