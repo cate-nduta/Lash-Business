@@ -164,88 +164,77 @@ export default function PaymentSuccessPage() {
         </div>
 
         <div className="space-y-3">
-          {paymentType === 'consultation' ? (
+          {emailSent ? (
             <>
-              {emailSent ? (
-                <>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                    <p className="text-green-800 text-sm font-medium">
-                      ✓ Consultation confirmed! Emails have been sent to you and our team. The time slot has been reserved.
-                    </p>
-                  </div>
-                  <Link
-                    href="/"
-                    className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
-                  >
-                    Return Home
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={async () => {
-                      if (!reference) return
-                      
-                      setSendingEmail(true)
-                      setEmailError(null)
-                      
-                      try {
-                        const response = await fetch('/api/consultations/send-confirmation', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ reference }),
-                        })
-                        
-                        const data = await response.json()
-                        
-                        if (response.ok && data.success) {
-                          setEmailSent(true)
-                        } else {
-                          setEmailError(data.error || 'Failed to send emails. Please contact support.')
-                        }
-                      } catch (err: any) {
-                        setEmailError('Failed to send emails. Please contact support.')
-                        console.error('Error sending confirmation:', err)
-                      } finally {
-                        setSendingEmail(false)
-                      }
-                    }}
-                    disabled={sendingEmail}
-                    className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {sendingEmail ? (
-                      <span className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Sending Emails...
-                      </span>
-                    ) : (
-                      'Send Email & Confirm Booking'
-                    )}
-                  </button>
-                  {emailError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <p className="text-red-800 text-sm">{emailError}</p>
-                    </div>
-                  )}
-                  <Link
-                    href="/"
-                    className="block w-full py-2 text-center text-[#7C4B31] hover:underline text-sm"
-                  >
-                    Return Home
-                  </Link>
-                </>
-              )}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <p className="text-green-800 text-sm font-medium">
+                  ✓ Consultation confirmed! Emails have been sent to you and our team. The time slot has been reserved.
+                </p>
+              </div>
+              <Link
+                href="/"
+                className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
+              >
+                Return Home
+              </Link>
             </>
           ) : (
-            <Link
-              href="/"
-              className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
-            >
-              Return Home
-            </Link>
+            <>
+              <button
+                onClick={async () => {
+                  if (!reference) return
+                  
+                  setSendingEmail(true)
+                  setEmailError(null)
+                  
+                  try {
+                    const response = await fetch('/api/consultations/send-confirmation', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ reference }),
+                    })
+                    
+                    const data = await response.json()
+                    
+                    if (response.ok && data.success) {
+                      setEmailSent(true)
+                    } else {
+                      setEmailError(data.error || 'Failed to send emails. Please contact support.')
+                    }
+                  } catch (err: any) {
+                    setEmailError('Failed to send emails. Please contact support.')
+                    console.error('Error sending confirmation:', err)
+                  } finally {
+                    setSendingEmail(false)
+                  }
+                }}
+                disabled={sendingEmail}
+                className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sendingEmail ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending Emails...
+                  </span>
+                ) : (
+                  'Send Email & Confirm Booking'
+                )}
+              </button>
+              {emailError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-800 text-sm">{emailError}</p>
+                </div>
+              )}
+              <Link
+                href="/"
+                className="block w-full py-2 text-center text-[#7C4B31] hover:underline text-sm"
+              >
+                Return Home
+              </Link>
+            </>
           )}
           <p className="text-sm text-[#6B4A3B]">
             If you have any questions, please contact us at{' '}
