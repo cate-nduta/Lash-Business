@@ -67,13 +67,18 @@ export async function GET(request: NextRequest) {
         sunday: false,
       },
       timeSlots: {
-        weekdays: [],
+        weekdays: [
+          { hour: 9, minute: 30, label: '9:30 AM' },
+          { hour: 12, minute: 0, label: '12:00 PM' },
+          { hour: 15, minute: 30, label: '3:30 PM' },
+        ],
       },
       blockedDates: [],
     })
 
-    // Load consultations in parallel (non-blocking)
+    // Load consultations and showcase bookings in parallel (non-blocking)
     const consultationsPromise = readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+    const showcaseBookingsPromise = readDataFile<Array<{ appointmentDate?: string; appointmentTime?: string; timeSlot?: string; status?: string }>>('labs-showcase-bookings.json', [])
     
     // Generate available dates FIRST (fast, synchronous calculation)
     const availableDates: string[] = []
@@ -119,15 +124,19 @@ export async function GET(request: NextRequest) {
       currentDate.setDate(currentDate.getDate() + 1)
     }
 
-    // Load consultations (already started in parallel)
+    // Load consultations and showcase bookings (already started in parallel)
     const consultationsData = await consultationsPromise
+    const showcaseBookings = await showcaseBookingsPromise
     
-    // Extract booked slots (optimized)
-    const bookedSlots = consultationsData.consultations
+    // Extract booked slots from consultations (optimized)
+    // Only confirmed consultations block slots (pending/pending_payment don't block until confirmed)
+    const consultationBookedSlots = consultationsData.consultations
       .filter(c => {
         if (!c.preferredDate || !c.preferredTime) return false
         const status = c.status?.toLowerCase()
-        return status !== 'cancelled' && status !== 'pending'
+        // Only confirmed consultations block slots
+        // pending, pending_payment, and other non-confirmed statuses don't block
+        return status === 'confirmed'
       })
       .map(c => ({
         date: normalizeDate(c.preferredDate) || c.preferredDate,
@@ -135,17 +144,102 @@ export async function GET(request: NextRequest) {
       }))
       .filter(slot => slot.date && slot.time)
 
-    const bookedDates = Array.from(new Set(
-      consultationsData.consultations
-        .filter(c => c.preferredDate && c.status?.toLowerCase() !== 'cancelled' && c.status?.toLowerCase() !== 'pending')
-        .map(c => normalizeDate(c.preferredDate) || c.preferredDate)
-        .filter((date): date is string => !!date)
-    ))
+    // Extract booked slots from showcase bookings
+    // Only confirmed showcase bookings block slots
+    const showcaseBookedSlots = showcaseBookings
+      .filter(b => {
+        if (!b.appointmentDate || !b.appointmentTime) return false
+        const status = b.status?.toLowerCase()
+        // Only confirmed bookings block slots
+        return status === 'confirmed'
+      })
+      .map(b => {
+        // Normalize the date to YYYY-MM-DD format
+        // appointmentDate is stored as ISO string, need to extract YYYY-MM-DD
+        let normalizedDate: string | null = null
+        
+        if (b.appointmentDate) {
+          // Try normalizeDate first (handles YYYY-MM-DD format)
+          normalizedDate = normalizeDate(b.appointmentDate)
+          
+          // If that didn't work, try parsing as ISO string
+          if (!normalizedDate) {
+            try {
+              const date = new Date(b.appointmentDate)
+              if (!isNaN(date.getTime())) {
+                const year = date.getFullYear()
+                const month = String(date.getMonth() + 1).padStart(2, '0')
+                const day = String(date.getDate()).padStart(2, '0')
+                normalizedDate = `${year}-${month}-${day}`
+              }
+            } catch {
+              // If parsing fails, try to extract YYYY-MM-DD from string
+              const dateMatch = b.appointmentDate.match(/(\d{4}-\d{2}-\d{2})/)
+              if (dateMatch) {
+                normalizedDate = dateMatch[1]
+              }
+            }
+          }
+        }
+        
+        // appointmentTime is stored as label like "9:30 AM"
+        const timeLabel = b.appointmentTime || ''
+        
+        return {
+          date: normalizedDate || b.appointmentDate,
+          time: normalizeTime(timeLabel) || timeLabel,
+        }
+      })
+      .filter(slot => slot.date && slot.time)
+
+    // Combine booked slots from both consultations and showcase bookings
+    const bookedSlots = [...consultationBookedSlots, ...showcaseBookedSlots]
+
+    // Extract booked dates from consultations
+    const consultationBookedDates = consultationsData.consultations
+      .filter(c => {
+        if (!c.preferredDate) return false
+        const status = c.status?.toLowerCase()
+        // Only confirmed consultations block dates
+        return status === 'confirmed'
+      })
+      .map(c => normalizeDate(c.preferredDate) || c.preferredDate)
+      .filter((date): date is string => !!date)
+
+    // Extract booked dates from showcase bookings
+    const showcaseBookedDates = showcaseBookings
+      .filter(b => {
+        if (!b.appointmentDate) return false
+        const status = b.status?.toLowerCase()
+        return status === 'confirmed'
+      })
+      .map(b => normalizeDate(b.appointmentDate) || b.appointmentDate)
+      .filter((date): date is string => !!date)
+
+    // Combine booked dates from both
+    const bookedDates = Array.from(new Set([...consultationBookedDates, ...showcaseBookedDates]))
 
     // Get time slots (support both structures)
-    const timeSlots = availabilityData.dailyAvailability?.monday?.timeSlots || 
-                     availabilityData.timeSlots?.weekdays || 
-                     []
+    // Check timeSlots.weekdays first (this is what the admin panel uses)
+    let timeSlots: Array<{ hour: number; minute: number; label: string }> = []
+    
+    if (availabilityData.timeSlots?.weekdays && 
+        Array.isArray(availabilityData.timeSlots.weekdays) &&
+        availabilityData.timeSlots.weekdays.length > 0) {
+      timeSlots = availabilityData.timeSlots.weekdays
+    } else if (availabilityData.dailyAvailability?.monday?.timeSlots && 
+               Array.isArray(availabilityData.dailyAvailability.monday.timeSlots) &&
+               availabilityData.dailyAvailability.monday.timeSlots.length > 0) {
+      // Fallback to dailyAvailability structure if weekdays not found
+      timeSlots = availabilityData.dailyAvailability.monday.timeSlots
+    } else {
+      // Default time slots if none configured: 9:30 AM, 12:00 PM, 3:30 PM
+      timeSlots = [
+        { hour: 9, minute: 30, label: '9:30 AM' },
+        { hour: 12, minute: 0, label: '12:00 PM' },
+        { hour: 15, minute: 30, label: '3:30 PM' },
+      ]
+    }
 
     return NextResponse.json({
       bookedDates,
@@ -156,7 +250,9 @@ export async function GET(request: NextRequest) {
       minimumBookingDate: availabilityData.minimumBookingDate || null,
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60', // Cache for faster loads
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0', // No cache to ensure fresh data
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error: any) {

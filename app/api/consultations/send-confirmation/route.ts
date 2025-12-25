@@ -176,19 +176,50 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update consultation status
+    // Update consultation status FIRST (before sending email) to reserve the time slot
     consultation.paymentStatus = 'paid'
     consultation.status = 'confirmed'
     consultation.paidAt = verification.transaction?.paidAt || consultation.paidAt || new Date().toISOString()
     consultation.paymentTransactionId = reference
 
-    // Save updated consultation
+    // Save updated consultation IMMEDIATELY to reserve the time slot
     const consultationIndex = consultationsData.consultations.findIndex(
       c => c.consultationId === consultation.consultationId
     )
     if (consultationIndex !== -1) {
       consultationsData.consultations[consultationIndex] = consultation
       await writeDataFile('labs-consultations.json', consultationsData)
+    } else {
+      // If not found in array, add it (shouldn't happen but safety check)
+      consultationsData.consultations.push(consultation)
+      await writeDataFile('labs-consultations.json', consultationsData)
+    }
+
+    // Log the consultation details for debugging
+    console.log('✅ Consultation confirmed and saved:', {
+      consultationId: consultation.consultationId,
+      preferredDate: consultation.preferredDate,
+      preferredTime: consultation.preferredTime,
+      preferredTimeRaw: JSON.stringify(consultation.preferredTime),
+      status: consultation.status,
+      paymentStatus: consultation.paymentStatus,
+      email: consultation.email,
+      businessName: consultation.businessName,
+      contactName: consultation.contactName,
+    })
+
+    // Verify the consultation data is correct before sending email
+    if (!consultation.preferredDate || !consultation.preferredTime) {
+      console.error('❌ Consultation missing required fields:', {
+        consultationId: consultation.consultationId,
+        hasDate: !!consultation.preferredDate,
+        hasTime: !!consultation.preferredTime,
+        consultationData: Object.keys(consultation),
+      })
+      return NextResponse.json(
+        { error: 'Consultation data is incomplete. Missing date or time information.' },
+        { status: 400 }
+      )
     }
 
     // Send confirmation emails (sends to both client and admin)

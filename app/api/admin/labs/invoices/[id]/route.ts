@@ -169,6 +169,20 @@ export async function PATCH(
     if (body.dueDate !== undefined) {
       invoice.dueDate = body.dueDate
     }
+    if (body.upfrontPaid !== undefined) {
+      invoice.upfrontPaid = body.upfrontPaid
+    }
+    if (body.secondPaid !== undefined) {
+      invoice.secondPaid = body.secondPaid
+    }
+
+    // Auto-update overall status if both payments are marked as paid
+    if (invoice.upfrontPaid && invoice.secondPaid && invoice.status !== 'paid') {
+      invoice.status = 'paid'
+    } else if (invoice.status === 'paid' && (!invoice.upfrontPaid || !invoice.secondPaid)) {
+      // If status is paid but one payment is unmarked, keep status as paid but log it
+      // (Admin can manually change if needed)
+    }
 
     invoice.updatedAt = new Date().toISOString()
     invoices[invoiceIndex] = invoice

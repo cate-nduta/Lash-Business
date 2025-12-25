@@ -90,7 +90,23 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'Not specified'
     try {
+      // Parse date string (expected format: YYYY-MM-DD)
+      // Extract just the date part to avoid timezone issues
+      const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+      if (dateMatch) {
+        const [year, month, day] = dateMatch[1].split('-').map(Number)
+        // Create date at noon to avoid timezone issues (time component will be ignored in formatting)
+        const date = new Date(year, month - 1, day, 12, 0, 0)
+        return date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      }
+      // Fallback: try parsing as-is
       const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return dateStr
       return date.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -104,12 +120,24 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return 'Not specified'
+    // Normalize the time string to handle case variations
+    const normalizedTime = timeStr.toLowerCase().trim()
     const timeMap: Record<string, string> = {
       morning: '9:00 AM - 12:00 PM',
       afternoon: '12:00 PM - 4:00 PM',
       evening: '4:00 PM - 7:00 PM',
     }
-    return timeMap[timeStr] || timeStr
+    // Check both exact match and normalized match
+    const mappedTime = timeMap[normalizedTime] || timeMap[timeStr] || timeStr
+    // Log for debugging if time doesn't match expected values
+    if (!timeMap[normalizedTime] && !timeMap[timeStr]) {
+      console.warn('⚠️ Unexpected time value in consultation email:', {
+        original: timeStr,
+        normalized: normalizedTime,
+        consultationId: data.consultationId,
+      })
+    }
+    return mappedTime
   }
 
   const businessTypeMap: Record<string, string> = {
@@ -277,6 +305,12 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
                 <tr>
                   <td style="padding: 8px 0; color: #6B4A3B; font-weight: 600;">Preferred Time:</td>
                   <td style="padding: 8px 0; color: #3E2A20;">${formatTime(data.preferredTime)}</td>
+                </tr>
+                ` : ''}
+                ${data.preferredDate && data.preferredTime ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #6B4A3B; font-weight: 600; vertical-align: top;">Consultation Slot:</td>
+                  <td style="padding: 8px 0; color: #3E2A20; font-weight: 600; font-size: 16px;">${formatDate(data.preferredDate)} at ${formatTime(data.preferredTime)}</td>
                 </tr>
                 ` : ''}
                 <tr>

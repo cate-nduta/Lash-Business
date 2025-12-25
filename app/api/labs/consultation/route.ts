@@ -59,6 +59,7 @@ export interface ConsultationSubmission {
   invoiceSentAt?: string // When invoice was sent
   invoiceId?: string // Invoice ID if invoice was created
   timeGatedLink?: string // Time-gated meeting link
+  contractId?: string // Contract ID if contract was created
   // Physical meeting location fields
   meetingCountry?: string
   meetingCity?: string
@@ -180,16 +181,51 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if specific date+time slot is already booked
+    // Check if specific date+time slot is already booked (check both consultations AND showcase bookings)
     const consultationsData = await readDataFile<{ consultations: ConsultationSubmission[] }>('labs-consultations.json', { consultations: [] })
-    const isSlotBooked = consultationsData.consultations.some(
-      consultation => 
-        consultation.preferredDate === body.preferredDate && 
-        consultation.preferredTime === body.preferredTime &&
-        consultation.status !== 'cancelled'
+    const showcaseBookings = await readDataFile<Array<{ appointmentDate?: string; appointmentTime?: string; status?: string }>>('labs-showcase-bookings.json', [])
+    
+    // Normalize time for comparison
+    const normalizeTimeForComparison = (timeStr: string): string => {
+      if (!timeStr) return ''
+      return timeStr.toLowerCase().trim()
+    }
+    
+    // Check consultations
+    const isConsultationBooked = consultationsData.consultations.some(
+      consultation => {
+        if (!consultation.preferredDate || !consultation.preferredTime) return false
+        const consultationDate = consultation.preferredDate
+        const consultationTime = normalizeTimeForComparison(consultation.preferredTime)
+        const requestedTime = normalizeTimeForComparison(body.preferredTime)
+        
+        return consultationDate === body.preferredDate && 
+               consultationTime === requestedTime &&
+               consultation.status !== 'cancelled'
+      }
+    )
+    
+    // Check showcase bookings
+    const isShowcaseBooked = showcaseBookings.some(
+      booking => {
+        if (!booking.appointmentDate || !booking.appointmentTime) return false
+        if (booking.status?.toLowerCase() !== 'confirmed') return false
+        
+        // Parse appointment date to YYYY-MM-DD format
+        const appointmentDate = new Date(booking.appointmentDate)
+        const requestedDate = new Date(body.preferredDate)
+        const dateMatch = appointmentDate.toISOString().split('T')[0] === requestedDate.toISOString().split('T')[0]
+        
+        if (!dateMatch) return false
+        
+        const bookingTime = normalizeTimeForComparison(booking.appointmentTime)
+        const requestedTime = normalizeTimeForComparison(body.preferredTime)
+        
+        return bookingTime === requestedTime
+      }
     )
 
-    if (isSlotBooked) {
+    if (isConsultationBooked || isShowcaseBooked) {
       return NextResponse.json(
         { error: 'This time slot is already booked. Please select another date or time.' },
         { status: 400 }

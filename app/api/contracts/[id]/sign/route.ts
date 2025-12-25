@@ -101,7 +101,7 @@ export async function POST(
       expiryDate: expiryDate.toISOString(),
       amount: upfrontAmount,
       description: contract.projectDescription || 'Project Services - 80% Upfront Payment',
-      status: 'sent',
+      status: 'draft', // Set to draft - admin will send manually
       notes: 'Work begins only after payment is received.',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -166,7 +166,7 @@ export async function POST(
             
             <p>Thank you for signing the contract. We're excited to begin working with you!</p>
             
-            <p>Your invoice for the upfront payment (80% of project cost) has been generated and will be sent to you shortly.</p>
+            <p>We'll be in touch shortly with next steps and payment information.</p>
             
             <p style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #E0E0E0; font-size: 14px; color: #666;">
               You can download a copy of your signed contract from your account or contact us if you need assistance.
@@ -205,7 +205,8 @@ export async function POST(
             <p><strong>IP Address:</strong> ${clientIp || 'Not available'}</p>
             
             <p style="margin-top: 24px;">
-              The contract has been signed and an invoice has been automatically generated for the upfront payment (80%).
+              The contract has been signed and an invoice has been automatically generated for the upfront payment (80%). 
+              <strong>Please send the invoice manually from the admin panel.</strong>
             </p>
             
             <p style="margin-top: 16px; font-size: 14px; color: #666;">
@@ -222,74 +223,8 @@ export async function POST(
       html: adminEmailHtml,
     })
 
-    // Send invoice email to client
-    const invoiceEmailHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #FDF9F4;">
-          <div style="background: #FFFFFF; border-radius: 8px; padding: 32px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h1 style="color: #7C4B31; margin-top: 0;">Invoice #${invoiceNumber}</h1>
-            
-            <p>Hello ${contract.clientName},</p>
-            
-            <p>Thank you for signing the contract. Please find your invoice below:</p>
-            
-            <div style="background: #F3E6DC; border-radius: 6px; padding: 20px; margin: 24px 0;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 8px 0; color: #6B4A3B;"><strong>Description:</strong></td>
-                  <td style="padding: 8px 0; color: #3E2A20;">${invoice.description}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #6B4A3B;"><strong>Amount:</strong></td>
-                  <td style="padding: 8px 0; color: #3E2A20; font-size: 20px; font-weight: bold;">KES ${upfrontAmount.toLocaleString()}</td>
-                </tr>
-              </table>
-            </div>
-            
-            <div style="background: #FFF3CD; border-left: 4px solid #FFC107; padding: 16px; margin: 24px 0; border-radius: 4px;">
-              <p style="margin: 0; color: #856404; font-weight: 600;">
-                ⚠️ Important: Work begins only after payment is received.
-              </p>
-            </div>
-            
-            ${paymentUrl ? `
-            <div style="background: #E8F5E9; border: 2px solid #4CAF50; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
-              <h2 style="margin: 0 0 16px 0; color: #2E7D32; font-size: 20px;">💳 Pay Now</h2>
-              <p style="margin: 0 0 20px 0; color: #333; font-size: 15px;">
-                Click the button below to pay this invoice securely (Card or M-Pesa).
-              </p>
-              <a href="${paymentUrl}" style="display: inline-block; background: #7C4B31; color: #FFFFFF; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 18px; font-weight: 600; box-shadow: 0 4px 12px rgba(124,75,49,0.3);">
-                Pay KES ${upfrontAmount.toLocaleString()} →
-              </a>
-              <p style="margin: 16px 0 0 0; font-size: 13px; color: #666;">
-                Secure payment processing
-              </p>
-            </div>
-            ` : `
-            <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #E0E0E0; font-size: 14px; color: #666;">
-              Please make payment to secure your project slot. We'll send you a payment link shortly.
-            </p>
-            `}
-            
-            <p style="margin-top: 16px; font-size: 14px; color: #666;">
-              Best regards,<br>
-              The LashDiary Team
-            </p>
-          </div>
-        </body>
-      </html>
-    `
-
-    await sendEmailViaZoho({
-      to: contract.clientEmail,
-      subject: `Invoice #${invoiceNumber} - Upfront Payment Required`,
-      html: invoiceEmailHtml,
-    })
+    // Invoice email is NOT sent automatically - admin will send it manually
+    // Invoice has been created with status 'draft' and is ready to be sent from admin panel
 
     return NextResponse.json({ 
       success: true,

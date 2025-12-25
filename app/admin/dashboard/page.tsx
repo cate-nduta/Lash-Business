@@ -260,6 +260,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Labs Contract Template',
+      description: 'Edit the contract template used for all Labs consultations',
+      href: '/admin/labs-contract-template',
+      icon: '📄',
+      ownerOnly: false,
+    },
+    {
       title: 'Labs Invoices',
       description: 'Manage invoices, track payments, and send invoices to clients',
       href: '/admin/labs-invoices',

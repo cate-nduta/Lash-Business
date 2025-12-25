@@ -53,9 +53,24 @@ async function loadAvailabilityData(): Promise<AvailabilityData | null> {
   }
 }
 
-async function loadLocalBookings(): Promise<Array<{ date?: string | null; timeSlot?: string | null; status?: string | null }>> {
+async function loadLocalBookings(includeShowcase: boolean = true): Promise<Array<{ date?: string | null; timeSlot?: string | null; status?: string | null; appointmentDate?: string }>> {
   try {
-    const data = await readDataFile<{ bookings?: Array<{ date?: string | null; timeSlot?: string | null; status?: string | null }> }>('bookings.json', { bookings: [] })
+    const data = await readDataFile<{ bookings?: Array<{ date?: string | null; timeSlot?: string | null; status?: string | null; appointmentDate?: string }> }>('bookings.json', { bookings: [] })
+    let bookings = data.bookings || []
+    
+    // Also load showcase bookings if including them
+    if (includeShowcase) {
+      try {
+        const showcaseData = await readDataFile<Array<{ appointmentDate?: string; status?: string }>>('labs-showcase-bookings.json', [])
+        const showcaseBookings = showcaseData.map(booking => ({
+          appointmentDate: booking.appointmentDate,
+          status: booking.status,
+        }))
+        bookings = [...bookings, ...showcaseBookings]
+      } catch (error) {
+        // If showcase bookings file doesn't exist, continue without it
+      }
+    }
     return Array.isArray(data.bookings) ? data.bookings : []
   } catch (error) {
     console.warn('Error loading local bookings:', error)
@@ -298,7 +313,9 @@ export async function GET(request: NextRequest) {
     }
     
     const availabilityData = await loadAvailabilityData()
-    const localBookings = await loadLocalBookings()
+    // Include all bookings (regular + showcase) when checking for conflicts
+    // Both types use the same calendar slots
+    const localBookings = await loadLocalBookings(true)
     const bookingWindow = availabilityData?.bookingWindow
     const minimumBookingDate = availabilityData?.minimumBookingDate
     const { start: windowStartDate, end: windowEndDate } = deriveWindowRange(bookingWindow)

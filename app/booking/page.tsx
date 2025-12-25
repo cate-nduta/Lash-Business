@@ -2189,9 +2189,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     >
                       Select Time *
                     </label>
-                {timeSlots.length === 0 && !loadingSlots ? (
+                {loadingSlots ? (
                   <div className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark">
-                    No available time slots for this date. Please select another date.
+                    Loading time slots...
+                  </div>
+                ) : timeSlots.length === 0 ? (
+                  <div className="w-full px-4 py-3 border-2 border-red-300 rounded-lg bg-red-50 text-red-800 font-medium">
+                    ⚠️ Slots not available on this day. Check another day.
                   </div>
                 ) : (
                 <select
@@ -2200,10 +2204,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   required
                   value={formData.timeSlot}
                   onChange={handleChange}
-                  disabled={loadingSlots}
-                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.02] relative min-h-[48px] disabled:opacity-50 disabled:cursor-wait"
+                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.02] relative min-h-[48px]"
                   >
-                    <option value="">{loadingSlots ? 'Loading time slots...' : 'Select a time'}</option>
+                    <option value="">Select a time</option>
                     {timeSlots.map((slot) => (
                       <option key={slot.value} value={slot.value}>
                         {slot.label}

@@ -37,6 +37,14 @@ export interface BuildProject {
       date: string
       notes?: string
     }
+    showcaseEmailSent?: {
+      date: string
+      notes?: string
+    }
+    showcaseMeetingScheduled?: {
+      date: string
+      notes?: string
+    }
     milestones?: Array<{
       name: string
       date: string
@@ -44,6 +52,10 @@ export interface BuildProject {
       notes?: string
     }>
   }
+  
+  // Showcase meeting
+  showcaseBookingToken?: string
+  showcaseBookingId?: string
   
   // Payment tracking
   paymentStatus: {

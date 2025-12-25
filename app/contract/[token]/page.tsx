@@ -192,17 +192,71 @@ export default function ContractSigningPage() {
   }
 
   if (error && !contract) {
+    const isExpired = error.includes('expired') || error.toLowerCase().includes('expired')
+    const isSigned = error.includes('already been signed') || error.toLowerCase().includes('signed')
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FDF9F4]">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-          <h1 className="text-2xl font-bold text-[#7C4B31] mb-4">Contract Not Found</h1>
-          <p className="text-[#6B4A3B] mb-6">{error}</p>
-          <button
-            onClick={() => router.push('/')}
-            className="px-6 py-2 bg-[#7C4B31] text-white rounded hover:bg-[#6B3E26]"
-          >
-            Return Home
-          </button>
+          {isExpired ? (
+            <>
+              <div className="text-6xl mb-4">⏰</div>
+              <h1 className="text-2xl font-bold text-[#7C4B31] mb-4">Contract Expired</h1>
+              <p className="text-[#6B4A3B] mb-4">
+                This contract link has expired. Contracts expire 7 days after they are sent.
+              </p>
+              <p className="text-[#6B4A3B] mb-6">
+                Please contact us to request a new contract link.
+              </p>
+              <div className="space-y-3">
+                <a
+                  href="mailto:hello@lashdiary.co.ke?subject=Contract Expired - Request New Link"
+                  className="block px-6 py-2 bg-[#7C4B31] text-white rounded hover:bg-[#6B3E26] transition-colors"
+                >
+                  Contact Us via Email
+                </a>
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-6 py-2 border-2 border-[#7C4B31] text-[#7C4B31] rounded hover:bg-[#7C4B31]/10 transition-colors"
+                >
+                  Return Home
+                </button>
+              </div>
+            </>
+          ) : isSigned ? (
+            <>
+              <div className="text-6xl mb-4">✓</div>
+              <h1 className="text-2xl font-bold text-[#7C4B31] mb-4">Contract Already Signed</h1>
+              <p className="text-[#6B4A3B] mb-6">
+                This contract has already been signed. If you need assistance, please contact us.
+              </p>
+              <div className="space-y-3">
+                <a
+                  href="mailto:hello@lashdiary.co.ke?subject=Contract Inquiry"
+                  className="block px-6 py-2 bg-[#7C4B31] text-white rounded hover:bg-[#6B3E26] transition-colors"
+                >
+                  Contact Us via Email
+                </a>
+                <button
+                  onClick={() => router.push('/')}
+                  className="px-6 py-2 border-2 border-[#7C4B31] text-[#7C4B31] rounded hover:bg-[#7C4B31]/10 transition-colors"
+                >
+                  Return Home
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-[#7C4B31] mb-4">Contract Not Found</h1>
+              <p className="text-[#6B4A3B] mb-6">{error}</p>
+              <button
+                onClick={() => router.push('/')}
+                className="px-6 py-2 bg-[#7C4B31] text-white rounded hover:bg-[#6B3E26]"
+              >
+                Return Home
+              </button>
+            </>
+          )}
         </div>
       </div>
     )

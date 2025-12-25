@@ -270,18 +270,48 @@ export default function LabsBookAppointment() {
     // Don't set loading to true - render calendar immediately
     const loadAvailability = async () => {
       try {
-        // Use cache for faster initial load
+        // Force fresh data - no cache to ensure we get latest bookings
         const response = await fetch('/api/labs/consultation/availability', { 
-          cache: 'default', // Allow browser cache for faster loads
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
         })
         if (response.ok) {
           const data = await response.json()
           if (mounted) {
+            const booked = Array.isArray(data.bookedSlots) ? data.bookedSlots : []
             setBookedDates(data.bookedDates || [])
-            setBookedSlots(data.bookedSlots || [])
+            setBookedSlots(booked)
             setAvailableDates(data.availableDates || [])
-            setTimeSlots(data.timeSlots || [])
+            
+            // Ensure timeSlots have proper structure
+            let slots: Array<{ hour: number; minute: number; label: string }> = []
+            if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
+              slots = data.timeSlots.filter((slot: any) => 
+                slot && 
+                typeof slot.hour === 'number' && 
+                typeof slot.minute === 'number' && 
+                typeof slot.label === 'string'
+              )
+            } else {
+              // Default time slots if none configured
+              slots = [
+                { hour: 9, minute: 30, label: '9:30 AM' },
+                { hour: 12, minute: 0, label: '12:00 PM' },
+                { hour: 15, minute: 30, label: '3:30 PM' },
+              ]
+            }
+            setTimeSlots(slots)
             setBlockedDates(data.blockedDates || [])
+            
+            // Debug logging
+            console.log('Loaded availability:', {
+              bookedSlotsCount: booked.length,
+              bookedSlots: booked,
+              timeSlotsCount: slots.length,
+            })
           }
         }
       } catch (error) {
@@ -292,23 +322,44 @@ export default function LabsBookAppointment() {
     // Load immediately (non-blocking)
     loadAvailability()
     
-    // Refresh in background every 30 seconds (non-blocking)
+    // Refresh in background every 10 seconds to catch new bookings immediately
     const interval = setInterval(() => {
       fetch('/api/labs/consultation/availability', { 
         cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
       })
         .then(response => response.ok ? response.json() : null)
         .then(data => {
           if (mounted && data) {
+            const booked = Array.isArray(data.bookedSlots) ? data.bookedSlots : []
             setBookedDates(data.bookedDates || [])
-            setBookedSlots(data.bookedSlots || [])
+            setBookedSlots(booked)
             setAvailableDates(data.availableDates || [])
-            setTimeSlots(data.timeSlots || [])
+            
+            let slots: Array<{ hour: number; minute: number; label: string }> = []
+            if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
+              slots = data.timeSlots.filter((slot: any) => 
+                slot && 
+                typeof slot.hour === 'number' && 
+                typeof slot.minute === 'number' && 
+                typeof slot.label === 'string'
+              )
+            } else {
+              slots = [
+                { hour: 9, minute: 30, label: '9:30 AM' },
+                { hour: 12, minute: 0, label: '12:00 PM' },
+                { hour: 15, minute: 30, label: '3:30 PM' },
+              ]
+            }
+            setTimeSlots(slots)
             setBlockedDates(data.blockedDates || [])
           }
         })
         .catch(() => {}) // Silent fail for background refresh
-    }, 30000)
+    }, 10000) // Refresh every 10 seconds instead of 30
     
     return () => {
       mounted = false
@@ -1330,8 +1381,25 @@ export default function LabsBookAppointment() {
                         })
                         return
                       }
-                      setFormData(prev => ({ ...prev, preferredDate: date }))
+                      setFormData(prev => ({ ...prev, preferredDate: date, preferredTime: '' }))
                       setSubmitStatus({ type: null, message: '' })
+                      
+                      // Refresh availability when date is selected to get latest bookings
+                      fetch('/api/labs/consultation/availability', { 
+                        cache: 'no-store',
+                        headers: {
+                          'Cache-Control': 'no-cache',
+                          'Pragma': 'no-cache',
+                        },
+                      })
+                        .then(response => response.ok ? response.json() : null)
+                        .then(data => {
+                          if (data) {
+                            const booked = Array.isArray(data.bookedSlots) ? data.bookedSlots : []
+                            setBookedSlots(booked)
+                          }
+                        })
+                        .catch(() => {})
                     }}
                     availableDates={availableDates}
                     blockedDates={blockedDates}
@@ -1361,104 +1429,131 @@ export default function LabsBookAppointment() {
                 <label htmlFor="preferredTime" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
                   Consultation Time <span className="text-red-500">*</span>
                 </label>
-                <select
-                  id="preferredTime"
-                  name="preferredTime"
-                  value={formData.preferredTime}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                  required
-                  disabled={!formData.preferredDate}
-                >
-                  <option value="">Select time</option>
-                  {timeSlots.length > 0 ? (
-                    // Use configured time slots from availability settings
-                    timeSlots
-                      .filter(slot => {
-                        // Check if this specific time slot is already booked
-                        const slotTimeLabel = slot.label.toLowerCase()
-                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                        return !bookedSlots.some(booked => {
-                          const bookedDate = normalizeDateForComparison(booked.date)
-                          const bookedTime = normalizeTimeForComparison(booked.time)
-                          // Match if date matches and time label matches
-                          return bookedDate === selectedDate && 
-                                 (bookedTime === slotTimeLabel || 
-                                  bookedTime.includes(slotTimeLabel) ||
-                                  slotTimeLabel.includes(bookedTime))
-                        })
-                      })
-                      .map(slot => (
-                        <option key={slot.label} value={slot.label}>
-                          {slot.label}
-                        </option>
-                      ))
-                  ) : (
-                    // Fallback to old system if no time slots configured
+                {(() => {
+                  if (!formData.preferredDate) {
+                    return (
+                      <div className="w-full px-4 py-3 border-2 border-[var(--color-primary)]/20 rounded-lg bg-gray-50 text-gray-500">
+                        Please select a date first
+                      </div>
+                    )
+                  }
+                  
+                  if (loadingAvailability) {
+                    return (
+                      <div className="w-full px-4 py-3 border-2 border-[var(--color-primary)]/20 rounded-lg bg-white text-[var(--color-text)]">
+                        Loading time slots...
+                      </div>
+                    )
+                  }
+                  
+                  const selectedDateNormalized = normalizeDateForComparison(formData.preferredDate)
+                  
+                  // Get all booked slots for this specific date
+                  const dateBookedSlots = bookedSlots.filter(booked => {
+                    if (!booked.date || !booked.time) return false
+                    const bookedDate = normalizeDateForComparison(booked.date)
+                    return bookedDate === selectedDateNormalized
+                  })
+                  
+                  // Filter out booked slots
+                  const availableSlots = timeSlots.length > 0 ? timeSlots.filter(slot => {
+                    const slotTimeLabel = slot.label.toLowerCase().trim()
+                    
+                    // Check if this slot matches any booked slot for this date
+                    const isBooked = dateBookedSlots.some(booked => {
+                      const bookedTime = normalizeTimeForComparison(booked.time)
+                      
+                      // Multiple matching strategies
+                      // 1. Exact match (case insensitive)
+                      if (bookedTime === slotTimeLabel) return true
+                      
+                      // 2. Contains match (handles variations)
+                      if (bookedTime.includes(slotTimeLabel) || slotTimeLabel.includes(bookedTime)) return true
+                      
+                      // 3. Match by hour:minute format
+                      const slotTimeStr = `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`
+                      const bookedTimeDigits = bookedTime.replace(/[^0-9:]/g, '')
+                      if (bookedTimeDigits.includes(slotTimeStr) || slotTimeStr.includes(bookedTimeDigits)) return true
+                      
+                      // 4. Match the original label (case insensitive)
+                      if (bookedTime === slot.label.toLowerCase().trim()) return true
+                      
+                      return false
+                    })
+                    
+                    return !isBooked
+                  }) : []
+                  
+                  // Check fallback slots (old system)
+                  const fallbackSlots = []
+                  if (timeSlots.length === 0) {
+                    if (!bookedSlots.some(slot => {
+                      const slotDate = normalizeDateForComparison(slot.date)
+                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                      const slotTime = normalizeTimeForComparison(slot.time)
+                      return slotDate === selectedDate && slotTime === 'morning'
+                    })) {
+                      fallbackSlots.push({ value: 'morning', label: 'Morning (9 AM - 12 PM)' })
+                    }
+                    if (!bookedSlots.some(slot => {
+                      const slotDate = normalizeDateForComparison(slot.date)
+                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                      const slotTime = normalizeTimeForComparison(slot.time)
+                      return slotDate === selectedDate && slotTime === 'afternoon'
+                    })) {
+                      fallbackSlots.push({ value: 'afternoon', label: 'Afternoon (12 PM - 4 PM)' })
+                    }
+                    if (!bookedSlots.some(slot => {
+                      const slotDate = normalizeDateForComparison(slot.date)
+                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                      const slotTime = normalizeTimeForComparison(slot.time)
+                      return slotDate === selectedDate && slotTime === 'evening'
+                    })) {
+                      fallbackSlots.push({ value: 'evening', label: 'Evening (4 PM - 7 PM)' })
+                    }
+                  }
+                  
+                  const allAvailableSlots = availableSlots.length > 0 ? availableSlots : fallbackSlots
+                  
+                  // Check if all slots are booked or no slots available
+                  const noSlotsAvailable = allAvailableSlots.length === 0
+                  
+                  if (noSlotsAvailable) {
+                    return (
+                      <div className="w-full px-4 py-3 border-2 border-red-300 rounded-lg bg-red-50 text-red-800 font-medium">
+                        ⚠️ Slots not available on this day. Check another day.
+                      </div>
+                    )
+                  }
+                  
+                  return (
                     <>
-                      {!bookedSlots.some(slot => {
-                        const slotDate = normalizeDateForComparison(slot.date)
-                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                        const slotTime = normalizeTimeForComparison(slot.time)
-                        return slotDate === selectedDate && slotTime === 'morning'
-                      }) && (
-                        <option value="morning">
-                          Morning (9 AM - 12 PM)
-                        </option>
-                      )}
-                      {!bookedSlots.some(slot => {
-                        const slotDate = normalizeDateForComparison(slot.date)
-                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                        const slotTime = normalizeTimeForComparison(slot.time)
-                        return slotDate === selectedDate && slotTime === 'afternoon'
-                      }) && (
-                        <option value="afternoon">
-                          Afternoon (12 PM - 4 PM)
-                        </option>
-                      )}
-                      {!bookedSlots.some(slot => {
-                        const slotDate = normalizeDateForComparison(slot.date)
-                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                        const slotTime = normalizeTimeForComparison(slot.time)
-                        return slotDate === selectedDate && slotTime === 'evening'
-                      }) && (
-                        <option value="evening">
-                          Evening (4 PM - 7 PM)
-                        </option>
+                      <select
+                        id="preferredTime"
+                        name="preferredTime"
+                        value={formData.preferredTime}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                        required
+                      >
+                        <option value="">Select time</option>
+                      {allAvailableSlots.map((slot, index) => {
+                        const value = 'value' in slot ? slot.value : slot.label
+                        const label = slot.label
+                        return (
+                          <option key={`${value}-${index}`} value={value}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                      </select>
+                      {formData.preferredDate && availableSlots.length > 0 && dateBookedSlots.length > 0 && (
+                        <p className="text-sm text-[var(--color-text)]/70 mt-2">
+                          ℹ️ {dateBookedSlots.length} time slot(s) already booked for this date. Only available slots are shown above.
+                        </p>
                       )}
                     </>
-                  )}
-                  {formData.preferredDate && timeSlots.length > 0 && 
-                   bookedSlots.filter(slot => {
-                     const slotDate = normalizeDateForComparison(slot.date)
-                     const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                     return slotDate === selectedDate
-                   }).length >= timeSlots.length && (
-                    <option value="" disabled>
-                      All time slots are booked for this date
-                    </option>
-                  )}
-                </select>
-                {formData.preferredDate && (() => {
-                  const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                  const bookedCount = bookedSlots.filter(slot => {
-                    const slotDate = normalizeDateForComparison(slot.date)
-                    return slotDate === selectedDate
-                  }).length
-                  
-                  if (bookedCount > 0 && bookedCount < 3) {
-                    return (
-                      <p className="text-sm text-[var(--color-text)]/70 mt-2">
-                        ℹ️ {bookedCount} time slot(s) already booked for this date. Only available slots are shown above.
-                      </p>
-                    )
-                  }
-                  if (bookedCount === 3) {
-                    return (
-                      <p className="text-sm text-red-600 mt-2">⚠️ All time slots are booked for this date. Please select another date.</p>
-                    )
-                  }
-                  return null
+                  )
                 })()}
               </div>
 
@@ -1705,7 +1800,7 @@ export default function LabsBookAppointment() {
                   <strong>📧 Check your email</strong>
                 </p>
                 <p className="text-[var(--color-text)]/80 text-sm">
-                  We've sent a {isRebooking ? 'rescheduling' : 'confirmation'} email to <strong>{formData.email || 'your email address'}</strong> with all the details{formData.meetingType === 'online' ? ', including the Google Meet link' : ''}.
+                  We've sent a {isRebooking ? 'rescheduling' : 'confirmation'} email to <strong>{formData.email || 'your email address'}</strong> with all the details{formData.meetingType === 'online' ? ', including your meeting link' : ''}.
                 </p>
               </div>
               {!isRebooking && (

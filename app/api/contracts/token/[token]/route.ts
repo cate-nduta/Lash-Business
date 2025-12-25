@@ -11,19 +11,44 @@ export async function GET(
   { params }: { params: { token: string } }
 ) {
   try {
+    const { readDataFile, writeDataFile } = await import('@/lib/data-utils')
     const contracts = await readDataFile<Contract[]>('contracts.json', [])
-    const contract = contracts.find(c => c.contractToken === params.token)
+    const contractIndex = contracts.findIndex(c => c.contractToken === params.token)
     
-    if (!contract) {
+    if (contractIndex === -1) {
       return NextResponse.json(
         { error: 'Contract not found' },
         { status: 404 }
       )
     }
 
+    const contract = contracts[contractIndex]
+
+    // Check if contract has expired (7 days from creation)
+    if (contract.status === 'pending') {
+      const createdAt = new Date(contract.createdAt)
+      const now = new Date()
+      const daysSinceCreation = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      
+      if (daysSinceCreation >= 7) {
+        // Mark contract as expired
+        contracts[contractIndex] = {
+          ...contract,
+          status: 'expired',
+          updatedAt: new Date().toISOString(),
+        }
+        await writeDataFile('contracts.json', contracts)
+        
+        return NextResponse.json(
+          { error: 'This contract has expired. Please contact us to request a new contract.' },
+          { status: 410 }
+        )
+      }
+    }
+
     if (contract.status === 'expired') {
       return NextResponse.json(
-        { error: 'This contract has expired' },
+        { error: 'This contract has expired. Please contact us to request a new contract.' },
         { status: 410 }
       )
     }

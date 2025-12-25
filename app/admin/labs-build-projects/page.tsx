@@ -160,6 +160,7 @@ export default function AdminLabsBuildProjects() {
   const [editingProject, setEditingProject] = useState<BuildProject | null>(null)
   const [editingTimeBlock, setEditingTimeBlock] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'gantt'>('list')
+  const [sendingShowcaseEmail, setSendingShowcaseEmail] = useState<string | null>(null)
   const [timeBlockForm, setTimeBlockForm] = useState<{
     startDate: string
     endDate: string
@@ -296,6 +297,33 @@ export default function AdminLabsBuildProjects() {
       loadProjects()
     } catch (error: any) {
       alert(error.message || 'Failed to set time block')
+    }
+  }
+
+  const handleSendShowcaseEmail = async (projectId: string) => {
+    if (!confirm('Send showcase meeting email to the client? This will allow them to book a time to go through their project.')) {
+      return
+    }
+
+    setSendingShowcaseEmail(projectId)
+    try {
+      const response = await authorizedFetch('/api/admin/labs/showcase/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to send showcase email')
+      }
+
+      alert('Showcase email sent successfully!')
+      loadProjects()
+    } catch (error: any) {
+      alert(error.message || 'Failed to send showcase email')
+    } finally {
+      setSendingShowcaseEmail(null)
     }
   }
 
@@ -833,6 +861,23 @@ export default function AdminLabsBuildProjects() {
                         >
                           View Invoice
                         </a>
+                        {project.paymentStatus.secondPaid && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSendShowcaseEmail(project.projectId)
+                            }}
+                            disabled={sendingShowcaseEmail === project.projectId || !!project.milestones.showcaseEmailSent}
+                            className="bg-purple-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50"
+                            title={project.milestones.showcaseEmailSent ? 'Showcase email already sent' : 'Send showcase meeting email to client'}
+                          >
+                            {sendingShowcaseEmail === project.projectId
+                              ? 'Sending...'
+                              : project.milestones.showcaseEmailSent
+                              ? '✓ Showcase Email Sent'
+                              : 'Send Showcase Email'}
+                          </button>
+                        )}
                         <a
                           href={`mailto:${project.email}?subject=Re: Build Project - ${project.businessName}`}
                           onClick={(e) => e.stopPropagation()}

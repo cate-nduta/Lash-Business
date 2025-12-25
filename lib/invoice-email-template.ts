@@ -37,6 +37,15 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, payment
   const pdfUrl = invoice.viewToken 
     ? `${BASE_URL}/api/labs/invoices/${invoice.invoiceId}/pdf?token=${invoice.viewToken}`
     : `${BASE_URL}/api/admin/labs/invoices/${invoice.invoiceId}/pdf` // Fallback for admin access
+  
+  // Determine the amount to display and charge (use invoiceAmount for split payments, otherwise use total)
+  const displayAmount = invoice.invoiceAmount || invoice.total
+  const isSplitPayment = invoice.invoiceType !== undefined && invoice.invoiceType !== null
+  const invoiceTypeLabel = invoice.invoiceType === 'downpayment' 
+    ? `Downpayment (${invoice.downpaymentPercent || 80}%)` 
+    : invoice.invoiceType === 'final' 
+    ? `Final Payment (${invoice.finalPaymentPercent || 20}%)` 
+    : 'Full Payment'
 
   return `
 <!DOCTYPE html>
@@ -164,9 +173,19 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, payment
                   <span style="color:${textPrimary}; font-weight:600;">${formatCurrency(invoice.tax, invoice.currency)}</span>
                 </div>
                 ` : ''}
+                ${isSplitPayment && invoice.total !== displayAmount ? `
+                <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:15px;">
+                  <span style="color:${textSecondary};">Project Total:</span>
+                  <span style="color:${textPrimary}; font-weight:600;">${formatCurrency(invoice.total, invoice.currency)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:15px; border-top:1px solid ${accent};">
+                  <span style="color:${textSecondary};">${invoiceTypeLabel}:</span>
+                  <span style="color:${textPrimary}; font-weight:600;">${formatCurrency(displayAmount, invoice.currency)}</span>
+                </div>
+                ` : ''}
                 <div style="display:flex; justify-content:space-between; padding:16px 0; border-top:2px solid ${brand}; border-bottom:2px solid ${brand}; margin-top:8px; font-size:20px;">
-                  <span style="color:${brand}; font-weight:700;">Total:</span>
-                  <span style="color:${brand}; font-weight:700;">${formatCurrency(invoice.total, invoice.currency)}</span>
+                  <span style="color:${brand}; font-weight:700;">${isSplitPayment ? 'Amount Due:' : 'Total:'}</span>
+                  <span style="color:${brand}; font-weight:700;">${formatCurrency(displayAmount, invoice.currency)}</span>
                 </div>
               </div>
             </td>
@@ -207,8 +226,15 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, payment
                   Click the button below to pay this invoice securely.
                 </p>
                 <a href="${paymentUrl}" style="display:inline-block; background:${brand}; color:#FFFFFF; text-decoration:none; padding:18px 40px; border-radius:8px; font-size:18px; font-weight:600; font-family:'Playfair Display', Georgia, serif; letter-spacing:0.5px; box-shadow:0 4px 12px rgba(124,75,49,0.3);">
-                  Pay ${formatCurrency(invoice.total, invoice.currency)} →
+                  Pay ${formatCurrency(displayAmount, invoice.currency)} →
                 </a>
+                ${isSplitPayment ? `
+                <p style="margin:12px 0 0 0; font-size:13px; color:${textSecondary};">
+                  ${invoice.invoiceType === 'downpayment' 
+                    ? `This is the ${invoice.downpaymentPercent || 80}% downpayment. The remaining ${invoice.finalPaymentPercent || 20}% will be invoiced after project completion.`
+                    : `This is the ${invoice.finalPaymentPercent || 20}% final payment.`}
+                </p>
+                ` : ''}
                 <p style="margin:16px 0 0 0; font-size:13px; color:${textSecondary};">
                   Secure payment processing
                 </p>

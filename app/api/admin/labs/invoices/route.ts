@@ -80,13 +80,13 @@ Invoice Items:
 ${invoice.items.map(item => `- ${item.description} (Qty: ${item.quantity}) - ${formatCurrency(item.unitPrice, invoice.currency)} each = ${formatCurrency(item.total, invoice.currency)}`).join('\n')}
 
 Subtotal: ${formatCurrency(invoice.subtotal, invoice.currency)}
-${invoice.tax && invoice.taxRate ? `Tax (${invoice.taxRate}%): ${formatCurrency(invoice.tax, invoice.currency)}\n` : ''}Total: ${formatCurrency(invoice.total, invoice.currency)}
+${invoice.tax && invoice.taxRate ? `Tax (${invoice.taxRate}%): ${formatCurrency(invoice.tax, invoice.currency)}\n` : ''}${invoice.invoiceAmount && invoice.invoiceAmount !== invoice.total ? `Project Total: ${formatCurrency(invoice.total, invoice.currency)}\n${invoice.invoiceType === 'downpayment' ? `Downpayment (${invoice.downpaymentPercent || 80}%):` : invoice.invoiceType === 'final' ? `Final Payment (${invoice.finalPaymentPercent || 20}%):` : 'Amount Due:'} ${formatCurrency(invoice.invoiceAmount, invoice.currency)}\n` : `Total: ${formatCurrency(invoice.total, invoice.currency)}`}
 
 ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 
 View PDF Invoice: ${pdfUrl}
 
-${paymentUrl && invoice.status !== 'paid' ? `\n💳 Pay Now: ${paymentUrl}\n` : ''}
+${paymentUrl && invoice.status !== 'paid' ? `\n💳 Pay Now: ${paymentUrl}\n${invoice.invoiceAmount && invoice.invoiceAmount !== invoice.total ? `Amount Due: ${formatCurrency(invoice.invoiceAmount, invoice.currency)}${invoice.invoiceType === 'downpayment' ? ` (${invoice.downpaymentPercent || 80}% downpayment)` : invoice.invoiceType === 'final' ? ` (${invoice.finalPaymentPercent || 20}% final payment)` : ''}\n` : ''}` : ''}
 
 ${invoice.expirationDate ? `\nIMPORTANT: This invoice is valid for 7 days (expires ${formatDate(invoice.expirationDate)}). If unpaid, your project slot will be released.\n` : ''}Payment Instructions:
 Please make payment by the due date (${formatDate(invoice.dueDate)}). If you have any questions about this invoice, please contact us at hello@lashdiary.co.ke.
@@ -136,6 +136,11 @@ export interface ConsultationInvoice {
   secondAmount?: number // For split payments
   upfrontPaid?: boolean
   secondPaid?: boolean
+  // Percentage split support
+  invoiceType?: 'downpayment' | 'final' // Which invoice this is (downpayment or final payment)
+  downpaymentPercent?: number // Percentage for downpayment (default 80)
+  finalPaymentPercent?: number // Percentage for final payment (default 20)
+  invoiceAmount?: number // Actual amount to charge for this invoice (calculated from percentage)
   viewToken?: string // Secure token for public PDF access
   createdAt: string
   updatedAt: string
@@ -179,6 +184,9 @@ export async function POST(request: NextRequest) {
       taxRate,
       notes,
       dueDate,
+      invoiceType, // 'downpayment' or 'final'
+      downpaymentPercent, // Percentage for downpayment (default 80)
+      finalPaymentPercent, // Percentage for final payment (default 20)
     } = body
 
     if (!consultationId || !items || !Array.isArray(items) || items.length === 0) {
@@ -211,7 +219,20 @@ export async function POST(request: NextRequest) {
     }, 0)
 
     const tax = taxRate ? subtotal * (taxRate / 100) : 0
-    const total = subtotal + tax
+    const fullTotal = subtotal + tax // This is the full project total
+
+    // Determine invoice type and calculate invoice amount based on percentage
+    const invoiceTypeValue: 'downpayment' | 'final' | undefined = invoiceType || undefined
+    const downpaymentPercentValue = downpaymentPercent || 80
+    const finalPaymentPercentValue = finalPaymentPercent || 20
+    
+    // Calculate the actual invoice amount based on the selected type
+    let invoiceAmount: number = fullTotal // Default to full total if no type specified
+    if (invoiceTypeValue === 'downpayment') {
+      invoiceAmount = Math.round((fullTotal * downpaymentPercentValue) / 100)
+    } else if (invoiceTypeValue === 'final') {
+      invoiceAmount = Math.round((fullTotal * finalPaymentPercentValue) / 100)
+    }
 
     // Generate invoice number (INV-YYYYMMDD-XXX)
     const today = new Date()
@@ -220,14 +241,17 @@ export async function POST(request: NextRequest) {
     const todayInvoices = invoices.filter(inv => inv.invoiceNumber.startsWith(`INV-${dateStr}`))
     const invoiceNumber = `INV-${dateStr}-${String(todayInvoices.length + 1).padStart(3, '0')}`
 
-    // Determine if this is a split payment (Tier 3)
-    const selectedTier = consultation.selectedTier || consultation.interestedTier || ''
-    const isTier3 = selectedTier.includes('Full Operations Suite') || selectedTier.includes('Premium')
-    const paymentStructure: 'full' | 'split' = isTier3 ? 'split' : 'full'
+    // Determine if this is a split payment (based on invoiceType being specified)
+    const isSplitPayment = invoiceTypeValue !== undefined
+    const paymentStructure: 'full' | 'split' = isSplitPayment ? 'split' : 'full'
     
-    // Calculate split amounts for Tier 3
-    const upfrontAmount = isTier3 ? Math.round(total * 0.5) : total
-    const secondAmount = isTier3 ? Math.round(total * 0.5) : 0
+    // Calculate split amounts for split payments
+    const upfrontAmount = isSplitPayment && invoiceTypeValue === 'downpayment' 
+      ? invoiceAmount 
+      : (isSplitPayment ? Math.round((fullTotal * downpaymentPercentValue) / 100) : fullTotal)
+    const secondAmount = isSplitPayment && invoiceTypeValue === 'final'
+      ? invoiceAmount
+      : (isSplitPayment ? Math.round((fullTotal * finalPaymentPercentValue) / 100) : 0)
     
     // Set expiration date (7 days from issue date - all invoices expire after 7 days)
     const issueDate = new Date().toISOString().split('T')[0]
@@ -261,15 +285,19 @@ export async function POST(request: NextRequest) {
       subtotal,
       tax: tax > 0 ? tax : undefined,
       taxRate: taxRate || undefined,
-      total,
+      total: fullTotal, // Store the full project total
       currency: consultation.currency || 'KES',
       status: 'draft',
       notes: notes || undefined,
       paymentStructure,
-      upfrontAmount: isTier3 ? upfrontAmount : undefined,
-      secondAmount: isTier3 ? secondAmount : undefined,
+      upfrontAmount: isSplitPayment ? upfrontAmount : undefined,
+      secondAmount: isSplitPayment ? secondAmount : undefined,
       upfrontPaid: false,
       secondPaid: false,
+      invoiceType: invoiceTypeValue,
+      downpaymentPercent: isSplitPayment ? downpaymentPercentValue : undefined,
+      finalPaymentPercent: isSplitPayment ? finalPaymentPercentValue : undefined,
+      invoiceAmount: invoiceAmount, // The actual amount to charge for this invoice
       viewToken,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -288,14 +316,18 @@ export async function POST(request: NextRequest) {
           const { initializeTransaction } = await import('@/lib/paystack-utils')
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'
           
+          // Use invoiceAmount if specified (for split payments), otherwise use full total
+          const paymentAmount = invoice.invoiceAmount || invoice.total
+          
           const paymentResult = await initializeTransaction({
             email: invoice.email,
-            amount: invoice.total,
+            amount: paymentAmount, // Use the calculated invoice amount (80% or 20% based on type)
             currency: invoice.currency || 'KES',
             metadata: {
               payment_type: 'invoice',
               invoice_id: invoice.invoiceId,
               invoice_number: invoice.invoiceNumber,
+              invoice_type: invoice.invoiceType || 'full', // Include invoice type in metadata
             },
             customerName: invoice.contactName || invoice.businessName,
             phone: invoice.phone,

@@ -16,6 +16,8 @@ export default function AdminLabsInvoices() {
   const [editingInvoice, setEditingInvoice] = useState<ConsultationInvoice | null>(null)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null)
+  const [markingPaymentId, setMarkingPaymentId] = useState<{ invoiceId: string; paymentType: 'upfront' | 'final' } | null>(null)
+  const [sendingShowcaseEmailId, setSendingShowcaseEmailId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -116,6 +118,127 @@ export default function AdminLabsInvoices() {
       loadInvoices()
     } catch (error: any) {
       alert(error.message || 'Failed to update invoice')
+    }
+  }
+
+  const handleMarkPayment = async (invoiceId: string, paymentType: 'upfront' | 'final', isPaid: boolean) => {
+    const paymentName = paymentType === 'upfront' ? 'Downpayment' : 'Final Payment'
+    const action = isPaid ? 'mark as paid' : 'mark as unpaid'
+    
+    if (!confirm(`${isPaid ? 'Mark' : 'Unmark'} ${paymentName} as ${isPaid ? 'paid' : 'unpaid'}?`)) {
+      return
+    }
+
+    setMarkingPaymentId({ invoiceId, paymentType })
+    try {
+      const response = await authorizedFetch(`/api/admin/labs/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [paymentType === 'upfront' ? 'upfrontPaid' : 'secondPaid']: isPaid,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update payment status')
+      }
+
+      alert(`${paymentName} ${isPaid ? 'marked as paid' : 'marked as unpaid'}!`)
+      loadInvoices()
+    } catch (error: any) {
+      alert(error.message || 'Failed to update payment status')
+    } finally {
+      setMarkingPaymentId(null)
+    }
+  }
+
+  const handleSendShowcaseEmail = async (invoiceId: string) => {
+    if (!confirm('Send showcase meeting email to the client? This will allow them to book a time to go through their project.')) {
+      return
+    }
+
+    setSendingShowcaseEmailId(invoiceId)
+    try {
+      // Find the invoice to get client details
+      const invoice = invoices.find(inv => inv.invoiceId === invoiceId)
+      if (!invoice) {
+        throw new Error('Invoice not found')
+      }
+
+      // Find or create build project for this invoice
+      const projectsResponse = await authorizedFetch('/api/admin/labs/build-projects')
+      if (!projectsResponse.ok) {
+        throw new Error('Failed to load build projects')
+      }
+      const projectsData = await projectsResponse.json()
+      let project = projectsData.projects?.find((p: any) => p.invoiceId === invoiceId)
+
+      // If no project exists, create one automatically
+      if (!project) {
+        // Get consultation data to get tier name
+        let tierName = 'Unknown Tier'
+        try {
+          const consultationsResponse = await authorizedFetch('/api/admin/labs/consultations')
+          if (consultationsResponse.ok) {
+            const consultationsData = await consultationsResponse.json()
+            const consultation = consultationsData.consultations?.find((c: any) => 
+              (c.consultationId || c.submittedAt) === invoice.consultationId
+            )
+            tierName = consultation?.selectedTier || consultation?.interestedTier || 'Unknown Tier'
+          }
+        } catch (error) {
+          console.warn('Could not load consultation data, using default tier name')
+        }
+
+        // Create build project automatically
+        const createProjectResponse = await authorizedFetch('/api/admin/labs/build-projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            consultationId: invoice.consultationId,
+            invoiceId: invoice.invoiceId,
+            businessName: invoice.businessName,
+            contactName: invoice.contactName,
+            email: invoice.email,
+            phone: invoice.phone || '',
+            tierName: tierName,
+            totalAmount: invoice.total,
+            currency: invoice.currency,
+          }),
+        })
+
+        if (!createProjectResponse.ok) {
+          const error = await createProjectResponse.json()
+          // If project creation fails, still try to send email with invoice data
+          console.warn('Failed to create build project, will send email directly:', error)
+        } else {
+          const createdProject = await createProjectResponse.json()
+          project = createdProject.project
+        }
+      }
+
+      // Send showcase email (will use project if exists, or create one in the API)
+      const response = await authorizedFetch('/api/admin/labs/showcase/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          projectId: project?.projectId,
+          invoiceId: invoiceId, // Fallback to invoice ID if no project
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to send showcase email')
+      }
+
+      alert('Showcase email sent successfully!')
+      loadInvoices()
+    } catch (error: any) {
+      alert(error.message || 'Failed to send showcase email')
+    } finally {
+      setSendingShowcaseEmailId(null)
     }
   }
 
@@ -426,8 +549,10 @@ export default function AdminLabsInvoices() {
 
                       {/* Payment Status */}
                       <div className="pt-4 border-t-2 border-brown-light">
-                        <h4 className="text-lg font-semibold text-brown mb-2">Payment Status</h4>
-                        <div className="flex items-center gap-4">
+                        <h4 className="text-lg font-semibold text-brown mb-4">Payment Status</h4>
+                        
+                        {/* Overall Status */}
+                        <div className="flex items-center gap-4 mb-4 flex-wrap">
                           <span className={`px-4 py-2 rounded-lg font-semibold ${
                             invoice.status === 'paid'
                               ? 'bg-green-600 text-white'
@@ -442,6 +567,140 @@ export default function AdminLabsInvoices() {
                               Expired on {formatDate(invoice.expirationDate)}
                             </span>
                           )}
+                          {/* Send Showcase Email Button - Only show when final payment (20%) is paid */}
+                          {invoice.secondPaid && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSendShowcaseEmail(invoice.invoiceId)
+                              }}
+                              disabled={sendingShowcaseEmailId === invoice.invoiceId}
+                              className="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50"
+                              title="Send showcase meeting email to client"
+                            >
+                              {sendingShowcaseEmailId === invoice.invoiceId ? 'Sending...' : 'Send Showcase Email'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Split Payment Tracking - Show for all invoices */}
+                        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                          <h5 className="text-md font-semibold text-brown mb-3">Payment Breakdown</h5>
+                          
+                          {/* Downpayment (80%) */}
+                          <div className="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-brown-light">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-brown">
+                                  Downpayment ({invoice.downpaymentPercent || 80}%)
+                                </span>
+                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                  invoice.upfrontPaid
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-gray-300 text-gray-700'
+                                }`}>
+                                  {invoice.upfrontPaid ? '✓ Paid' : '⏳ Unpaid'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Amount: {formatCurrency(
+                                  invoice.invoiceAmount && invoice.invoiceType === 'downpayment'
+                                    ? invoice.invoiceAmount
+                                    : Math.round(invoice.total * ((invoice.downpaymentPercent || 80) / 100)),
+                                  invoice.currency
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleMarkPayment(invoice.invoiceId, 'upfront', !invoice.upfrontPaid)
+                              }}
+                              disabled={markingPaymentId?.invoiceId === invoice.invoiceId && markingPaymentId?.paymentType === 'upfront'}
+                              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                                invoice.upfrontPaid
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-green-600 text-white hover:bg-green-700'
+                              } disabled:opacity-50`}
+                            >
+                              {markingPaymentId?.invoiceId === invoice.invoiceId && markingPaymentId?.paymentType === 'upfront'
+                                ? 'Updating...'
+                                : invoice.upfrontPaid
+                                ? 'Mark Unpaid'
+                                : 'Mark as Paid'}
+                            </button>
+                          </div>
+
+                          {/* Final Payment (20%) */}
+                          <div className="flex items-center justify-between p-3 bg-white rounded-lg border-2 border-brown-light">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-brown">
+                                  Final Payment ({invoice.finalPaymentPercent || 20}%)
+                                </span>
+                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                  invoice.secondPaid
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-gray-300 text-gray-700'
+                                }`}>
+                                  {invoice.secondPaid ? '✓ Paid' : '⏳ Unpaid'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Amount: {formatCurrency(
+                                  invoice.invoiceAmount && invoice.invoiceType === 'final'
+                                    ? invoice.invoiceAmount
+                                    : Math.round(invoice.total * ((invoice.finalPaymentPercent || 20) / 100)),
+                                  invoice.currency
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleMarkPayment(invoice.invoiceId, 'final', !invoice.secondPaid)
+                              }}
+                              disabled={markingPaymentId?.invoiceId === invoice.invoiceId && markingPaymentId?.paymentType === 'final'}
+                              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                                invoice.secondPaid
+                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                  : 'bg-green-600 text-white hover:bg-green-700'
+                              } disabled:opacity-50`}
+                            >
+                              {markingPaymentId?.invoiceId === invoice.invoiceId && markingPaymentId?.paymentType === 'final'
+                                ? 'Updating...'
+                                : invoice.secondPaid
+                                ? 'Mark Unpaid'
+                                : 'Mark as Paid'}
+                            </button>
+                          </div>
+
+                          {/* Total Paid Summary */}
+                          <div className="pt-3 border-t-2 border-brown-light">
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold text-brown">Total Paid:</span>
+                              <span className="text-lg font-bold text-green-700">
+                                {formatCurrency(
+                                  (invoice.upfrontPaid ? Math.round(invoice.total * ((invoice.downpaymentPercent || 80) / 100)) : 0) +
+                                  (invoice.secondPaid ? Math.round(invoice.total * ((invoice.finalPaymentPercent || 20) / 100)) : 0),
+                                  invoice.currency
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-sm text-gray-600">Remaining:</span>
+                              <span className={`text-sm font-semibold ${
+                                (invoice.upfrontPaid && invoice.secondPaid) ? 'text-green-700' : 'text-red-600'
+                              }`}>
+                                {formatCurrency(
+                                  invoice.total -
+                                  ((invoice.upfrontPaid ? Math.round(invoice.total * ((invoice.downpaymentPercent || 80) / 100)) : 0) +
+                                  (invoice.secondPaid ? Math.round(invoice.total * ((invoice.finalPaymentPercent || 20) / 100)) : 0)),
+                                  invoice.currency
+                                )}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
