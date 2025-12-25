@@ -164,9 +164,11 @@ export async function POST(request: NextRequest) {
     })
     
     // Check showcase bookings for conflicts
+    // IMPORTANT: Check ALL non-cancelled bookings (not just confirmed) to prevent double booking
     const hasShowcaseConflict = showcaseBookings.some((booking: any) => {
       if (!booking.appointmentDate || !booking.appointmentTime) return false
-      if (booking.status?.toLowerCase() !== 'confirmed') return false
+      // Block ALL non-cancelled bookings (pending, confirmed, etc.) to prevent double booking
+      if (booking.status?.toLowerCase() === 'cancelled') return false
       
       // Parse appointment date to YYYY-MM-DD format
       const appointmentDate = new Date(booking.appointmentDate)
@@ -229,6 +231,7 @@ export async function POST(request: NextRequest) {
     await writeDataFile('labs-build-projects.json', projects)
 
     // Add to Google Calendar
+    // IMPORTANT: Use slotDateTime (proper ISO format) instead of time label to ensure correct time in calendar
     try {
       const calendarResponse = await fetch(`${BASE_URL}/api/calendar/book`, {
         method: 'POST',
@@ -238,9 +241,8 @@ export async function POST(request: NextRequest) {
           email: clientEmail,
           phone: clientPhone || project.phone || '',
           service: `Showcase Meeting - ${project.businessName}`,
-          appointmentDate: date,
-          appointmentTime: time,
-          appointmentEndTime: new Date(slotDateTime.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour meeting
+          date: date, // YYYY-MM-DD format
+          timeSlot: slotDateTime.toISOString(), // Use actual ISO datetime (not label) to ensure correct time in Google Calendar
           location: meetingType === 'physical' ? 'LashDiary Studio, Nairobi, Kenya' : 'Online Meeting',
           bookingId,
         }),
@@ -258,26 +260,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Send confirmation emails
+    // Use slotDateTime which is already in the correct timezone (Nairobi/EAT = UTC+3)
+    // Parse the date components to ensure correct formatting
     const meetingDate = new Date(slotDateTime)
+    
+    // Format date using the actual booked date (in Nairobi timezone)
     const formattedDate = meetingDate.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'Africa/Nairobi', // Ensure we use Nairobi timezone
     })
+    
+    // Format time using the actual booked time (in Nairobi timezone)
     const formattedTime = meetingDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: 'Africa/Nairobi', // Ensure we use Nairobi timezone
     })
 
     // Generate Google Calendar link
-    // slotDateTime is in ISO format with timezone, so we can use it directly
+    // slotDateTime is in ISO format with timezone (+03:00 for Nairobi), so we can use it directly
     const meetingStart = new Date(slotDateTime)
     const meetingEnd = new Date(meetingStart.getTime() + 60 * 60 * 1000) // Add 1 hour for meeting duration
     
     // Format dates for Google Calendar (YYYYMMDDTHHMMSSZ in UTC)
-    // Google Calendar expects UTC time, so we convert the local time to UTC
+    // slotDateTime is already in ISO format with +03:00 timezone
+    // We need to convert it to UTC for Google Calendar
     const formatGoogleCalendarDate = (date: Date): string => {
+      // date is already a Date object created from slotDateTime (which has +03:00)
+      // When we create a Date from an ISO string with timezone, JavaScript automatically converts to UTC
+      // So date.getUTC* methods will give us the correct UTC time
       const year = date.getUTCFullYear()
       const month = String(date.getUTCMonth() + 1).padStart(2, '0')
       const day = String(date.getUTCDate()).padStart(2, '0')
@@ -290,7 +304,55 @@ export async function POST(request: NextRequest) {
     const startDateStr = formatGoogleCalendarDate(meetingStart)
     const endDateStr = formatGoogleCalendarDate(meetingEnd)
     
-    // Create event details
+    // Generate iCal calendar file for email attachment
+    const formatICSDate = (date: Date): string => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+    }
+    
+    const icsStartDate = formatICSDate(meetingStart)
+    const icsEndDate = formatICSDate(meetingEnd)
+    
+    const icsLocation = meetingType === 'online' 
+      ? 'Online Meeting'
+      : 'LashDiary Studio, Nairobi, Kenya'
+    
+    const icsDescription = `Showcase Meeting for ${project.businessName}
+
+During this meeting, we'll cover:
+• Walkthrough of your website
+• Workflows and how to use the system
+• Answer any questions you may have
+
+${meetingType === 'online' && timeGatedLink ? `Meeting Link: ${timeGatedLink}\n\nNote: This link will only work during your scheduled time slot.` : ''}
+
+If you need to reschedule, please contact us at hello@lashdiary.co.ke`
+    
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//LashDiary Labs//Showcase Booking//EN
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:showcase-${bookingId}@lashdiary.co.ke
+DTSTAMP:${formatICSDate(new Date())}
+DTSTART:${icsStartDate}
+DTEND:${icsEndDate}
+SUMMARY:Showcase Meeting - ${project.businessName}
+DESCRIPTION:${icsDescription.replace(/\n/g, '\\n')}
+LOCATION:${icsLocation}
+ORGANIZER;CN=LashDiary Labs:mailto:${BUSINESS_NOTIFICATION_EMAIL}
+ATTENDEE;CN=${clientName};RSVP=TRUE:mailto:${clientEmail}
+STATUS:CONFIRMED
+SEQUENCE:0
+BEGIN:VALARM
+TRIGGER:-PT15M
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Showcase Meeting in 15 minutes
+END:VALARM
+END:VEVENT
+END:VCALENDAR`
+    
+    // Create event details for Google Calendar link
     const eventTitle = encodeURIComponent(`Showcase Meeting - ${project.businessName}`)
     const eventLocation = meetingType === 'online' 
       ? (timeGatedLink ? encodeURIComponent(`Online Meeting: ${timeGatedLink}`) : encodeURIComponent('Online Meeting'))
@@ -343,9 +405,12 @@ If you need to reschedule, please contact us at hello@lashdiary.co.ke`)
             </div>
             
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${googleCalendarUrl}" target="_blank" style="display: inline-block; background-color: #4285F4; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+              <a href="${googleCalendarUrl}" target="_blank" style="display: inline-block; background-color: #4285F4; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 14px; margin-bottom: 12px;">
                 Add to Google Calendar
               </a>
+              <p style="margin: 12px 0 0 0; font-size: 14px; color: #666;">
+                <strong>📎 Add to Calendar:</strong> We've attached a calendar event file (.ics) to this email. You can download it and add it to your calendar to ensure you don't miss the meeting.
+              </p>
             </div>
             
             <p>During this meeting, we'll cover:</p>
@@ -370,8 +435,15 @@ If you need to reschedule, please contact us at hello@lashdiary.co.ke`)
 
     await sendEmailViaZoho({
       to: clientEmail,
-      subject: `Showcase Meeting Confirmed - ${formattedDate}`,
+      subject: `Showcase Meeting Confirmed - ${formattedDate} at ${formattedTime}`,
       html: clientEmailHtml,
+      attachments: [
+        {
+          filename: 'showcase-meeting.ics',
+          content: icsContent,
+          contentType: 'text/calendar; charset=UTF-8; method=REQUEST',
+        },
+      ],
     })
 
     // Admin notification email

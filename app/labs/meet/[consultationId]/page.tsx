@@ -124,12 +124,10 @@ export default function TimeGatedMeetPage() {
   }
 
   const formatTime = (timeStr: string) => {
-    const timeMap: Record<string, string> = {
-      morning: '9:00 AM - 12:00 PM',
-      afternoon: '12:00 PM - 4:00 PM',
-      evening: '4:00 PM - 7:00 PM',
-    }
-    return timeMap[timeStr] || timeStr
+    if (!timeStr) return 'Not specified'
+    // Return the actual time string as-is (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+    // No more hardcoded mappings - use the exact time that was booked
+    return timeStr.trim()
   }
 
   if (loading) {

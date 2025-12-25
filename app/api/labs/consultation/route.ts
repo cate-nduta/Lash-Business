@@ -70,18 +70,63 @@ export interface ConsultationSubmission {
 // Generate iCal calendar file
 function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string | null): string {
   const formatDateForICS = (dateStr: string, timeStr: string): Date => {
-    const date = new Date(dateStr)
-    let hour = 10 // Default to 10 AM
-    
-    if (timeStr === 'morning') {
-      hour = 10 // 10 AM
-    } else if (timeStr === 'afternoon') {
-      hour = 14 // 2 PM
-    } else if (timeStr === 'evening') {
-      hour = 17 // 5 PM
+    // Parse date string (expected format: YYYY-MM-DD)
+    // Extract just the date part to avoid timezone issues
+    const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (!dateMatch) {
+      // Fallback: try to parse as-is
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date format: ${dateStr}`)
+      }
+      // Set time to noon to avoid timezone issues, then we'll set the actual time
+      date.setHours(12, 0, 0, 0)
+      // Continue with time parsing below
     }
     
-    date.setHours(hour, 0, 0, 0)
+    // Parse date components (YYYY-MM-DD format)
+    const [year, month, day] = dateMatch ? dateMatch[1].split('-').map(Number) : []
+    if (!year || !month || !day) {
+      throw new Error(`Invalid date format: ${dateStr}`)
+    }
+    
+    // Parse actual time string (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+    // Remove any whitespace and convert to lowercase for parsing
+    const normalizedTime = timeStr.trim().toLowerCase()
+    let hour = 10 // Default to 10 AM
+    let minute = 0
+    
+    // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM"
+    const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+    if (timeMatch) {
+      hour = parseInt(timeMatch[1], 10)
+      minute = parseInt(timeMatch[2], 10)
+      const period = timeMatch[3].toLowerCase()
+      
+      // Convert to 24-hour format
+      if (period === 'pm' && hour !== 12) {
+        hour += 12
+      } else if (period === 'am' && hour === 12) {
+        hour = 0
+      }
+    } else {
+      // Fallback: try to match common patterns
+      if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30')) {
+        hour = 9
+        minute = 30
+      } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon')) {
+        hour = 12
+        minute = 0
+      } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30')) {
+        hour = 15
+        minute = 30
+      }
+    }
+    
+    // Create date in local timezone (Nairobi/EAT = UTC+3)
+    // Use the date components directly to avoid timezone conversion issues
+    const date = new Date(year, month - 1, day, hour, minute, 0, 0)
+    
     return date
   }
 
@@ -206,10 +251,12 @@ export async function POST(request: NextRequest) {
     )
     
     // Check showcase bookings
+    // IMPORTANT: Check ALL non-cancelled bookings (not just confirmed) to prevent double booking
     const isShowcaseBooked = showcaseBookings.some(
       booking => {
         if (!booking.appointmentDate || !booking.appointmentTime) return false
-        if (booking.status?.toLowerCase() !== 'confirmed') return false
+        // Block ALL non-cancelled bookings (pending, confirmed, etc.) to prevent double booking
+        if (booking.status?.toLowerCase() === 'cancelled') return false
         
         // Parse appointment date to YYYY-MM-DD format
         const appointmentDate = new Date(booking.appointmentDate)
@@ -284,7 +331,7 @@ export async function POST(request: NextRequest) {
       meetingCity: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingCity, { fieldName: 'Meeting city', maxLength: 100, optional: true }) || '') : '',
       meetingBuilding: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingBuilding, { fieldName: 'Meeting building', maxLength: 200, optional: true }) || '') : '',
       meetingStreet: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingStreet, { fieldName: 'Meeting street', maxLength: 200, optional: true }) || '') : '',
-      consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 7000,
+      consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 0,
       currency: (body.currency === 'USD' || body.currency === 'KES') ? body.currency : 'KES',
       submittedAt: body.submittedAt || new Date().toISOString(),
       source: body.source || 'labs-consultation',
@@ -376,11 +423,19 @@ export async function POST(request: NextRequest) {
 
     // Send email notification (with time-gated link) only if payment is not pending
     if (shouldSendEmail) {
-    try {
-      await sendConsultationEmail(consultationData)
-    } catch (error) {
-      console.error('Error sending consultation email:', error)
-      // Still return success if email fails - data is stored
+      console.log('📧 Attempting to send consultation confirmation email:', {
+        consultationId: consultationData.consultationId,
+        email: consultationData.email,
+        status: consultationData.status,
+        paymentStatus: consultationData.paymentStatus,
+        isFree,
+      })
+      try {
+        await sendConsultationEmail(consultationData)
+        console.log('✅ Consultation confirmation email sent successfully')
+      } catch (error) {
+        console.error('❌ Error sending consultation email:', error)
+        // Still return success if email fails - data is stored
       }
     } else {
       console.log('📧 Email will be sent after payment is confirmed via IPN')

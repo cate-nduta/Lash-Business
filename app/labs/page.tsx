@@ -85,14 +85,14 @@ export default function LabsPage() {
             // Still set the data - API should have provided defaults
             // If tiers are missing, the empty state will show
             setSettings(data || {
-              consultationFeeKES: 7000,
+              consultationFeeKES: 0,
               tiers: [],
             })
           }
         } else {
           // Fallback to default if API fails
           setSettings({
-            consultationFeeKES: 7000,
+            consultationFeeKES: 0,
             tiers: [],
           })
         }
@@ -100,7 +100,7 @@ export default function LabsPage() {
         console.error('Error loading labs settings:', error)
         // Fallback to default on error
         setSettings({
-          consultationFeeKES: 7000,
+          consultationFeeKES: 0,
           tiers: [],
         })
       } finally {
@@ -203,10 +203,16 @@ export default function LabsPage() {
                   <div className="text-center">
                     <p className="text-sm sm:text-base text-[var(--color-text)]/70 mb-2">Consultation Fee</p>
                     <p className="text-4xl sm:text-5xl font-bold text-[var(--color-primary)] mb-2">
-                      {formatPrice(settings?.consultationFeeKES || 7000)}
+                      {settings?.consultationFeeKES === 0 
+                        ? 'Free' 
+                        : settings?.consultationFeeKES 
+                          ? formatPrice(settings.consultationFeeKES)
+                          : 'Loading...'}
                     </p>
                     <p className="text-sm sm:text-base text-[var(--color-text)]/70">
-                      One-time fee for a full consultation session
+                      {settings?.consultationFeeKES === 0 
+                        ? 'No payment required for this consultation'
+                        : 'One-time fee for a full consultation session'}
                     </p>
                   </div>
                 </div>

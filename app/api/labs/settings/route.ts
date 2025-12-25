@@ -144,7 +144,7 @@ const DEFAULT_BUDGET_RANGES: BudgetRange[] = [
 ]
 
 const DEFAULT_SETTINGS: LabsSettings = {
-  consultationFeeKES: 7000,
+  consultationFeeKES: 0,
   tiers: DEFAULT_TIERS,
   statistics: {
     consultationsCompleted: 0,
@@ -209,8 +209,9 @@ export async function GET(request: NextRequest) {
     }
     
     // Ensure all required fields are present with defaults
+    // IMPORTANT: Use actual consultationFeeKES from settings file (can be 0 for free consultations)
     const completeSettings: LabsSettings = {
-      consultationFeeKES: settings.consultationFeeKES || DEFAULT_SETTINGS.consultationFeeKES,
+      consultationFeeKES: typeof settings.consultationFeeKES === 'number' ? settings.consultationFeeKES : 0,
       tiers: (settings.tiers && Array.isArray(settings.tiers) && settings.tiers.length > 0) 
         ? settings.tiers 
         : DEFAULT_TIERS,
@@ -268,7 +269,7 @@ export async function GET(request: NextRequest) {
       // Last resort - return minimal valid response
       console.error('Error serializing DEFAULT_SETTINGS:', jsonError)
       return NextResponse.json({
-        consultationFeeKES: 7000,
+        consultationFeeKES: 0,
         tiers: DEFAULT_TIERS,
       }, {
         status: 200,

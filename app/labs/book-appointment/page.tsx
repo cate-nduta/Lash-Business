@@ -217,7 +217,7 @@ export default function LabsBookAppointment() {
   
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
-  const [consultationFeeKES, setConsultationFeeKES] = useState<number>(7000)
+  const [consultationFeeKES, setConsultationFeeKES] = useState<number>(0)
   const [loadingFee, setLoadingFee] = useState(true)
   const [selectedTier, setSelectedTier] = useState<PricingTier | null>(null)
   const [loadingTier, setLoadingTier] = useState(true)
@@ -231,7 +231,7 @@ export default function LabsBookAppointment() {
         const response = await fetch('/api/labs/settings', { cache: 'no-store' })
         if (response.ok) {
           const data = await response.json()
-          setConsultationFeeKES(data.consultationFeeKES || 7000)
+          setConsultationFeeKES(data.consultationFeeKES ?? 0)
           
           // Load budget ranges
           if (data.budgetRanges && Array.isArray(data.budgetRanges) && data.budgetRanges.length > 0) {
@@ -407,7 +407,8 @@ export default function LabsBookAppointment() {
     message: string
   }>({ type: null, message: '' })
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | null>(null)
+  // Payment method will be selected on Paystack page
+  const [paymentMethod] = useState<'mpesa' | 'card' | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<{
     loading: boolean
     success: boolean | null
@@ -605,32 +606,11 @@ export default function LabsBookAppointment() {
         return
       }
 
-      // Regular new consultation submission (REQUIRES PAYMENT FIRST)
-      // Validate payment method
-      if (!paymentMethod) {
-        setSubmitStatus({
-          type: 'error',
-          message: 'Please select a payment method to proceed with your consultation booking.',
-        })
-        setLoading(false)
-        // Scroll to payment section
-        setTimeout(() => {
-          document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }, 100)
-        return
-      }
-
+      // Regular new consultation submission
       const fullPhone = `${phoneCountryCode}${phoneLocalNumber.replace(/\D/g, '')}`
       
-      // Validate phone number for M-Pesa
-      if (paymentMethod === 'mpesa' && (!phoneLocalNumber || phoneLocalNumber.trim().length < 9)) {
-        setSubmitStatus({
-          type: 'error',
-          message: 'Please enter a valid phone number for M-Pesa payment.',
-        })
-        setLoading(false)
-        return
-      }
+      // Check if consultation is free (price = 0)
+      const isFree = consultationFeeKES === 0
       
       // Convert consultation fee to the selected currency
       let consultationPrice = consultationFeeKES
@@ -645,6 +625,75 @@ export default function LabsBookAppointment() {
           consultationPrice = consultationFeeKES / defaultRate
           consultationPrice = Math.round(consultationPrice * 100) / 100
         }
+      }
+
+      // If consultation is free, create it directly without payment
+      if (isFree) {
+        const consultationData = {
+          ...formData,
+          phone: fullPhone,
+          consultationPrice: 0,
+          currency: currency,
+          submittedAt: new Date().toISOString(),
+          source: 'labs-consultation',
+          interestedTier: selectedTier ? selectedTier.name : (formData.interestedTier || ''),
+          paymentStatus: 'not_required',
+          paymentOrderTrackingId: null,
+          paymentMethod: null,
+        }
+
+        const consultationResponse = await fetch('/api/labs/consultation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(consultationData),
+        })
+
+        const consultationResult = await consultationResponse.json()
+
+        if (!consultationResponse.ok) {
+          setSubmitStatus({
+            type: 'error',
+            message: consultationResult.error || 'Failed to submit consultation request',
+          })
+          setLoading(false)
+          return
+        }
+
+        // Free consultation created successfully
+        setSubmitStatus({
+          type: 'success',
+          message: 'Your free consultation has been booked successfully! You will receive a confirmation email shortly.',
+        })
+        setShowConfirmationModal(true)
+        setLoading(false)
+        return
+      }
+
+      // For paid consultations, require payment
+      // Validate payment method
+      if (!paymentMethod) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select a payment method to proceed with your consultation booking.',
+        })
+        setLoading(false)
+        // Scroll to payment section
+        setTimeout(() => {
+          document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+        return
+      }
+      
+      // Validate phone number for M-Pesa
+      if (paymentMethod === 'mpesa' && (!phoneLocalNumber || phoneLocalNumber.trim().length < 9)) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please enter a valid phone number for M-Pesa payment.',
+        })
+        setLoading(false)
+        return
       }
 
       // Initiate payment FIRST before creating consultation
@@ -1590,8 +1639,8 @@ export default function LabsBookAppointment() {
               </div>
             </div>
 
-            {/* Payment Method Section - Only show for new consultations (not rebooking) */}
-            {!isRebooking && (
+            {/* Payment Section - Only show for new consultations (not rebooking) and when consultation is not free */}
+            {!isRebooking && consultationFeeKES > 0 && (
               <div id="payment-section" className="mt-8 space-y-4">
                 <h2 className="text-2xl font-display text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]/20 pb-2">
                   Payment
@@ -1600,89 +1649,9 @@ export default function LabsBookAppointment() {
                 <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
                     <strong>Payment Required:</strong> Consultation fee must be paid before your appointment is confirmed. 
-                    You'll be redirected to a secure payment page after submitting this form.
+                    You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa).
                   </p>
                 </div>
-
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-[var(--color-accent)]/10"
-                    style={{ borderColor: paymentMethod === 'card' ? 'var(--color-primary)' : 'rgba(124, 75, 49, 0.2)' }}>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="card"
-                      checked={paymentMethod === 'card'}
-                      onChange={(e) => setPaymentMethod(e.target.value as 'card')}
-                      className="h-5 w-5 accent-[var(--color-primary)] flex-shrink-0"
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold text-base text-[var(--color-text)]">
-                        💳 Card Payment
-                      </div>
-                      <div className="text-sm text-[var(--color-text)]/70 mt-1">
-                        Full payment • KES & USD accepted
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-[var(--color-accent)]/10"
-                    style={{ borderColor: paymentMethod === 'mpesa' ? 'var(--color-primary)' : 'rgba(124, 75, 49, 0.2)' }}>
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="mpesa"
-                      checked={paymentMethod === 'mpesa'}
-                      onChange={(e) => setPaymentMethod(e.target.value as 'mpesa')}
-                      disabled={currency === 'USD'}
-                      className="h-5 w-5 accent-[var(--color-primary)] flex-shrink-0 disabled:opacity-50"
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold text-base text-[var(--color-text)]">
-                        📱 M-Pesa Payment
-                        {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-normal">(KES only)</span>}
-                      </div>
-                      <div className="text-sm text-[var(--color-text)]/70 mt-1">
-                        Full payment • KES only
-                      </div>
-                    </div>
-                  </label>
-                </div>
-
-                {/* M-Pesa Phone Number Input */}
-                {paymentMethod === 'mpesa' && currency !== 'USD' && (
-                  <div className="p-4 bg-[var(--color-accent)]/10 rounded-lg border border-[var(--color-primary)]/20">
-                    <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
-                      Phone Number for M-Pesa Payment *
-                    </label>
-                    <div className="flex gap-2">
-                      <select
-                        value={phoneCountryCode}
-                        onChange={(e) => setPhoneCountryCode(e.target.value)}
-                        className="px-3 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg bg-white text-[var(--color-text)] text-sm focus:border-[var(--color-primary)] focus:outline-none"
-                      >
-                        {PHONE_COUNTRY_CODES.map((code) => (
-                          <option key={code.code} value={code.dialCode}>
-                            {code.dialCode}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="tel"
-                        value={phoneLocalNumber}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '')
-                          setPhoneLocalNumber(value)
-                        }}
-                        placeholder="712345678"
-                        className="flex-1 px-3 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg bg-white text-[var(--color-text)] text-sm focus:border-[var(--color-primary)] focus:outline-none"
-                        required={paymentMethod === 'mpesa'}
-                      />
-                    </div>
-                    <p className="text-xs text-[var(--color-text)]/60 mt-2">
-                      We'll redirect you to the secure payment page to complete your payment
-                    </p>
-                  </div>
-                )}
 
                 {/* Payment Status */}
                 {paymentStatus.loading && (
@@ -1718,6 +1687,16 @@ export default function LabsBookAppointment() {
               </div>
             )}
 
+            {/* Free Consultation Message */}
+            {!isRebooking && consultationFeeKES === 0 && (
+              <div className="mt-8 bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                <p className="text-sm text-green-800">
+                  <strong>✅ Free Consultation:</strong> This consultation is free of charge. No payment is required. 
+                  Your consultation will be confirmed immediately upon submission.
+                </p>
+              </div>
+            )}
+
             {/* Submit Button */}
             <div className="flex flex-col sm:flex-row gap-4 pt-6">
               <button
@@ -1729,7 +1708,9 @@ export default function LabsBookAppointment() {
                   ? 'Processing...' 
                   : isRebooking 
                     ? 'Reschedule Consultation (No Payment Required)' 
-                    : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
+                    : consultationFeeKES === 0
+                      ? 'Submit Free Consultation Request'
+                      : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
               </button>
               <Link
                 href="/labs"
@@ -1785,13 +1766,15 @@ export default function LabsBookAppointment() {
                   ? 'Your consultation has been successfully rescheduled!'
                   : 'Your consultation request has been received successfully!'}
               </p>
-              {isRebooking && (
+              {(isRebooking || consultationFeeKES === 0) && (
                 <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4 mb-6">
                   <p className="text-green-800 font-semibold mb-1">
                     ✅ No Payment Required
                   </p>
                   <p className="text-green-700 text-sm">
-                    Since you already paid for your original consultation, no additional payment was required.
+                    {isRebooking 
+                      ? 'Since you already paid for your original consultation, no additional payment was required.'
+                      : 'This consultation is free of charge. No payment was required.'}
                   </p>
                 </div>
               )}

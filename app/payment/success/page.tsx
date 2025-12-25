@@ -13,6 +13,7 @@ export default function PaymentSuccessPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [paymentTypeDetected, setPaymentTypeDetected] = useState<string>('unknown')
 
   const reference = searchParams.get('reference')
   const amount = searchParams.get('amount')
@@ -34,6 +35,8 @@ export default function PaymentSuccessPage() {
 
         if (data.success && data.transaction?.status === 'success') {
           setVerified(true)
+          // Use provided payment type or default to 'unknown'
+          setPaymentTypeDetected(paymentType)
         } else {
           setError(data.error || 'Payment verification failed')
         }
@@ -101,11 +104,17 @@ export default function PaymentSuccessPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-[#7C4B31] mb-2">
-            {paymentType === 'consultation' ? 'Payment Successful & Appointment Booked!' : 'Payment Successful!'}
+            {paymentTypeDetected === 'consultation' || paymentType === 'consultation' 
+              ? 'Payment Successful & Appointment Booked!' 
+              : paymentTypeDetected === 'booking' || paymentType === 'booking'
+              ? 'Payment Successful & Appointment Booked!'
+              : 'Payment Successful!'}
           </h1>
           <p className="text-[#6B4A3B]">
-            {paymentType === 'consultation' 
+            {paymentTypeDetected === 'consultation' || paymentType === 'consultation'
               ? 'Your payment was successful and your consultation appointment has been booked.' 
+              : paymentTypeDetected === 'booking' || paymentType === 'booking'
+              ? 'Your payment was successful and your lash appointment has been booked.'
               : 'Your payment has been processed successfully.'}
           </p>
         </div>
@@ -113,12 +122,14 @@ export default function PaymentSuccessPage() {
         {amount && (
           <div className="bg-[#F3E6DC] rounded-lg p-4 mb-6">
             <p className="text-sm text-[#6B4A3B] mb-1">
-              {paymentType === 'consultation' ? 'You paid' : 'Amount Paid'}
+              {(paymentTypeDetected === 'consultation' || paymentType === 'consultation') || (paymentTypeDetected === 'booking' || paymentType === 'booking')
+                ? 'You paid' 
+                : 'Amount Paid'}
             </p>
             <p className="text-2xl font-bold text-[#7C4B31]">
               {currency} {parseFloat(amount).toLocaleString()}
             </p>
-            {paymentType === 'consultation' && (
+            {(paymentTypeDetected === 'consultation' || paymentType === 'consultation') && (
               <p className="text-sm text-[#6B4A3B] mt-2">to LASHDIARY LABS</p>
             )}
             {reference && (
@@ -130,11 +141,11 @@ export default function PaymentSuccessPage() {
 
         <div className="bg-[#F3E6DC] rounded-lg p-6 mb-6 text-left">
           <h2 className="font-semibold text-[#7C4B31] mb-3">What Happens Next?</h2>
-          {paymentType === 'consultation' ? (
+          {(paymentTypeDetected === 'consultation' || paymentType === 'consultation') ? (
             <ul className="space-y-2 text-sm text-[#3E2A20]">
               <li className="flex items-start">
                 <span className="mr-2">✓</span>
-                <span>You'll receive a confirmation email with your consultation details shortly</span>
+                <span>Click the button below to send your consultation confirmation email</span>
               </li>
               <li className="flex items-start">
                 <span className="mr-2">✓</span>
@@ -143,6 +154,21 @@ export default function PaymentSuccessPage() {
               <li className="flex items-start">
                 <span className="mr-2">✓</span>
                 <span>We'll contact you soon to finalize the details and schedule your session</span>
+              </li>
+            </ul>
+          ) : (paymentTypeDetected === 'booking' || paymentType === 'booking') ? (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Click the button below to send your lash appointment confirmation email</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your lash appointment has been confirmed</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>You'll receive all appointment details in the confirmation email</span>
               </li>
             </ul>
           ) : (
@@ -168,7 +194,11 @@ export default function PaymentSuccessPage() {
             <>
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <p className="text-green-800 text-sm font-medium">
-                  ✓ Consultation confirmed! Emails have been sent to you and our team. The time slot has been reserved.
+                  ✓ {(paymentTypeDetected === 'consultation' || paymentType === 'consultation')
+                    ? 'Consultation confirmed! Emails have been sent to you and our team. The time slot has been reserved.'
+                    : (paymentTypeDetected === 'booking' || paymentType === 'booking')
+                    ? 'Lash appointment confirmed! Emails have been sent to you and our team. The time slot has been reserved.'
+                    : 'Emails have been sent successfully!'}
                 </p>
               </div>
               <Link
@@ -188,16 +218,38 @@ export default function PaymentSuccessPage() {
                   setEmailError(null)
                   
                   try {
-                    const response = await fetch('/api/consultations/send-confirmation', {
+                    // Try booking first, then consultation
+                    let response
+                    let data
+                    
+                    // Try booking confirmation
+                    response = await fetch('/api/booking/send-confirmation', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ reference }),
                     })
                     
-                    const data = await response.json()
+                    data = await response.json()
+                    
+                    // If booking not found, try consultation
+                    if (!response.ok && response.status === 404) {
+                      response = await fetch('/api/consultations/send-confirmation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reference }),
+                      })
+                      
+                      data = await response.json()
+                    }
                     
                     if (response.ok && data.success) {
                       setEmailSent(true)
+                      // Update payment type if detected
+                      if (data.bookingId) {
+                        setPaymentTypeDetected('booking')
+                      } else {
+                        setPaymentTypeDetected('consultation')
+                      }
                     } else {
                       setEmailError(data.error || 'Failed to send emails. Please contact support.')
                     }
@@ -217,10 +269,14 @@ export default function PaymentSuccessPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Sending Emails...
+                    Sending Email...
                   </span>
                 ) : (
-                  'Send Email & Confirm Booking'
+                  (paymentTypeDetected === 'consultation' || paymentType === 'consultation')
+                    ? 'Send Consultation Confirmation Email'
+                    : (paymentTypeDetected === 'booking' || paymentType === 'booking')
+                    ? 'Send Lash Appointment Email Confirmation'
+                    : 'Send Confirmation Email'
                 )}
               </button>
               {emailError && (

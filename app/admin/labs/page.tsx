@@ -41,7 +41,7 @@ const blankTier = (): PricingTier => ({
 
 export default function AdminLabs() {
   const [settings, setSettings] = useState<LabsSettings>({
-    consultationFeeKES: 7000,
+    consultationFeeKES: 0,
     tiers: [],
     statistics: {
       consultationsCompleted: 0,
@@ -70,7 +70,7 @@ export default function AdminLabs() {
     googleMeetRoomLastChanged: new Date().toISOString(),
   })
   const [originalSettings, setOriginalSettings] = useState<LabsSettings>({
-    consultationFeeKES: 7000,
+    consultationFeeKES: 0,
     tiers: [],
     statistics: {
       consultationsCompleted: 0,

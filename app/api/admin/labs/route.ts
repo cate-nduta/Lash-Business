@@ -190,7 +190,7 @@ const DEFAULT_BUDGET_RANGES: BudgetRange[] = [
 ]
 
 const DEFAULT_SETTINGS: LabsSettings = {
-  consultationFeeKES: 7000,
+  consultationFeeKES: 0,
   tiers: DEFAULT_TIERS,
   statistics: DEFAULT_STATISTICS,
   statisticsEnabled: true, // Statistics section enabled by default

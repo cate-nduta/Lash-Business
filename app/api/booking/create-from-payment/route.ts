@@ -177,29 +177,10 @@ export async function POST(request: NextRequest) {
     const updatedReservations = reservations.filter(r => r.bookingReference !== bookingReference)
     await writeDataFile('pending-booking-reservations.json', updatedReservations)
 
-    // Send confirmation emails
-    try {
-      await sendEmailNotification({
-        name: bookingData.name,
-        email: bookingData.email,
-        phone: bookingData.phone,
-        service: bookingData.service,
-        date: bookingData.date,
-        timeSlot: bookingData.timeSlot,
-        location: bookingData.location || STUDIO_LOCATION,
-        originalPrice: bookingData.originalPrice || 0,
-        discount: bookingData.discount || 0,
-        finalPrice: bookingData.finalPrice || 0,
-        deposit: bookingData.deposit || 0,
-        bookingId,
-        manageToken,
-        policyWindowHours: CLIENT_MANAGE_WINDOW_HOURS,
-        desiredLook: bookingData.desiredLook || 'Custom',
-        desiredLookStatus: bookingData.desiredLookStatus || 'custom',
-      })
-    } catch (emailError) {
-      console.error('Error sending booking confirmation email:', emailError)
-    }
+    // NOTE: Email confirmation is NOT sent automatically after payment
+    // User must click the button on the payment success page to send the email
+    // This prevents sending emails before payment is fully confirmed
+    console.log('✅ Booking created after payment. Email will be sent when user clicks button on success page.')
 
     // Create/update client account
     try {

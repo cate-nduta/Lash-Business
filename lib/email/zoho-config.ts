@@ -162,6 +162,11 @@ export async function sendEmailViaZoho(options: {
   text?: string
   replyTo?: string
   from?: string
+  attachments?: Array<{
+    filename: string
+    content: string
+    contentType?: string
+  }>
 }): Promise<{
   success: boolean
   messageId?: string
@@ -190,6 +195,11 @@ export async function sendEmailViaZoho(options: {
       html: options.html,
       text: options.text,
       replyTo: options.replyTo || BUSINESS_NOTIFICATION_EMAIL,
+      attachments: options.attachments?.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        contentType: att.contentType,
+      })),
       // Priority: high for password resets
       priority: 'high',
       // Send immediately

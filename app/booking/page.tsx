@@ -116,16 +116,12 @@ export default function Booking() {
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | string>('card')
+  // Payment method will be selected on Paystack page, default to paystack
+  const [paymentMethod] = useState<'mpesa' | 'card' | string>('paystack')
   const [paymentSettings, setPaymentSettings] = useState<any>(null)
   const [loadingPaymentSettings, setLoadingPaymentSettings] = useState(true)
 
-  // Auto-switch to card payment if USD is selected and M-Pesa is selected (M-Pesa only accepts KES)
-  useEffect(() => {
-    if (currency === 'USD' && paymentMethod === 'mpesa') {
-      setPaymentMethod('card')
-    }
-  }, [currency, paymentMethod])
+  // Payment method will be selected on Paystack page
   const [clientPhotoError, setClientPhotoError] = useState<string | null>(null)
   const [studioLocation, setStudioLocation] = useState<string>(
     process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
@@ -678,10 +674,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         if (response.ok) {
           const data = await response.json()
           setPaymentSettings(data)
-          // Set default payment method if configured
-          if (data.defaultPaymentMethod) {
-            setPaymentMethod(data.defaultPaymentMethod)
-          }
+          // Payment method is now selected on Paystack page, no need to set default
         }
       } catch (error) {
         console.error('Error loading payment settings:', error)
@@ -1862,99 +1855,96 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       let bookingCreated = false
       let createdBookingId: string | null = null
 
-      // Handle payment based on method
-      if (paymentMethod === 'card') {
-        // Card payment - ALWAYS requires full payment
-        // Create booking first with pending payment status
-        const timestamp = Date.now()
-        const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...formData,
-            service: selectedServiceNames.length > 0 
-              ? selectedServiceNames.join(' + ') 
-              : formData.service || 'Lash Service',
-            services: selectedServiceNames,
-            serviceDetails: cartItems.map(item => ({
-              serviceId: item.serviceId,
-              name: item.name,
-              price: item.price,
-              priceUSD: item.priceUSD,
-              duration: item.duration,
-              categoryId: item.categoryId,
-              categoryName: item.categoryName,
-            })),
-            location: STUDIO_LOCATION,
-            isFirstTimeClient: effectiveIsFirstTimeClient === true,
-            originalPrice: pricingDetails.originalPrice,
-            discount: pricingDetails.discount,
-            finalPrice: pricingDetails.finalPrice,
-            deposit: pricingDetails.finalPrice, // Card = full payment
-            paymentType: 'full',
-            discountType: pricingDetails.discountType,
-            promoCode: promoCodeData?.code || null,
-            promoCodeType: referralType,
-            salonReferral: salonReferralContext,
-            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
-            paymentMethod: 'paystack',
-            paymentStatus: 'pending_payment',
-            currency: currency,
-            desiredLook: 'Custom',
-          }),
-        })
+      // Payment method will be selected on Paystack page
+      // Create booking first with pending payment status
+      const timestamp = Date.now()
+      const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          service: selectedServiceNames.length > 0 
+            ? selectedServiceNames.join(' + ') 
+            : formData.service || 'Lash Service',
+          services: selectedServiceNames,
+          serviceDetails: cartItems.map(item => ({
+            serviceId: item.serviceId,
+            name: item.name,
+            price: item.price,
+            priceUSD: item.priceUSD,
+            duration: item.duration,
+            categoryId: item.categoryId,
+            categoryName: item.categoryName,
+          })),
+          location: STUDIO_LOCATION,
+          isFirstTimeClient: effectiveIsFirstTimeClient === true,
+          originalPrice: pricingDetails.originalPrice,
+          discount: pricingDetails.discount,
+          finalPrice: pricingDetails.finalPrice,
+          deposit: pricingDetails.finalPrice, // Full payment (Paystack handles method selection)
+          paymentType: 'full',
+          discountType: pricingDetails.discountType,
+          promoCode: promoCodeData?.code || null,
+          promoCodeType: referralType,
+          salonReferral: salonReferralContext,
+          giftCardCode: giftCardData?.valid ? giftCardData.code : null,
+          paymentMethod: 'paystack',
+          paymentStatus: 'pending_payment',
+          currency: currency,
+          desiredLook: 'Custom',
+        }),
+      })
 
-        const bookingData = await bookingResponse.json()
-        if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
-          bookingCreated = true
-          createdBookingId = bookingData.bookingId
-          
-          // Now initiate payment with booking ID
-          const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
-          paymentResult = { ...cardResult }
-          
-          if (cardResult.success && cardResult.orderTrackingId) {
-            // Update booking with Paystack reference
-            try {
-              await fetch(`/api/booking/update-payment-tracking`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  bookingId: createdBookingId,
-                  paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
-                  paymentMethod: 'paystack',
-                }),
-              })
-            } catch (error) {
-              console.error('Error updating booking with Paystack reference:', error)
-            }
-            
-            setLoading(false)
-            return // User will be redirected to payment page
-          } else {
-            setSubmitStatus({
-              type: 'error',
-              message: 'Payment Failed',
-              details: cardResult.error || 'Failed to initiate card payment. Please try again or select a different payment method.',
+      const bookingData = await bookingResponse.json()
+      if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
+        bookingCreated = true
+        createdBookingId = bookingData.bookingId
+        
+        // Now initiate payment with booking ID (Paystack will handle method selection)
+        const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
+        paymentResult = { ...cardResult }
+        
+        if (cardResult.success && cardResult.orderTrackingId) {
+          // Update booking with Paystack reference
+          try {
+            await fetch(`/api/booking/update-payment-tracking`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                bookingId: createdBookingId,
+                paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
+                paymentMethod: 'paystack',
+              }),
             })
-            setLoading(false)
-            return
+          } catch (error) {
+            console.error('Error updating booking with Paystack reference:', error)
           }
+          
+          setLoading(false)
+          return // User will be redirected to payment page
         } else {
           setSubmitStatus({
             type: 'error',
-            message: 'Booking Failed',
-            details: bookingData.error || 'Failed to create booking. Please try again.',
+            message: 'Payment Failed',
+            details: cardResult.error || 'Failed to initiate payment. Please try again.',
           })
           setLoading(false)
           return
         }
+      } else {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Booking Failed',
+          details: bookingData.error || 'Failed to create booking. Please try again.',
+        })
+        setLoading(false)
+        return
       }
       
-      // At this point, paymentMethod is 'mpesa' (card already returned above)
-      if (paymentMethod === 'mpesa') {
+      // Legacy M-Pesa code removed - Paystack handles all payment methods
+      if (false) {
         // Validate phone number first
         const fullPhone = `${phoneCountryCode}${phoneLocalNumber}`
         if (!phoneLocalNumber || phoneLocalNumber.trim().length < 9) {
@@ -2020,7 +2010,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
             salonReferral: salonReferralContext,
-            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
+            giftCardCode: (giftCardData?.valid && giftCardData?.code) ? giftCardData?.code : null,
             paymentMethod: 'paystack',
             paymentStatus: 'pending_payment',
             paymentOrderTrackingId: mpesaResult.orderTrackingId || mpesaResult.reference, // Store Paystack reference
@@ -2816,107 +2806,17 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </div>
             )}
 
-            {/* Payment Method Selection */}
+            {/* Payment Info */}
             <div id="payment-method-section" className="rounded-lg border-2 border-brown-light bg-white p-4 sm:p-5">
-              <label className="block text-sm sm:text-base font-semibold text-brown-dark mb-4">
-                Payment Method
-              </label>
-
-              <div className="space-y-4">
-                {/* Card Payment Option */}
-                <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
-                  style={{ borderColor: paymentMethod === 'card' ? '#7C4B31' : '#E5D5C8' }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="card"
-                    checked={paymentMethod === 'card'}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="h-5 w-5 accent-brown-dark flex-shrink-0"
-                  />
-                  <div className="flex-1">
-                    <div className="font-semibold text-base text-brown-dark">
-                      💳 Card Payment
-                    </div>
-                    <div className="text-sm text-brown-dark/70 mt-1">
-                      Full payment • KES & USD accepted
-                    </div>
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-start gap-2">
+                  <span className="text-lg">ℹ️</span>
+                  <div className="text-sm text-blue-900">
+                    <p className="font-medium mb-1">Secure Payment</p>
+                    <p>You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa). We accept both KES and USD.</p>
                   </div>
-                </label>
-
-                {/* M-Pesa Payment Option */}
-                <label className="flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all hover:bg-brown-light/10"
-                  style={{ borderColor: paymentMethod === 'mpesa' ? '#7C4B31' : '#E5D5C8' }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="mpesa"
-                    checked={paymentMethod === 'mpesa'}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    disabled={currency === 'USD'}
-                    className="h-5 w-5 accent-brown-dark flex-shrink-0 disabled:opacity-50"
-                  />
-                  <div className="flex-1">
-                    <div className="font-semibold text-base text-brown-dark">
-                      📱 M-Pesa Payment
-                      {currency === 'USD' && <span className="ml-2 text-xs text-amber-700 font-normal">(KES only)</span>}
-                    </div>
-                    <div className="text-sm text-brown-dark/70 mt-1">
-                      Deposit payment • KES only
-                    </div>
-                  </div>
-                </label>
-
+                </div>
               </div>
-
-              {/* M-Pesa Phone Number Input */}
-              {paymentMethod === 'mpesa' && currency !== 'USD' && (
-                <div className="mt-4 p-4 bg-brown-light/10 rounded-lg border border-brown-light">
-                  <label className="block text-sm font-medium text-brown-dark mb-2">
-                    Phone Number for M-Pesa Payment *
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      value={phoneCountryCode}
-                      onChange={(e) => setPhoneCountryCode(e.target.value)}
-                      className="px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark text-sm focus:border-brown-dark focus:outline-none"
-                    >
-                      {PHONE_COUNTRY_CODES.map((code) => (
-                        <option key={code.code} value={code.dialCode}>
-                          {code.dialCode}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="tel"
-                      value={phoneLocalNumber}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '')
-                        setPhoneLocalNumber(value)
-                      }}
-                      placeholder="712345678"
-                      className="flex-1 px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark text-sm focus:border-brown-dark focus:outline-none"
-                      required={paymentMethod === 'mpesa'}
-                    />
-                  </div>
-                  <p className="text-xs text-brown-dark/60 mt-2">
-                    We'll redirect you to Paystack where you can complete your M-Pesa payment
-                  </p>
-                </div>
-              )}
-
-              {/* Card Payment Info */}
-              {paymentMethod === 'card' && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-start gap-2">
-                    <span className="text-lg">ℹ️</span>
-                    <div className="text-sm text-blue-900">
-                      <p className="font-medium mb-1">Secure Payment</p>
-                      <p>You'll be redirected to Paystack's secure payment page to complete your card payment. We accept both KES and USD.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Terms Acknowledgement */}
@@ -2980,8 +2880,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 fillOutsideWindow ||
                 mpesaStatus.loading ||
                 !termsAccepted ||
-                (currency === 'USD' && paymentMethod === 'mpesa') ||
-                !paymentMethod || (paymentMethod !== 'card' && paymentMethod !== 'mpesa')
+                false // Payment method will be selected on Paystack page
               }
               className="btn-cute hover-lift w-full bg-brown-dark hover:bg-brown text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-4 sm:py-4 rounded-full shadow-soft-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none touch-manipulation relative overflow-hidden group min-h-[56px] sm:min-h-[52px]"
             >
@@ -2993,11 +2892,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   </>
                 ) : (
                   <>
-                    {paymentMethod === 'card'
-                      ? 'Book Appointment & Pay Full Amount (Card)'
-                      : paymentMethod === 'mpesa'
-                      ? 'Book Appointment & Pay Deposit (M-Pesa)'
-                      : 'Book Appointment & Pay'}
+                    Book Appointment & Pay →
                     <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
                   </>
                 )}

@@ -544,73 +544,78 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send email notifications via Resend
-    let emailSent = false
-    let emailError = null
-    let emailStatus = 'skipped'
-    try {
-      const emailResult = await sendEmailNotification({
-        name,
-        email,
-        phone,
-        service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
-        date,
-        timeSlot,
-        location: bookingLocation,
-        isFirstTimeClient: isFirstTimeClient === true,
-        originalPrice: originalPrice || 0,
-        discount: discount || 0,
-        finalPrice: finalPrice || originalPrice || 0,
-        deposit: deposit || 0,
-        bookingId,
-        manageToken,
-        policyWindowHours,
-        notes: typeof notes === 'string' ? notes : undefined,
-        appointmentPreference: appointmentPreference || undefined,
-        desiredLook: desiredLookLabel,
-        desiredLookStatus: lashMapStatus,
-        isGiftCardBooking: !!giftCardCode,
-      })
-      if (!emailResult) {
-        console.warn('Email notification service did not return a response.')
-        emailSent = false
-        emailError = 'Email service unavailable'
-        emailStatus = 'error'
-      } else {
-        emailSent = emailResult.success === true && emailResult.ownerEmailSent === true
-        emailStatus = emailResult.status || (emailSent ? 'sent' : 'issue')
-        if (emailSent) {
-          console.log('Email notifications status:', {
-            ownerEmailSent: emailResult.ownerEmailSent,
-            ownerEmailId: emailResult.ownerEmailId,
-            customerEmailSent: emailResult.customerEmailSent,
-            customerEmailId: emailResult.customerEmailId,
-            customerEmailError: emailResult.customerEmailError,
-          })
-          
-          if (!emailResult.customerEmailSent) {
-            console.warn('⚠️ Customer email was not sent!')
-            if (emailResult.customerEmailError) {
-              console.error('Customer email error:', emailResult.customerEmailError)
-            }
-          }
-        } else {
-          console.warn('Email notifications not sent:', emailResult.error)
-          emailError = emailResult.error
-          emailStatus = emailResult.status || 'issue'
-        }
-      }
-    } catch (emailErr: any) {
-      console.error('Error sending email notifications:', emailErr)
-      emailError = emailErr.message || 'Email service error'
-      emailStatus = 'error'
-      // Don't fail the booking if email fails
-    }
-
     // Check if booking is free (0 KSH) - if so, create immediately without payment
     const finalPriceAmount = Number(finalPrice || originalPrice || 0)
     const depositAmount = Number(deposit || 0)
     const isFree = finalPriceAmount === 0 && depositAmount === 0
+
+    // Send email notifications ONLY for free services (price = 0)
+    // For paid services, emails will be sent after payment via the success page button
+    let emailSent = false
+    let emailError = null
+    let emailStatus = 'skipped'
+    if (isFree) {
+      try {
+        const emailResult = await sendEmailNotification({
+          name,
+          email,
+          phone,
+          service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
+          date,
+          timeSlot,
+          location: bookingLocation,
+          isFirstTimeClient: isFirstTimeClient === true,
+          originalPrice: originalPrice || 0,
+          discount: discount || 0,
+          finalPrice: finalPrice || originalPrice || 0,
+          deposit: deposit || 0,
+          bookingId,
+          manageToken,
+          policyWindowHours,
+          notes: typeof notes === 'string' ? notes : undefined,
+          appointmentPreference: appointmentPreference || undefined,
+          desiredLook: desiredLookLabel,
+          desiredLookStatus: lashMapStatus,
+          isGiftCardBooking: !!giftCardCode,
+        })
+        if (!emailResult) {
+          console.warn('Email notification service did not return a response.')
+          emailSent = false
+          emailError = 'Email service unavailable'
+          emailStatus = 'error'
+        } else {
+          emailSent = emailResult.success === true && emailResult.ownerEmailSent === true
+          emailStatus = emailResult.status || (emailSent ? 'sent' : 'issue')
+          if (emailSent) {
+            console.log('✅ Free booking email notifications sent:', {
+              ownerEmailSent: emailResult.ownerEmailSent,
+              ownerEmailId: emailResult.ownerEmailId,
+              customerEmailSent: emailResult.customerEmailSent,
+              customerEmailId: emailResult.customerEmailId,
+              customerEmailError: emailResult.customerEmailError,
+            })
+            
+            if (!emailResult.customerEmailSent) {
+              console.warn('⚠️ Customer email was not sent!')
+              if (emailResult.customerEmailError) {
+                console.error('Customer email error:', emailResult.customerEmailError)
+              }
+            }
+          } else {
+            console.warn('Email notifications not sent:', emailResult.error)
+            emailError = emailResult.error
+            emailStatus = emailResult.status || 'issue'
+          }
+        }
+      } catch (emailErr: any) {
+        console.error('Error sending email notifications:', emailErr)
+        emailError = emailErr.message || 'Email service error'
+        emailStatus = 'error'
+        // Don't fail the booking if email fails
+      }
+    } else {
+      console.log('📧 Paid booking - email will be sent after payment confirmation via success page')
+    }
 
     // If NOT free and payment is required, store as pending booking instead of creating immediately
     if (!isFree && (body.paymentStatus === 'pending_payment' || body.paymentMethod === 'paystack')) {

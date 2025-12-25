@@ -33,12 +33,10 @@ function formatDate(dateStr: string): string {
 }
 
 function formatTime(timeStr: string): string {
-  const timeMap: Record<string, string> = {
-    morning: '9:00 AM - 12:00 PM',
-    afternoon: '12:00 PM - 4:00 PM',
-    evening: '4:00 PM - 7:00 PM',
-  }
-  return timeMap[timeStr] || timeStr
+  if (!timeStr) return 'Not specified'
+  // Return the actual time string as-is (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+  // No more hardcoded mappings - use the exact time that was booked
+  return timeStr.trim()
 }
 
 async function sendRebookingEmail(data: ConsultationSubmission, originalDate: string, originalTime: string) {
@@ -215,16 +213,52 @@ export async function POST(request: NextRequest) {
     const originalDate = originalConsultation.preferredDate
     const originalTime = originalConsultation.preferredTime
 
-    // Check if new slot is already booked
-    const isSlotBooked = consultationsData.consultations.some(
-      (c, index) => 
-        index !== consultationIndex &&
-        c.preferredDate === preferredDate && 
-        c.preferredTime === preferredTime &&
-        c.status !== 'cancelled'
+    // Normalize time for comparison
+    const normalizeTimeForComparison = (timeStr: string): string => {
+      if (!timeStr) return ''
+      return timeStr.toLowerCase().trim()
+    }
+    
+    const requestedTimeNormalized = normalizeTimeForComparison(preferredTime)
+    
+    // Check if new slot is already booked (check both consultations AND showcase bookings)
+    // Reuse consultationsData already loaded above
+    const showcaseBookings = await readDataFile<Array<{ appointmentDate?: string; appointmentTime?: string; status?: string }>>('labs-showcase-bookings.json', [])
+    
+    // Check consultations
+    const isConsultationBooked = consultationsData.consultations.some(
+      (c, index) => {
+        if (index === consultationIndex) return false // Skip the current consultation being rebooked
+        if (!c.preferredDate || !c.preferredTime) return false
+        if (c.status === 'cancelled') return false
+        
+        const consultationTime = normalizeTimeForComparison(c.preferredTime)
+        return c.preferredDate === preferredDate && 
+               consultationTime === requestedTimeNormalized
+      }
+    )
+    
+    // Check showcase bookings
+    // IMPORTANT: Check ALL non-cancelled bookings (not just confirmed) to prevent double booking
+    const isShowcaseBooked = showcaseBookings.some(
+      booking => {
+        if (!booking.appointmentDate || !booking.appointmentTime) return false
+        // Block ALL non-cancelled bookings (pending, confirmed, etc.) to prevent double booking
+        if (booking.status?.toLowerCase() === 'cancelled') return false
+        
+        // Parse appointment date to YYYY-MM-DD format
+        const appointmentDate = new Date(booking.appointmentDate)
+        const requestedDate = new Date(preferredDate)
+        const dateMatch = appointmentDate.toISOString().split('T')[0] === requestedDate.toISOString().split('T')[0]
+        
+        if (!dateMatch) return false
+        
+        const bookingTime = normalizeTimeForComparison(booking.appointmentTime)
+        return bookingTime === requestedTimeNormalized
+      }
     )
 
-    if (isSlotBooked) {
+    if (isConsultationBooked || isShowcaseBooked) {
       return NextResponse.json(
         { error: 'This time slot is already booked. Please select another date or time.' },
         { status: 400 }

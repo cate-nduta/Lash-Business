@@ -11,18 +11,63 @@ import type { ConsultationSubmission } from './route'
 // Generate iCal calendar file
 function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string | null): string {
   const formatDateForICS = (dateStr: string, timeStr: string): Date => {
-    const date = new Date(dateStr)
-    let hour = 10 // Default to 10 AM
-    
-    if (timeStr === 'morning') {
-      hour = 10 // 10 AM
-    } else if (timeStr === 'afternoon') {
-      hour = 14 // 2 PM
-    } else if (timeStr === 'evening') {
-      hour = 17 // 5 PM
+    // Parse date string (expected format: YYYY-MM-DD)
+    // Extract just the date part to avoid timezone issues
+    const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (!dateMatch) {
+      // Fallback: try to parse as-is
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date format: ${dateStr}`)
+      }
+      // Set time to noon to avoid timezone issues, then we'll set the actual time
+      date.setHours(12, 0, 0, 0)
+      // Continue with time parsing below
     }
     
-    date.setHours(hour, 0, 0, 0)
+    // Parse date components (YYYY-MM-DD format)
+    const [year, month, day] = dateMatch ? dateMatch[1].split('-').map(Number) : []
+    if (!year || !month || !day) {
+      throw new Error(`Invalid date format: ${dateStr}`)
+    }
+    
+    // Parse actual time string (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+    // Remove any whitespace and convert to lowercase for parsing
+    const normalizedTime = timeStr.trim().toLowerCase()
+    let hour = 10 // Default to 10 AM
+    let minute = 0
+    
+    // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM"
+    const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+    if (timeMatch) {
+      hour = parseInt(timeMatch[1], 10)
+      minute = parseInt(timeMatch[2], 10)
+      const period = timeMatch[3].toLowerCase()
+      
+      // Convert to 24-hour format
+      if (period === 'pm' && hour !== 12) {
+        hour += 12
+      } else if (period === 'am' && hour === 12) {
+        hour = 0
+      }
+    } else {
+      // Fallback: try to match common patterns
+      if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30')) {
+        hour = 9
+        minute = 30
+      } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon')) {
+        hour = 12
+        minute = 0
+      } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30')) {
+        hour = 15
+        minute = 30
+      }
+    }
+    
+    // Create date in local timezone (Nairobi/EAT = UTC+3)
+    // Use the date components directly to avoid timezone conversion issues
+    const date = new Date(year, month - 1, day, hour, minute, 0, 0)
+    
     return date
   }
 
@@ -120,24 +165,9 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return 'Not specified'
-    // Normalize the time string to handle case variations
-    const normalizedTime = timeStr.toLowerCase().trim()
-    const timeMap: Record<string, string> = {
-      morning: '9:00 AM - 12:00 PM',
-      afternoon: '12:00 PM - 4:00 PM',
-      evening: '4:00 PM - 7:00 PM',
-    }
-    // Check both exact match and normalized match
-    const mappedTime = timeMap[normalizedTime] || timeMap[timeStr] || timeStr
-    // Log for debugging if time doesn't match expected values
-    if (!timeMap[normalizedTime] && !timeMap[timeStr]) {
-      console.warn('⚠️ Unexpected time value in consultation email:', {
-        original: timeStr,
-        normalized: normalizedTime,
-        consultationId: data.consultationId,
-      })
-    }
-    return mappedTime
+    // Return the actual time string as-is (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+    // No more hardcoded mappings - use the exact time that was booked
+    return timeStr.trim()
   }
 
   const businessTypeMap: Record<string, string> = {
@@ -549,26 +579,31 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
 </html>
     `.trim()
 
-    // Only send confirmation email to client if payment has been confirmed
-    // Payment is confirmed if: paymentStatus is 'paid' or 'not_required'
-    // We explicitly check to prevent sending confirmation before payment
+    // Send confirmation email to client if:
+    // 1. Payment is confirmed (paid or not_required), OR
+    // 2. Consultation status is confirmed (for free consultations or when called from route handler)
+    // This ensures emails are sent for both free and paid consultations
     const paymentConfirmed = data.paymentStatus === 'paid' || data.paymentStatus === 'not_required'
+    const consultationConfirmed = data.status === 'confirmed'
     
-    if (!paymentConfirmed) {
-      console.warn('⚠️ Skipping client consultation confirmation email - payment not confirmed yet:', {
+    if (!paymentConfirmed && !consultationConfirmed) {
+      console.warn('⚠️ Skipping client consultation confirmation email - consultation not confirmed yet:', {
         consultationId: data.consultationId,
         email: data.email,
         paymentStatus: data.paymentStatus,
         status: data.status,
-        note: 'Business notification email was already sent above. Client confirmation will be sent after payment is confirmed.',
+        note: 'Business notification email was already sent above. Client confirmation will be sent after consultation is confirmed.',
       })
       return
     }
     
-    console.log('✅ Sending client consultation confirmation email - payment confirmed:', {
+    console.log('✅ Sending client consultation confirmation email:', {
       consultationId: data.consultationId,
       email: data.email,
       paymentStatus: data.paymentStatus,
+      status: data.status,
+      paymentConfirmed,
+      consultationConfirmed,
     })
 
     await transporter.sendMail({

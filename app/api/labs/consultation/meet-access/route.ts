@@ -10,12 +10,46 @@ const JOIN_WINDOW_BEFORE_MINUTES = 15
 const JOIN_WINDOW_AFTER_MINUTES = 60
 
 function getTimeForConsultation(timeStr: string): { startHour: number; startMinute: number; endHour: number; endMinute: number } {
-  const timeMap: Record<string, { startHour: number; startMinute: number; endHour: number; endMinute: number }> = {
-    morning: { startHour: 9, startMinute: 0, endHour: 12, endMinute: 0 },
-    afternoon: { startHour: 12, startMinute: 0, endHour: 16, endMinute: 0 },
-    evening: { startHour: 16, startMinute: 0, endHour: 19, endMinute: 0 },
+  // Parse actual time string (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+  const normalizedTime = timeStr.trim().toLowerCase()
+  
+  // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM"
+  const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+  if (timeMatch) {
+    let hour = parseInt(timeMatch[1], 10)
+    const minute = parseInt(timeMatch[2], 10)
+    const period = timeMatch[3].toLowerCase()
+    
+    // Convert to 24-hour format
+    if (period === 'pm' && hour !== 12) {
+      hour += 12
+    } else if (period === 'am' && hour === 12) {
+      hour = 0
+    }
+    
+    // Consultation duration is 1 hour
+    const endHour = hour + 1
+    const endMinute = minute
+    
+    return {
+      startHour: hour,
+      startMinute: minute,
+      endHour: endHour > 23 ? 23 : endHour,
+      endMinute: endMinute,
+    }
   }
-  return timeMap[timeStr] || { startHour: 10, startMinute: 0, endHour: 11, endMinute: 0 }
+  
+  // Fallback: try to match common patterns
+  if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30')) {
+    return { startHour: 9, startMinute: 30, endHour: 10, endMinute: 30 }
+  } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon')) {
+    return { startHour: 12, startMinute: 0, endHour: 13, endMinute: 0 }
+  } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30')) {
+    return { startHour: 15, startMinute: 30, endHour: 16, endMinute: 30 }
+  }
+  
+  // Default fallback
+  return { startHour: 10, startMinute: 0, endHour: 11, endMinute: 0 }
 }
 
 function formatTimeRemaining(targetDate: Date): string {
@@ -54,12 +88,10 @@ function formatDate(dateStr: string): string {
 }
 
 function formatTime(timeStr: string): string {
-  const timeMap: Record<string, string> = {
-    morning: '9:00 AM - 12:00 PM',
-    afternoon: '12:00 PM - 4:00 PM',
-    evening: '4:00 PM - 7:00 PM',
-  }
-  return timeMap[timeStr] || timeStr
+  if (!timeStr) return 'Not specified'
+  // Return the actual time string as-is (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
+  // No more hardcoded mappings - use the exact time that was booked
+  return timeStr.trim()
 }
 
 export async function GET(request: NextRequest) {
