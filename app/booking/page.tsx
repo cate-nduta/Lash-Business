@@ -1856,91 +1856,91 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       let createdBookingId: string | null = null
 
       // Payment method will be selected on Paystack page
-      // Create booking first with pending payment status
-      const timestamp = Date.now()
-      const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          service: selectedServiceNames.length > 0 
-            ? selectedServiceNames.join(' + ') 
-            : formData.service || 'Lash Service',
-          services: selectedServiceNames,
-          serviceDetails: cartItems.map(item => ({
-            serviceId: item.serviceId,
-            name: item.name,
-            price: item.price,
-            priceUSD: item.priceUSD,
-            duration: item.duration,
-            categoryId: item.categoryId,
-            categoryName: item.categoryName,
-          })),
-          location: STUDIO_LOCATION,
-          isFirstTimeClient: effectiveIsFirstTimeClient === true,
-          originalPrice: pricingDetails.originalPrice,
-          discount: pricingDetails.discount,
-          finalPrice: pricingDetails.finalPrice,
+        // Create booking first with pending payment status
+        const timestamp = Date.now()
+        const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...formData,
+            service: selectedServiceNames.length > 0 
+              ? selectedServiceNames.join(' + ') 
+              : formData.service || 'Lash Service',
+            services: selectedServiceNames,
+            serviceDetails: cartItems.map(item => ({
+              serviceId: item.serviceId,
+              name: item.name,
+              price: item.price,
+              priceUSD: item.priceUSD,
+              duration: item.duration,
+              categoryId: item.categoryId,
+              categoryName: item.categoryName,
+            })),
+            location: STUDIO_LOCATION,
+            isFirstTimeClient: effectiveIsFirstTimeClient === true,
+            originalPrice: pricingDetails.originalPrice,
+            discount: pricingDetails.discount,
+            finalPrice: pricingDetails.finalPrice,
           deposit: pricingDetails.finalPrice, // Full payment (Paystack handles method selection)
-          paymentType: 'full',
-          discountType: pricingDetails.discountType,
-          promoCode: promoCodeData?.code || null,
-          promoCodeType: referralType,
-          salonReferral: salonReferralContext,
-          giftCardCode: giftCardData?.valid ? giftCardData.code : null,
-          paymentMethod: 'paystack',
-          paymentStatus: 'pending_payment',
-          currency: currency,
-          desiredLook: 'Custom',
-        }),
-      })
+            paymentType: 'full',
+            discountType: pricingDetails.discountType,
+            promoCode: promoCodeData?.code || null,
+            promoCodeType: referralType,
+            salonReferral: salonReferralContext,
+            giftCardCode: giftCardData?.valid ? giftCardData.code : null,
+            paymentMethod: 'paystack',
+            paymentStatus: 'pending_payment',
+            currency: currency,
+            desiredLook: 'Custom',
+          }),
+        })
 
-      const bookingData = await bookingResponse.json()
-      if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
-        bookingCreated = true
-        createdBookingId = bookingData.bookingId
-        
-        // Now initiate payment with booking ID (Paystack will handle method selection)
-        const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
-        paymentResult = { ...cardResult }
-        
-        if (cardResult.success && cardResult.orderTrackingId) {
-          // Update booking with Paystack reference
-          try {
-            await fetch(`/api/booking/update-payment-tracking`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                bookingId: createdBookingId,
-                paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
-                paymentMethod: 'paystack',
-              }),
-            })
-          } catch (error) {
-            console.error('Error updating booking with Paystack reference:', error)
-          }
+        const bookingData = await bookingResponse.json()
+        if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
+          bookingCreated = true
+          createdBookingId = bookingData.bookingId
           
-          setLoading(false)
-          return // User will be redirected to payment page
+        // Now initiate payment with booking ID (Paystack will handle method selection)
+          const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
+          paymentResult = { ...cardResult }
+          
+          if (cardResult.success && cardResult.orderTrackingId) {
+            // Update booking with Paystack reference
+            try {
+              await fetch(`/api/booking/update-payment-tracking`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  bookingId: createdBookingId,
+                  paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
+                  paymentMethod: 'paystack',
+                }),
+              })
+            } catch (error) {
+              console.error('Error updating booking with Paystack reference:', error)
+            }
+            
+            setLoading(false)
+            return // User will be redirected to payment page
+          } else {
+            setSubmitStatus({
+              type: 'error',
+              message: 'Payment Failed',
+            details: cardResult.error || 'Failed to initiate payment. Please try again.',
+            })
+            setLoading(false)
+            return
+          }
         } else {
           setSubmitStatus({
             type: 'error',
-            message: 'Payment Failed',
-            details: cardResult.error || 'Failed to initiate payment. Please try again.',
+            message: 'Booking Failed',
+            details: bookingData.error || 'Failed to create booking. Please try again.',
           })
           setLoading(false)
           return
-        }
-      } else {
-        setSubmitStatus({
-          type: 'error',
-          message: 'Booking Failed',
-          details: bookingData.error || 'Failed to create booking. Please try again.',
-        })
-        setLoading(false)
-        return
       }
       
       // Legacy M-Pesa code removed - Paystack handles all payment methods
@@ -2809,14 +2809,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             {/* Payment Info */}
             <div id="payment-method-section" className="rounded-lg border-2 border-brown-light bg-white p-4 sm:p-5">
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-start gap-2">
-                  <span className="text-lg">ℹ️</span>
-                  <div className="text-sm text-blue-900">
-                    <p className="font-medium mb-1">Secure Payment</p>
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">ℹ️</span>
+                    <div className="text-sm text-blue-900">
+                      <p className="font-medium mb-1">Secure Payment</p>
                     <p>You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa). We accept both KES and USD.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
             </div>
 
             {/* Terms Acknowledgement */}

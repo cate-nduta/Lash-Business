@@ -15,7 +15,7 @@ export default function Cart() {
   const [pickupLocation, setPickupLocation] = useState('Pick up Mtaani')
   const [deliveryOption, setDeliveryOption] = useState<'pickup' | 'delivery' | 'lash_suite'>('lash_suite')
   const [deliveryAddress, setDeliveryAddress] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | null>(null)
+  // Payment method not needed - Paystack handles all payment methods
   const [phoneNumber, setPhoneNumber] = useState('')
   const [email, setEmail] = useState('')
   const [processing, setProcessing] = useState(false)
@@ -62,18 +62,9 @@ export default function Cart() {
       return
     }
 
-    if (!paymentMethod) {
-      alert('Please select a payment method')
-      return
-    }
-
-    if (paymentMethod === 'mpesa' && !phoneNumber.trim()) {
-      alert('Please enter your phone number for M-Pesa payment')
-      return
-    }
-
-    if (paymentMethod === 'card' && !email.trim() && !phoneNumber.trim()) {
-      alert('Please enter your email or phone number so we can notify you when your order is ready')
+    // Email is required for Paystack payment processing
+    if (!email.trim() || !email.includes('@')) {
+      alert('Please enter a valid email address for payment processing')
       return
     }
 
@@ -93,7 +84,7 @@ export default function Cart() {
             productId: item.productId,
             quantity: item.quantity,
           })),
-          paymentMethod,
+          // Payment method not needed - Paystack handles all payment methods
           phoneNumber: phoneNumber.trim() || undefined,
           email: email.trim() || undefined,
           deliveryOption,
@@ -109,14 +100,43 @@ export default function Cart() {
         return
       }
 
-      // If PesaPal redirect URL is provided, redirect to payment page
-      if (data.redirectUrl) {
-        // Redirect to PesaPal payment page
-        window.location.href = data.redirectUrl
-        return
+      // Order created - now initialize Paystack payment
+      if (data.success && data.orderId) {
+        // Initialize Paystack payment
+        const paymentResponse = await fetch('/api/paystack/initialize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email || data.customerEmail || 'customer@example.com',
+            amount: data.total || data.amount,
+            currency: 'KES',
+            metadata: {
+              payment_type: 'shop_order',
+              order_id: data.orderId,
+              items: data.items?.map((item: any) => item.name).join(', ') || 'Shop items',
+            },
+            customerName: data.customerName || 'Customer',
+            phone: phoneNumber || data.customerPhone || undefined,
+          }),
+        })
+
+        const paymentData = await paymentResponse.json()
+
+        if (paymentResponse.ok && paymentData.success && paymentData.authorizationUrl) {
+          // Payment reference will be handled by Paystack webhook when payment is confirmed
+          // No need to update here - webhook will handle order status update
+
+          // Redirect to Paystack payment page
+          window.location.href = paymentData.authorizationUrl
+          return
+        } else {
+          alert(paymentData.error || 'Failed to initialize payment. Please try again.')
+          setProcessing(false)
+          return
+        }
       }
 
-      // Otherwise, show success message (fallback for manual payment)
+      // Fallback (should not reach here if order was created successfully)
       setSuccessMessage(
         data.message ||
           'Order received! We will reach out shortly with payment instructions and pickup details.'
@@ -128,7 +148,6 @@ export default function Cart() {
       })
       setShowSuccessModal(true)
       clearCart()
-      setPaymentMethod(null)
       setPhoneNumber('')
       setEmail('')
       setDeliveryOption('lash_suite')
@@ -328,66 +347,41 @@ export default function Cart() {
                 </div>
               </div>
 
-              {/* Payment Method */}
-              <div className="space-y-3 mb-6">
-                <label className="block text-sm font-medium text-brown-dark">Payment Method</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="mpesa"
-                      checked={paymentMethod === 'mpesa'}
-                      onChange={() => setPaymentMethod('mpesa')}
-                      className="w-4 h-4 text-brown-dark"
-                    />
-                    <span className="text-brown-dark">M-Pesa</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="card"
-                      checked={paymentMethod === 'card'}
-                      onChange={() => setPaymentMethod('card')}
-                      className="w-4 h-4 text-brown-dark"
-                    />
-                    <span className="text-brown-dark">Card Payment</span>
-                  </label>
-                </div>
-              </div>
-
               {/* Contact Info */}
               <div className="space-y-3 mb-6">
-                {paymentMethod === 'mpesa' && (
-                  <div>
-                    <label className="block text-sm font-medium text-brown-dark mb-2">
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="254712345678"
-                      className="w-full rounded-lg border-2 border-brown-light bg-white px-3 py-2 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
-                    />
-                  </div>
-                )}
+                {/* Payment will be handled by Paystack - no method selection needed */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Secure Payment:</strong> You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa).
+                  </p>
+                </div>
 
-                {(paymentMethod === 'card' || paymentMethod === 'mpesa') && (
-                  <div>
-                    <label className="block text-sm font-medium text-brown-dark mb-2">
-                      Email {paymentMethod === 'card' && '*'}
-                    </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="your@email.com"
-                      className="w-full rounded-lg border-2 border-brown-light bg-white px-3 py-2 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="w-full rounded-lg border-2 border-brown-light bg-white px-3 py-2 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Phone Number <span className="text-sm text-brown-dark/60">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="254712345678"
+                    className="w-full rounded-lg border-2 border-brown-light bg-white px-3 py-2 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+                  />
+                </div>
               </div>
 
               <button

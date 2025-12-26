@@ -39,7 +39,8 @@ export default function LabsCheckout() {
   const [tier, setTier] = useState<PricingTier | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | null>(null)
+  // Payment method will be selected on payment page, default to card
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | null>('card')
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
   const [email, setEmail] = useState('')
@@ -89,11 +90,8 @@ export default function LabsCheckout() {
     if (!tier) return
 
     // Validation
-    // For free tiers, payment method is not required
-    if (tier.priceKES > 0 && !paymentMethod) {
-      setError('Please select a payment method')
-      return
-    }
+    // Payment method defaults to 'card' - user can change it if needed
+    const finalPaymentMethod = paymentMethod || 'card'
 
     if (!businessName.trim()) {
       setError('Business name is required')
@@ -105,24 +103,24 @@ export default function LabsCheckout() {
       return
     }
 
-    // Phone number only required for M-Pesa payments (not for free tiers)
-    if (tier.priceKES > 0 && paymentMethod === 'mpesa' && !phoneLocalNumber.trim()) {
-      setError('Phone number is required for M-Pesa payment')
-      return
-    }
+      // Phone number only required for M-Pesa payments (not for free tiers)
+      if (tier.priceKES > 0 && finalPaymentMethod === 'mpesa' && !phoneLocalNumber.trim()) {
+        setError('Phone number is required for M-Pesa payment')
+        return
+      }
 
     setError(null)
     setProcessing(true)
 
     try {
-      const fullPhone = paymentMethod === 'mpesa' 
+      const fullPhone = finalPaymentMethod === 'mpesa' 
         ? `${phoneCountryCode}${phoneLocalNumber.replace(/\D/g, '')}`
         : undefined
 
       // Ensure paymentMethod is set correctly
-      const finalPaymentMethod = tier.priceKES === 0 
+      const apiPaymentMethod = tier.priceKES === 0 
         ? 'free' 
-        : (paymentMethod || 'card') // Default to 'card' if somehow null for paid tiers
+        : finalPaymentMethod // Use the final payment method
 
       const response = await fetch('/api/labs/checkout', {
         method: 'POST',
@@ -132,7 +130,7 @@ export default function LabsCheckout() {
           businessName: businessName.trim(),
           email: email.trim(),
           phone: fullPhone,
-          paymentMethod: finalPaymentMethod,
+          paymentMethod: apiPaymentMethod,
           currency: currency || 'KES',
         }),
       })
@@ -180,11 +178,11 @@ export default function LabsCheckout() {
       }
 
       // If M-Pesa, show waiting message
-      if (paymentMethod === 'mpesa' && data.checkoutRequestID) {
+      if (finalPaymentMethod === 'mpesa' && data.checkoutRequestID) {
         setOrderId(data.orderId)
         // Poll for payment status
         pollPaymentStatus(data.orderId, data.checkoutRequestID)
-      } else if (paymentMethod === 'card') {
+      } else if (finalPaymentMethod === 'card') {
         // For card payments, redirect to payment gateway or show success
         // For now, we'll assume card payment is handled differently
         setSuccess(true)

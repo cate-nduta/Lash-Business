@@ -56,7 +56,8 @@ export default function GiftCards() {
   const [purchasing, setPurchasing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [purchasedCard, setPurchasedCard] = useState<any>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'later' | null>(null)
+  // Payment method will be selected on Paystack page, default to card (Paystack)
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'card' | 'later' | null>('card')
   const [mpesaPhone, setMpesaPhone] = useState('')
   const [mpesaStatus, setMpesaStatus] = useState<{ loading: boolean; success: boolean | null; message: string }>({
     loading: false,
@@ -273,11 +274,8 @@ export default function GiftCards() {
       return
     }
 
-    // If no payment method selected, show error
-    if (!paymentMethod) {
-      setMessage({ type: 'error', text: 'Please select a payment method' })
-      return
-    }
+    // Payment method will be selected on Paystack page - default to Paystack (card)
+    const finalPaymentMethod = paymentMethod || 'card'
 
     setPurchasing(true)
     setMessage(null)
@@ -286,7 +284,7 @@ export default function GiftCards() {
       // Process payment first (unless pay later)
       let paymentResult: { success: boolean; checkoutRequestID?: string; orderTrackingId?: string; error?: string } = { success: false }
 
-      if (paymentMethod === 'mpesa') {
+      if (finalPaymentMethod === 'mpesa') {
         if (!mpesaPhone || mpesaPhone.trim() === '') {
           setMessage({ type: 'error', text: 'Please enter your M-Pesa phone number' })
           setPurchasing(false)
@@ -297,7 +295,8 @@ export default function GiftCards() {
           setPurchasing(false)
           return
         }
-      } else if (paymentMethod === 'card') {
+      } else if (finalPaymentMethod === 'card') {
+        // Default to Paystack - user will choose payment method on Paystack page
         paymentResult = await initiateCardPayment(amount)
         if (paymentResult.success) {
           // Card payment redirects, so we don't create gift card here
@@ -308,13 +307,13 @@ export default function GiftCards() {
           setPurchasing(false)
           return
         }
-      } else if (paymentMethod === 'later') {
+      } else if (finalPaymentMethod === 'later') {
         // Pay later - create gift card immediately without payment
         paymentResult = { success: true }
       }
 
       // Create gift card for M-Pesa (after payment initiated) or Pay Later
-      if ((paymentMethod === 'mpesa' && paymentResult.success) || paymentMethod === 'later') {
+      if ((finalPaymentMethod === 'mpesa' && paymentResult.success) || finalPaymentMethod === 'later') {
         try {
           const response = await fetch('/api/gift-cards/purchase', {
             method: 'POST',

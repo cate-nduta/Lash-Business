@@ -75,7 +75,7 @@ function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string |
     const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
     if (!dateMatch) {
       // Fallback: try to parse as-is
-      const date = new Date(dateStr)
+    const date = new Date(dateStr)
       if (isNaN(date.getTime())) {
         throw new Error(`Invalid date format: ${dateStr}`)
       }
@@ -430,12 +430,12 @@ export async function POST(request: NextRequest) {
         paymentStatus: consultationData.paymentStatus,
         isFree,
       })
-      try {
-        await sendConsultationEmail(consultationData)
+    try {
+      await sendConsultationEmail(consultationData)
         console.log('✅ Consultation confirmation email sent successfully')
-      } catch (error) {
+    } catch (error) {
         console.error('❌ Error sending consultation email:', error)
-        // Still return success if email fails - data is stored
+      // Still return success if email fails - data is stored
       }
     } else {
       console.log('📧 Email will be sent after payment is confirmed via IPN')

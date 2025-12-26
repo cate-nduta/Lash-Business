@@ -671,30 +671,8 @@ export default function LabsBookAppointment() {
         return
       }
 
-      // For paid consultations, require payment
-      // Validate payment method
-      if (!paymentMethod) {
-        setSubmitStatus({
-          type: 'error',
-          message: 'Please select a payment method to proceed with your consultation booking.',
-        })
-        setLoading(false)
-        // Scroll to payment section
-        setTimeout(() => {
-          document.getElementById('payment-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }, 100)
-        return
-      }
-      
-      // Validate phone number for M-Pesa
-      if (paymentMethod === 'mpesa' && (!phoneLocalNumber || phoneLocalNumber.trim().length < 9)) {
-        setSubmitStatus({
-          type: 'error',
-          message: 'Please enter a valid phone number for M-Pesa payment.',
-        })
-        setLoading(false)
-        return
-      }
+      // For paid consultations, payment will be handled on Paystack page
+      // No need to select payment method here - user will choose on Paystack
 
       // Initiate payment FIRST before creating consultation
       setPaymentStatus({ loading: true, success: null, message: 'Initializing payment...' })
@@ -1495,68 +1473,68 @@ export default function LabsBookAppointment() {
                     )
                   }
                   
-                  const selectedDateNormalized = normalizeDateForComparison(formData.preferredDate)
-                  
-                  // Get all booked slots for this specific date
-                  const dateBookedSlots = bookedSlots.filter(booked => {
-                    if (!booked.date || !booked.time) return false
-                    const bookedDate = normalizeDateForComparison(booked.date)
-                    return bookedDate === selectedDateNormalized
-                  })
-                  
-                  // Filter out booked slots
+                      const selectedDateNormalized = normalizeDateForComparison(formData.preferredDate)
+                      
+                      // Get all booked slots for this specific date
+                      const dateBookedSlots = bookedSlots.filter(booked => {
+                        if (!booked.date || !booked.time) return false
+                        const bookedDate = normalizeDateForComparison(booked.date)
+                        return bookedDate === selectedDateNormalized
+                      })
+                      
+                      // Filter out booked slots
                   const availableSlots = timeSlots.length > 0 ? timeSlots.filter(slot => {
-                    const slotTimeLabel = slot.label.toLowerCase().trim()
-                    
-                    // Check if this slot matches any booked slot for this date
-                    const isBooked = dateBookedSlots.some(booked => {
-                      const bookedTime = normalizeTimeForComparison(booked.time)
-                      
-                      // Multiple matching strategies
-                      // 1. Exact match (case insensitive)
-                      if (bookedTime === slotTimeLabel) return true
-                      
-                      // 2. Contains match (handles variations)
-                      if (bookedTime.includes(slotTimeLabel) || slotTimeLabel.includes(bookedTime)) return true
-                      
-                      // 3. Match by hour:minute format
-                      const slotTimeStr = `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`
-                      const bookedTimeDigits = bookedTime.replace(/[^0-9:]/g, '')
-                      if (bookedTimeDigits.includes(slotTimeStr) || slotTimeStr.includes(bookedTimeDigits)) return true
-                      
-                      // 4. Match the original label (case insensitive)
-                      if (bookedTime === slot.label.toLowerCase().trim()) return true
-                      
-                      return false
-                    })
-                    
-                    return !isBooked
+                        const slotTimeLabel = slot.label.toLowerCase().trim()
+                        
+                        // Check if this slot matches any booked slot for this date
+                        const isBooked = dateBookedSlots.some(booked => {
+                          const bookedTime = normalizeTimeForComparison(booked.time)
+                          
+                          // Multiple matching strategies
+                          // 1. Exact match (case insensitive)
+                          if (bookedTime === slotTimeLabel) return true
+                          
+                          // 2. Contains match (handles variations)
+                          if (bookedTime.includes(slotTimeLabel) || slotTimeLabel.includes(bookedTime)) return true
+                          
+                          // 3. Match by hour:minute format
+                          const slotTimeStr = `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`
+                          const bookedTimeDigits = bookedTime.replace(/[^0-9:]/g, '')
+                          if (bookedTimeDigits.includes(slotTimeStr) || slotTimeStr.includes(bookedTimeDigits)) return true
+                          
+                          // 4. Match the original label (case insensitive)
+                          if (bookedTime === slot.label.toLowerCase().trim()) return true
+                          
+                          return false
+                        })
+                        
+                        return !isBooked
                   }) : []
                   
                   // Check fallback slots (old system)
                   const fallbackSlots = []
                   if (timeSlots.length === 0) {
                     if (!bookedSlots.some(slot => {
-                      const slotDate = normalizeDateForComparison(slot.date)
-                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                      const slotTime = normalizeTimeForComparison(slot.time)
-                      return slotDate === selectedDate && slotTime === 'morning'
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'morning'
                     })) {
                       fallbackSlots.push({ value: 'morning', label: 'Morning (9 AM - 12 PM)' })
                     }
                     if (!bookedSlots.some(slot => {
-                      const slotDate = normalizeDateForComparison(slot.date)
-                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                      const slotTime = normalizeTimeForComparison(slot.time)
-                      return slotDate === selectedDate && slotTime === 'afternoon'
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'afternoon'
                     })) {
                       fallbackSlots.push({ value: 'afternoon', label: 'Afternoon (12 PM - 4 PM)' })
                     }
                     if (!bookedSlots.some(slot => {
-                      const slotDate = normalizeDateForComparison(slot.date)
-                      const selectedDate = normalizeDateForComparison(formData.preferredDate)
-                      const slotTime = normalizeTimeForComparison(slot.time)
-                      return slotDate === selectedDate && slotTime === 'evening'
+                        const slotDate = normalizeDateForComparison(slot.date)
+                        const selectedDate = normalizeDateForComparison(formData.preferredDate)
+                        const slotTime = normalizeTimeForComparison(slot.time)
+                        return slotDate === selectedDate && slotTime === 'evening'
                     })) {
                       fallbackSlots.push({ value: 'evening', label: 'Evening (4 PM - 7 PM)' })
                     }
@@ -1575,7 +1553,7 @@ export default function LabsBookAppointment() {
                     )
                   }
                   
-                  return (
+                    return (
                     <>
                       <select
                         id="preferredTime"
@@ -1710,7 +1688,7 @@ export default function LabsBookAppointment() {
                     ? 'Reschedule Consultation (No Payment Required)' 
                     : consultationFeeKES === 0
                       ? 'Submit Free Consultation Request'
-                      : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
+                    : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
               </button>
               <Link
                 href="/labs"

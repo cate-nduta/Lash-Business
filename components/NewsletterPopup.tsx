@@ -9,9 +9,10 @@ export default function NewsletterPopup() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [discountPercentage, setDiscountPercentage] = useState(5) // Default to 5%
+  const [enabled, setEnabled] = useState(true) // Default to enabled
 
   useEffect(() => {
-    // Load discount percentage from public API
+    // Load discount percentage and enabled status from public API
     // Add timestamp to prevent caching - ensures fresh data every time
     const timestamp = Date.now()
     fetch(`/api/newsletter/discount?t=${timestamp}`, {
@@ -26,14 +27,22 @@ export default function NewsletterPopup() {
         if (typeof data?.discountPercentage === 'number') {
           setDiscountPercentage(Math.max(0, Math.min(100, data.discountPercentage)))
         }
+        if (typeof data?.enabled === 'boolean') {
+          setEnabled(data.enabled)
+        }
       })
       .catch(() => {
-        // If error, keep default 5%
-        console.warn('Could not load discount percentage, using default 5%')
+        // If error, keep defaults
+        console.warn('Could not load newsletter settings, using defaults')
       })
   }, [])
 
   useEffect(() => {
+    // Only show popup if enabled in settings
+    if (!enabled) {
+      return
+    }
+    
     // Check if popup has been shown before
     const hasSeenPopup = localStorage.getItem('newsletter-popup-shown')
     if (!hasSeenPopup) {
@@ -44,7 +53,7 @@ export default function NewsletterPopup() {
 
       return () => clearTimeout(timer)
     }
-  }, [])
+  }, [enabled])
 
   const handleClose = () => {
     setIsOpen(false)
@@ -100,7 +109,8 @@ export default function NewsletterPopup() {
     }
   }
 
-  if (!isOpen) return null
+  // Don't render if disabled or not open
+  if (!enabled || !isOpen) return null
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">

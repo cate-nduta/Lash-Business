@@ -42,7 +42,7 @@ const DEFAULT_PRODUCTS: ProductsPayload = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { productId, items, paymentMethod, phoneNumber, email, deliveryAddress } = body
+    const { productId, items, phoneNumber, email, deliveryAddress } = body
     let { deliveryOption } = body
 
     // Support both single product and cart checkout
@@ -53,9 +53,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Either productId or items array is required' }, { status: 400 })
     }
 
-    if (!paymentMethod || !['mpesa', 'card'].includes(paymentMethod)) {
-      return NextResponse.json({ error: 'Valid payment method is required (mpesa or card)' }, { status: 400 })
-    }
+    // Payment method will be selected on Paystack page - no need to validate here
+    // Paystack handles all payment methods (card, M-Pesa, etc.)
 
     const data = await readDataFile<ProductsPayload>('shop-products.json', DEFAULT_PRODUCTS)
     const products = data.products || []
@@ -139,16 +138,15 @@ export async function POST(request: NextRequest) {
       : 0
     const total = subtotal + transportCost
 
-    // Validate contact info
-    if (!email && !phoneNumber) {
+    // Email is required for Paystack payment processing
+    if (!email || !email.trim() || !email.includes('@')) {
       return NextResponse.json(
-        { error: 'Email or phone number is required so we can confirm your order.' },
+        { error: 'Valid email address is required for payment processing.' },
         { status: 400 },
       )
     }
 
-    // For both M-Pesa and card, use PesaPal
-    // PesaPal supports both payment methods
+    // Paystack handles all payment methods (card, M-Pesa, etc.)
     const orderItems = checkoutItems.map((item) => ({
       productId: item.product.id,
       productName: item.product.name,
@@ -171,7 +169,7 @@ export async function POST(request: NextRequest) {
     const order = {
       id: orderId,
       items: orderItems,
-      paymentMethod: 'pesapal', // Both M-Pesa and card go through PesaPal
+      paymentMethod: 'paystack', // Paystack handles all payment methods
       paymentStatus: 'pending',
       phoneNumber: phoneNumber || undefined,
       email: email || undefined,
@@ -184,7 +182,7 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       readyForPickupAt: null,
       pickedUpAt: null,
-      pesapalOrderTrackingId: null, // Will be set after PesaPal order submission
+      paymentOrderTrackingId: null, // Will be set after Paystack payment initialization
     }
 
     orders.unshift(order)
@@ -196,148 +194,21 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     })
 
-    // Submit order to PesaPal (import the function directly)
-    try {
-      // Import PesaPal submit order logic
-      const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || ''
-      const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || ''
-      const PESAPAL_ENVIRONMENT = process.env.PESAPAL_ENVIRONMENT || 'sandbox'
-      
-      // Check if Pesapal is configured
-      if (!PESAPAL_CONSUMER_KEY || !PESAPAL_CONSUMER_SECRET) {
-        throw new Error('Pesapal API credentials not configured. Please add PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET to your environment variables.')
-      }
-      
-      const getBaseUrl = (): string => {
-        const raw = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || ''
-        if (typeof raw === 'string' && raw.trim().length > 0) {
-          const trimmed = raw.trim().replace(/\/+$/, '')
-          if (/^https?:\/\//i.test(trimmed)) {
-            return trimmed
-          }
-          return `https://${trimmed}`
-        }
-        return 'https://lashdiary.co.ke'
-      }
-      
-      const PESAPAL_CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || `${getBaseUrl()}/api/pesapal/callback`
-      const PESAPAL_IPN_URL = process.env.PESAPAL_IPN_URL || `${getBaseUrl()}/api/pesapal/ipn`
-      const PESAPAL_BASE_URL = PESAPAL_ENVIRONMENT === 'live'
-        ? 'https://pay.pesapal.com/v3'
-        : 'https://cybqa.pesapal.com/pesapalv3'
-
-      // Get access token - Pesapal v3 uses Basic authentication (not Bearer)
-      const auth = Buffer.from(`${PESAPAL_CONSUMER_KEY}:${PESAPAL_CONSUMER_SECRET}`).toString('base64')
-      const tokenResponse = await fetch(`${PESAPAL_BASE_URL}/api/Auth/RequestToken`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${auth}`, // Changed from Bearer to Basic
-        },
-        body: JSON.stringify({}),
-      })
-
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to get PesaPal access token')
-      }
-
-      const tokenData = await tokenResponse.json()
-      const accessToken = tokenData.token
-
-      // Generate order tracking ID
-      const orderTrackingId = `LashDiary-Shop-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-
-      // Prepare order data
-      const pesapalOrderData = {
-        id: orderTrackingId,
-        currency: 'KES',
-        amount: Math.round(total),
-        description: `LashDiary Shop Order - ${orderItems.map((item) => item.productName).join(', ')}`,
-        callback_url: PESAPAL_CALLBACK_URL,
-        notification_id: PESAPAL_IPN_URL,
-        billing_address: {
-          email_address: email || undefined,
-          phone_number: phoneNumber || null,
-          country_code: 'KE',
-          first_name: firstName,
-          middle_name: '',
-          last_name: lastName,
-          line_1: '',
-          line_2: '',
-          city: '',
-          postal_code: '',
-          zip_code: '',
-        },
-      }
-
-      // Submit order to PesaPal
-      const pesapalResponse = await fetch(`${PESAPAL_BASE_URL}/api/Transactions/SubmitOrderRequest`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(pesapalOrderData),
-      })
-
-      const pesapalData = await pesapalResponse.json()
-
-      if (pesapalResponse.ok && pesapalData.redirect_url) {
-        // Update order with PesaPal tracking ID
-        const updatedOrders = orders.map((o: any) => 
-          o.id === orderId 
-            ? { ...o, pesapalOrderTrackingId: pesapalData.order_tracking_id || orderTrackingId }
-            : o
-        )
-        
-        await writeDataFile('shop-products.json', {
-          ...data,
-          orders: updatedOrders,
-          updatedAt: now,
-        })
-
-        return NextResponse.json({
-          success: true,
-          orderId,
-          paymentMethod: 'pesapal',
-          redirectUrl: pesapalData.redirect_url,
-          orderTrackingId: pesapalData.order_tracking_id || orderTrackingId,
-          message: 'Redirecting to secure payment page...',
-          items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
-          subtotal,
-          transportationFee: transportCost,
-          total,
-        })
-      } else {
-        console.error('PesaPal Submit Order Error:', pesapalData)
-        // If PesaPal fails, still create order but mark as pending manual payment
-        return NextResponse.json({
-          success: true,
-          orderId,
-          paymentMethod: 'pesapal',
-          message: pesapalData.message || pesapalData.error || 'Payment gateway temporarily unavailable. We will contact you with payment instructions.',
-          items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
-          subtotal,
-          transportationFee: transportCost,
-          total,
-        })
-      }
-    } catch (pesapalError: any) {
-      console.error('Error submitting to PesaPal:', pesapalError)
-      // If PesaPal fails, still create order but mark as pending manual payment
-      return NextResponse.json({
-        success: true,
-        orderId,
-        paymentMethod: 'pesapal',
-        message: 'Payment gateway temporarily unavailable. We will contact you with payment instructions.',
-        items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
-        subtotal,
-        transportationFee: transportCost,
-        total,
-      })
-    }
+    // Return order info - frontend will initialize Paystack payment
+    return NextResponse.json({
+      success: true,
+      orderId,
+      paymentMethod: 'paystack',
+      message: 'Order created. Proceed to payment.',
+      items: orderItems.map((item) => ({ name: item.productName, quantity: item.quantity })),
+      subtotal,
+      transportationFee: transportCost,
+      total,
+      amount: total,
+      customerName: `${firstName} ${lastName}`.trim() || 'Customer',
+      customerEmail: email || undefined,
+      customerPhone: phoneNumber || undefined,
+    })
   } catch (error: any) {
     console.error('Error processing checkout:', error)
     return NextResponse.json(

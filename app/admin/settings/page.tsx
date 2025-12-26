@@ -31,6 +31,7 @@ interface Settings {
   }
   newsletter?: {
     discountPercentage?: number
+    enabled?: boolean
   }
   exchangeRates?: {
     usdToKes?: number
@@ -62,6 +63,7 @@ export default function AdminSettings() {
     },
     newsletter: {
       discountPercentage: 10,
+      enabled: true,
     },
     exchangeRates: {
       usdToKes: 130,
@@ -148,9 +150,14 @@ export default function AdminSettings() {
         }
         // Ensure newsletter settings exist
         if (!loaded.newsletter) {
-          loaded.newsletter = { discountPercentage: 10 }
-        } else if (typeof loaded.newsletter.discountPercentage !== 'number') {
-          loaded.newsletter.discountPercentage = 10
+          loaded.newsletter = { discountPercentage: 10, enabled: true }
+        } else {
+          if (typeof loaded.newsletter.discountPercentage !== 'number') {
+            loaded.newsletter.discountPercentage = 10
+          }
+          if (typeof loaded.newsletter.enabled !== 'boolean') {
+            loaded.newsletter.enabled = true
+          }
         }
         // Ensure exchange rates exist
         if (!loaded.exchangeRates) {
@@ -883,6 +890,38 @@ export default function AdminSettings() {
           <div className="mb-8">
             <h2 className="text-2xl font-display text-brown-dark mb-4">Newsletter Settings</h2>
             <div className="space-y-4">
+              {/* Enable/Disable Toggle */}
+              <div className="flex items-center justify-between p-4 bg-baby-pink-light rounded-lg border-2 border-brown-light">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">
+                    Show Newsletter Popup
+                  </label>
+                  <p className="text-xs text-gray-600">
+                    When enabled, visitors will see the newsletter popup when they first land on your homepage. 
+                    When disabled, the popup will not appear.
+                  </p>
+                </div>
+                <div className="ml-4">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.newsletter?.enabled !== false}
+                      onChange={(e) => {
+                        setSettings(prev => ({
+                          ...prev,
+                          newsletter: {
+                            ...prev.newsletter,
+                            enabled: e.target.checked,
+                          }
+                        }))
+                        setHasUnsavedChanges(true)
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brown-dark rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brown-dark"></div>
+                  </label>
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-semibold text-brown-dark mb-2">
                   Welcome Discount Percentage
