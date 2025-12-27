@@ -43,6 +43,12 @@ export interface ConsultationSubmission {
   interestedTier: string
   selectedTier?: string // Optional field for selected tier
   consultationPrice: number
+  originalPrice?: number // Original price before discount
+  discountAmount?: number // Discount amount applied
+  discountCode?: string // Discount code used (waitlist or general discount code)
+  discountType?: 'percentage' | 'fixed' // Type of discount applied
+  discountValue?: number // Discount value (percentage or fixed amount)
+  discountPercentage?: number // Discount percentage applied (legacy field for backward compatibility)
   currency: string
   submittedAt: string
   source: string
@@ -332,6 +338,12 @@ export async function POST(request: NextRequest) {
       meetingBuilding: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingBuilding, { fieldName: 'Meeting building', maxLength: 200, optional: true }) || '') : '',
       meetingStreet: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingStreet, { fieldName: 'Meeting street', maxLength: 200, optional: true }) || '') : '',
       consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 0,
+      originalPrice: typeof body.originalPrice === 'number' ? body.originalPrice : undefined,
+      discountAmount: typeof body.discountAmount === 'number' ? body.discountAmount : undefined,
+      discountCode: typeof body.discountCode === 'string' ? body.discountCode : undefined,
+      discountType: typeof body.discountType === 'string' && (body.discountType === 'percentage' || body.discountType === 'fixed') ? body.discountType : undefined,
+      discountValue: typeof body.discountValue === 'number' ? body.discountValue : undefined,
+      discountPercentage: typeof body.discountPercentage === 'number' ? body.discountPercentage : undefined,
       currency: (body.currency === 'USD' || body.currency === 'KES') ? body.currency : 'KES',
       submittedAt: body.submittedAt || new Date().toISOString(),
       source: body.source || 'labs-consultation',

@@ -53,6 +53,164 @@ interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean
   courseSectionEnabled?: boolean
+  waitlistSectionEnabled?: boolean
+}
+
+interface WaitlistStatus {
+  enabled: boolean
+  isOpen: boolean
+  openDate: string | null
+  closeDate: string | null
+  countdownTargetDate: string | null
+  discountPercentage: number
+  totalSignups: number
+}
+
+interface CountdownTime {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
+function WaitlistSection({ enabled }: { enabled?: boolean }) {
+  const [waitlistStatus, setWaitlistStatus] = useState<WaitlistStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [countdown, setCountdown] = useState<CountdownTime | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
+
+    const fetchWaitlistStatus = async () => {
+      try {
+        const response = await fetch('/api/labs/waitlist', {
+          cache: 'no-store',
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setWaitlistStatus(data)
+        }
+      } catch (error) {
+        console.error('Error fetching waitlist status:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchWaitlistStatus()
+  }, [enabled])
+
+  // Countdown timer effect - countdown to close date
+  useEffect(() => {
+    // Use closeDate for countdown, fallback to countdownTargetDate if closeDate not available
+    const targetDateStr = waitlistStatus?.closeDate || waitlistStatus?.countdownTargetDate
+    if (!targetDateStr) {
+      setCountdown(null)
+      return
+    }
+
+    const targetDate = new Date(targetDateStr).getTime()
+    
+    const updateCountdown = () => {
+      const now = new Date().getTime()
+      const distance = targetDate - now
+
+      if (distance < 0) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+        return
+      }
+
+      setCountdown({
+        days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
+        seconds: Math.floor((distance % (1000 * 60)) / 1000),
+      })
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+
+    return () => clearInterval(interval)
+  }, [waitlistStatus?.closeDate, waitlistStatus?.countdownTargetDate])
+
+  // Don't show if section is disabled
+  if (!enabled) {
+    return null
+  }
+
+  // Show section even while loading or if status fetch fails - just show basic CTA
+  // The waitlist page will handle showing whether it's open or closed
+  return (
+    <div className="bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/20 mb-12">
+      <div className="text-center">
+        <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] mb-4">
+          Join the Waitlist ✨
+        </h2>
+        <p className="text-lg text-[var(--color-text)] mb-6 max-w-3xl mx-auto">
+          Be the first to know when LashDiary Labs launches and get exclusive early access.
+        </p>
+        
+        {/* Live Countdown Timer */}
+        {countdown !== null && (waitlistStatus?.closeDate || waitlistStatus?.countdownTargetDate) && (
+          <div className="mb-6">
+            <p className="text-base font-semibold text-[var(--color-primary)] mb-4">
+              Waitlist closes in:
+            </p>
+            <div className="flex justify-center gap-3 sm:gap-6">
+              <div className="bg-white rounded-lg shadow-lg border-2 border-[var(--color-primary)] p-4 sm:p-6 min-w-[70px] sm:min-w-[90px]">
+                <div className="text-3xl sm:text-4xl font-bold text-[var(--color-primary)] mb-1">
+                  {countdown.days}
+                </div>
+                <div className="text-xs sm:text-sm text-[var(--color-text)]/70 font-semibold uppercase">
+                  {countdown.days === 1 ? 'Day' : 'Days'}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow-lg border-2 border-[var(--color-primary)] p-4 sm:p-6 min-w-[70px] sm:min-w-[90px]">
+                <div className="text-3xl sm:text-4xl font-bold text-[var(--color-primary)] mb-1">
+                  {countdown.hours}
+                </div>
+                <div className="text-xs sm:text-sm text-[var(--color-text)]/70 font-semibold uppercase">
+                  {countdown.hours === 1 ? 'Hour' : 'Hours'}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow-lg border-2 border-[var(--color-primary)] p-4 sm:p-6 min-w-[70px] sm:min-w-[90px]">
+                <div className="text-3xl sm:text-4xl font-bold text-[var(--color-primary)] mb-1">
+                  {countdown.minutes}
+                </div>
+                <div className="text-xs sm:text-sm text-[var(--color-text)]/70 font-semibold uppercase">
+                  {countdown.minutes === 1 ? 'Minute' : 'Minutes'}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow-lg border-2 border-[var(--color-primary)] p-4 sm:p-6 min-w-[70px] sm:min-w-[90px]">
+                <div className="text-3xl sm:text-4xl font-bold text-[var(--color-primary)] mb-1">
+                  {countdown.seconds}
+                </div>
+                <div className="text-xs sm:text-sm text-[var(--color-text)]/70 font-semibold uppercase">
+                  {countdown.seconds === 1 ? 'Second' : 'Seconds'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && waitlistStatus && waitlistStatus.discountPercentage > 0 && (
+          <p className="text-base text-[var(--color-primary)] font-semibold mb-6">
+            🎉 Exclusive {waitlistStatus.discountPercentage}% discount for early signups!
+          </p>
+        )}
+        <Link
+          href="/labs/waitlist"
+          className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-8 py-4 rounded-lg font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
+        >
+          Join Waitlist
+        </Link>
+      </div>
+    </div>
+  )
 }
 
 export default function LabsPage() {
@@ -181,6 +339,9 @@ export default function LabsPage() {
               </div>
             </div>
           </div>
+
+          {/* Waitlist Section */}
+          <WaitlistSection enabled={settings?.waitlistSectionEnabled} />
 
           {/* Consultation Information Section */}
           <div className="mb-16">

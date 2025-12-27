@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
@@ -220,6 +220,16 @@ export default function LabsBookAppointment() {
   const [consultationFeeKES, setConsultationFeeKES] = useState<number>(0)
   const [loadingFee, setLoadingFee] = useState(true)
   const [selectedTier, setSelectedTier] = useState<PricingTier | null>(null)
+  const [discountSectionEnabled, setDiscountSectionEnabled] = useState(false)
+  const [waitlistPageEnabled, setWaitlistPageEnabled] = useState(false)
+  const [discountCode, setDiscountCode] = useState<string>('')
+  const [validatingDiscountCode, setValidatingDiscountCode] = useState(false)
+  const [discountCodeValidationStatus, setDiscountCodeValidationStatus] = useState<{
+    valid: boolean | null
+    discountType: 'percentage' | 'fixed' | null
+    discountValue: number
+    message: string
+  }>({ valid: null, discountType: null, discountValue: 0, message: '' })
   const [loadingTier, setLoadingTier] = useState(true)
   const [isRebooking, setIsRebooking] = useState(false)
   const [loadingRebookData, setLoadingRebookData] = useState(false)
@@ -232,6 +242,11 @@ export default function LabsBookAppointment() {
         if (response.ok) {
           const data = await response.json()
           setConsultationFeeKES(data.consultationFeeKES ?? 0)
+          
+          // Load discount section enabled flag
+          setDiscountSectionEnabled(data.discountSectionEnabled ?? false)
+          // Load waitlist page enabled flag
+          setWaitlistPageEnabled(data.waitlistPageEnabled ?? false)
           
           // Load budget ranges
           if (data.budgetRanges && Array.isArray(data.budgetRanges) && data.budgetRanges.length > 0) {
@@ -450,6 +465,70 @@ export default function LabsBookAppointment() {
     }
     return `${priceKES.toLocaleString('en-US')} KSH`
   }
+
+  // Validate discount code (waitlist discount codes)
+  const validateDiscountCode = useCallback(async (code: string) => {
+    if (!code || !code.trim()) {
+      setDiscountCodeValidationStatus({ valid: null, discountType: null, discountValue: 0, message: '' })
+      return
+    }
+
+    setValidatingDiscountCode(true)
+    try {
+      const response = await fetch('/api/labs/discount/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: code.trim(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.valid && data.discountValue > 0) {
+        setDiscountCodeValidationStatus({
+          valid: true,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+          message: data.discountType === 'percentage' 
+            ? `✓ Valid code! You'll get ${data.discountValue}% off your consultation fee.`
+            : `✓ Valid code! You'll get ${data.discountValue.toLocaleString()} KES off your consultation fee.`,
+        })
+      } else {
+        setDiscountCodeValidationStatus({
+          valid: false,
+          discountType: null,
+          discountValue: 0,
+          message: data.error || 'Invalid discount code',
+        })
+      }
+    } catch (error) {
+      setDiscountCodeValidationStatus({
+        valid: false,
+        discountType: null,
+        discountValue: 0,
+        message: 'Failed to validate discount code. Please try again.',
+      })
+    } finally {
+      setValidatingDiscountCode(false)
+    }
+  }, [])
+  
+  // Debounce discount code validation
+  useEffect(() => {
+    if (!discountCode || discountCode.trim().length < 3) {
+      setDiscountCodeValidationStatus({ valid: null, discountType: null, discountValue: 0, message: '' })
+      return
+    }
+    
+    const timeoutId = setTimeout(() => {
+      validateDiscountCode(discountCode)
+    }, 500)
+    
+    return () => clearTimeout(timeoutId)
+  }, [discountCode, validateDiscountCode])
 
   // Normalize date for comparison (ensure YYYY-MM-DD format)
   const normalizeDateForComparison = (dateStr: string): string => {
@@ -671,6 +750,40 @@ export default function LabsBookAppointment() {
         return
       }
 
+      // Apply waitlist discount if valid code is provided
+      let discountAmount = 0
+      let finalConsultationPrice = consultationPrice
+      let appliedDiscountCode: string | undefined = undefined
+      let appliedDiscountType: 'percentage' | 'fixed' | undefined = undefined
+      let appliedDiscountValue: number | undefined = undefined
+
+      // Check if discount code is applied (waitlist discount codes)
+      if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
+        if (discountCodeValidationStatus.discountType === 'percentage') {
+          discountAmount = (consultationPrice * discountCodeValidationStatus.discountValue) / 100
+        } else if (discountCodeValidationStatus.discountType === 'fixed') {
+          // For fixed discount, convert to currency if needed
+          if (currency === 'USD' && exchangeRates) {
+            discountAmount = discountCodeValidationStatus.discountValue / exchangeRates.usdToKes
+          } else {
+            discountAmount = discountCodeValidationStatus.discountValue
+          }
+        }
+        finalConsultationPrice = Math.max(0, consultationPrice - discountAmount)
+        appliedDiscountCode = discountCode.toUpperCase().trim()
+        appliedDiscountType = discountCodeValidationStatus.discountType || undefined
+        appliedDiscountValue = discountCodeValidationStatus.discountValue
+      }
+
+      // Round to 2 decimal places for USD, whole number for KES
+      if (currency === 'USD') {
+        finalConsultationPrice = Math.round(finalConsultationPrice * 100) / 100
+        discountAmount = Math.round(discountAmount * 100) / 100
+      } else {
+        finalConsultationPrice = Math.round(finalConsultationPrice)
+        discountAmount = Math.round(discountAmount)
+      }
+
       // For paid consultations, payment will be handled on Paystack page
       // No need to select payment method here - user will choose on Paystack
 
@@ -678,11 +791,16 @@ export default function LabsBookAppointment() {
       setPaymentStatus({ loading: true, success: null, message: 'Initializing payment...' })
       
       // Create consultation with pending payment status first
-      const consultationData = {
-        ...formData,
-        phone: fullPhone,
-        consultationPrice: consultationPrice,
-        currency: currency,
+        const consultationData = {
+          ...formData,
+          phone: fullPhone,
+          consultationPrice: finalConsultationPrice, // Final price after discount
+          originalPrice: consultationPrice, // Store original price before discount
+          discountAmount: discountAmount, // Store discount amount
+          discountCode: appliedDiscountCode, // Store discount code if used (either discount code or waitlist code)
+          discountType: appliedDiscountType, // Store discount type
+          discountValue: appliedDiscountValue, // Store discount value
+          currency: currency,
         submittedAt: new Date().toISOString(),
         source: 'labs-consultation',
         interestedTier: selectedTier ? selectedTier.name : (formData.interestedTier || ''),
@@ -728,7 +846,7 @@ export default function LabsBookAppointment() {
         },
         body: JSON.stringify({
           email: formData.email,
-          amount: consultationPrice,
+          amount: finalConsultationPrice, // Use discounted price
           currency: currency === 'USD' ? 'USD' : 'KES',
           metadata: {
             payment_type: 'consultation',
@@ -883,12 +1001,67 @@ export default function LabsBookAppointment() {
               )}
               
               {/* Consultation Fee */}
-              <div>
-                <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
-                  {loadingFee ? 'Loading...' : formatPrice(consultationFeeKES)}
-                </div>
-                <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
-              </div>
+              {(() => {
+                // Calculate displayed price with discount if valid code
+                let displayPrice = consultationFeeKES
+                if (currency === 'USD' && exchangeRates) {
+                  displayPrice = consultationFeeKES / exchangeRates.usdToKes
+                  displayPrice = Math.round(displayPrice * 100) / 100
+                } else if (currency === 'USD' && !exchangeRates) {
+                  const defaultRate = 130
+                  displayPrice = consultationFeeKES / defaultRate
+                  displayPrice = Math.round(displayPrice * 100) / 100
+                }
+                
+                // Calculate discount - waitlist discount code
+                let discountAmount = 0
+                let discountMessage = ''
+                let finalPrice = displayPrice
+                
+                if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
+                  if (discountCodeValidationStatus.discountType === 'percentage') {
+                    discountAmount = (displayPrice * discountCodeValidationStatus.discountValue) / 100
+                    discountMessage = `✓ ${discountCodeValidationStatus.discountValue}% waitlist discount applied`
+                  } else if (discountCodeValidationStatus.discountType === 'fixed') {
+                    // For fixed discount, convert to currency if needed
+                    if (currency === 'USD' && exchangeRates) {
+                      discountAmount = discountCodeValidationStatus.discountValue / exchangeRates.usdToKes
+                    } else {
+                      discountAmount = discountCodeValidationStatus.discountValue
+                    }
+                    discountMessage = `✓ ${discountCodeValidationStatus.discountValue.toLocaleString()} KES waitlist discount applied`
+                  }
+                  finalPrice = currency === 'USD' 
+                    ? Math.round((displayPrice - discountAmount) * 100) / 100
+                    : Math.round(displayPrice - discountAmount)
+                }
+                
+                if (discountAmount > 0) {
+                  return (
+                    <div>
+                      <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
+                        {loadingFee ? 'Loading...' : formatPrice(finalPrice)}
+                      </div>
+                      <div className="text-sm text-green-600 font-semibold mb-1">
+                        {discountMessage}
+                      </div>
+                      <div className="text-xs text-[var(--color-text)]/60 line-through mb-1">
+                        Original: {formatPrice(displayPrice)}
+                      </div>
+                      <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
+                    </div>
+                  )
+                }
+                
+                return (
+                  <div>
+                    <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
+                      {loadingFee ? 'Loading...' : formatPrice(displayPrice)}
+                    </div>
+                    <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
+                  </div>
+                )
+              })()}
             </div>
           )}
         </div>
@@ -1617,6 +1790,58 @@ export default function LabsBookAppointment() {
               </div>
             </div>
 
+            {/* Discount Section - Only show if enabled, waitlist page is enabled, and not rebooking and consultation is not free */}
+            {!isRebooking && consultationFeeKES > 0 && discountSectionEnabled && waitlistPageEnabled && (
+              <div className="space-y-6 pt-6 border-t-2 border-[var(--color-primary)]/10">
+                <h2 className="text-2xl font-display text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]/20 pb-2">
+                  Discount Code
+                </h2>
+                
+                <div>
+                  <label htmlFor="discountCode" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
+                    Waitlist Discount Code (Optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      id="discountCode"
+                      value={discountCode}
+                      onChange={(e) => {
+                        const newCode = e.target.value.toUpperCase().trim()
+                        setDiscountCode(newCode)
+                      }}
+                      onBlur={() => {
+                        if (discountCode.trim()) {
+                          validateDiscountCode(discountCode)
+                        }
+                      }}
+                      className="flex-1 px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                      placeholder="Enter your waitlist discount code"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => validateDiscountCode(discountCode)}
+                      disabled={validatingDiscountCode || !discountCode.trim()}
+                      className="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    >
+                      {validatingDiscountCode ? 'Validating...' : 'Apply'}
+                    </button>
+                  </div>
+                  {discountCodeValidationStatus.message && (
+                    <p className={`text-sm mt-2 ${
+                      discountCodeValidationStatus.valid 
+                        ? 'text-green-600 font-semibold' 
+                        : discountCodeValidationStatus.valid === false 
+                        ? 'text-red-600' 
+                        : 'text-[var(--color-text)]/70'
+                    }`}>
+                      {discountCodeValidationStatus.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Payment Section - Only show for new consultations (not rebooking) and when consultation is not free */}
             {!isRebooking && consultationFeeKES > 0 && (
               <div id="payment-section" className="mt-8 space-y-4">
@@ -1665,15 +1890,6 @@ export default function LabsBookAppointment() {
               </div>
             )}
 
-            {/* Free Consultation Message */}
-            {!isRebooking && consultationFeeKES === 0 && (
-              <div className="mt-8 bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-800">
-                  <strong>✅ Free Consultation:</strong> This consultation is free of charge. No payment is required. 
-                  Your consultation will be confirmed immediately upon submission.
-                </p>
-              </div>
-            )}
 
             {/* Submit Button */}
             <div className="flex flex-col sm:flex-row gap-4 pt-6">
@@ -1682,13 +1898,42 @@ export default function LabsBookAppointment() {
                 disabled={loading || loadingRebookData}
                 className="flex-1 bg-[var(--color-primary)] text-[var(--color-on-primary)] px-8 py-4 rounded-lg font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading || loadingRebookData 
-                  ? 'Processing...' 
-                  : isRebooking 
-                    ? 'Reschedule Consultation (No Payment Required)' 
-                    : consultationFeeKES === 0
-                      ? 'Submit Free Consultation Request'
-                    : `Submit Consultation Request - ${formatPrice(consultationFeeKES)}`}
+                {(() => {
+                  if (loading || loadingRebookData) return 'Processing...'
+                  if (isRebooking) return 'Reschedule Consultation (No Payment Required)'
+                  if (consultationFeeKES === 0) return 'Submit Free Consultation Request'
+                  
+                  // Calculate final price with discount
+                  let displayPrice = consultationFeeKES
+                  if (currency === 'USD' && exchangeRates) {
+                    displayPrice = consultationFeeKES / exchangeRates.usdToKes
+                    displayPrice = Math.round(displayPrice * 100) / 100
+                  } else if (currency === 'USD' && !exchangeRates) {
+                    const defaultRate = 130
+                    displayPrice = consultationFeeKES / defaultRate
+                    displayPrice = Math.round(displayPrice * 100) / 100
+                  }
+                  
+                  // Apply waitlist discount
+                  let finalPrice = displayPrice
+                  if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
+                    if (discountCodeValidationStatus.discountType === 'percentage') {
+                      const discountAmount = (displayPrice * discountCodeValidationStatus.discountValue) / 100
+                      finalPrice = currency === 'USD' 
+                        ? Math.round((displayPrice - discountAmount) * 100) / 100
+                        : Math.round(displayPrice - discountAmount)
+                    } else if (discountCodeValidationStatus.discountType === 'fixed') {
+                      if (currency === 'USD' && exchangeRates) {
+                        const discountAmount = discountCodeValidationStatus.discountValue / exchangeRates.usdToKes
+                        finalPrice = Math.round((displayPrice - discountAmount) * 100) / 100
+                      } else {
+                        finalPrice = Math.round(displayPrice - discountCodeValidationStatus.discountValue)
+                      }
+                    }
+                  }
+                  
+                  return `Submit Consultation Request - ${formatPrice(finalPrice)}`
+                })()}
               </button>
               <Link
                 href="/labs"

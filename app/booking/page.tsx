@@ -1787,6 +1787,61 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         return
       }
 
+      // Validate date and time slot are selected
+      if (!formData.date) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select an appointment date to continue.',
+        })
+        // Scroll to date selection
+        setTimeout(() => {
+          document.getElementById('date')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+        return
+      }
+
+      if (!formData.timeSlot) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please select an appointment time to continue.',
+        })
+        // Scroll to time slot selection
+        setTimeout(() => {
+          document.getElementById('timeSlot')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+        return
+      }
+
+      // Validate required personal details
+      if (!formData.name || !formData.name.trim()) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please enter your name to continue.',
+        })
+        return
+      }
+
+      if (!formData.email || !formData.email.includes('@')) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please enter a valid email address to continue.',
+        })
+        return
+      }
+
+      if (!formData.phone || !formData.phone.trim()) {
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: 'Please enter your phone number to continue.',
+        })
+        return
+      }
+
       if (hasFillServiceSelected) {
         if (!formData.lastFullSetDate) {
           setLoading(false)
@@ -1898,6 +1953,26 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         })
 
         const bookingData = await bookingResponse.json()
+        
+        // Log error details for debugging
+        if (!bookingResponse.ok) {
+          console.error('Booking API error:', {
+            status: bookingResponse.status,
+            statusText: bookingResponse.statusText,
+            error: bookingData.error,
+            details: bookingData.details,
+            requestData: {
+              name: formData.name,
+              email: formData.email,
+              phone: formData.phone,
+              timeSlot: formData.timeSlot,
+              date: formData.date,
+              service: selectedServiceNames,
+            },
+            fullResponse: bookingData
+          })
+        }
+        
         if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
           bookingCreated = true
           createdBookingId = bookingData.bookingId
@@ -1934,10 +2009,18 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             return
           }
         } else {
+          const errorMessage = bookingData.error || bookingData.details || 'Failed to create booking. Please try again.'
+          console.error('Booking creation failed:', {
+            status: bookingResponse.status,
+            error: bookingData.error,
+            details: bookingData.details,
+            fullResponse: bookingData
+          })
+          
           setSubmitStatus({
             type: 'error',
             message: 'Booking Failed',
-            details: bookingData.error || 'Failed to create booking. Please try again.',
+            details: errorMessage,
           })
           setLoading(false)
           return

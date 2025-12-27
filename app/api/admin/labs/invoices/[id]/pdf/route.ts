@@ -329,6 +329,12 @@ export async function GET(
         <span class="totals-value">${formatCurrency(invoice.tax, invoice.currency)}</span>
       </div>
       ` : ''}
+      ${invoice.discount && invoice.discount > 0 ? `
+      <div class="totals-row" style="color: #388e3c;">
+        <span class="totals-label">Discount${invoice.discountType === 'percentage' && invoice.discountValue ? ` (${invoice.discountValue}%)` : ''}:</span>
+        <span class="totals-value" style="color: #388e3c;">-${formatCurrency(invoice.discount, invoice.currency)}</span>
+      </div>
+      ` : ''}
       <div class="totals-row total">
         <span class="totals-label">Total:</span>
         <span class="totals-value">${formatCurrency(invoice.total, invoice.currency)}</span>

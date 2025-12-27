@@ -101,6 +101,8 @@ export default function AdminLabs() {
       subtitle: 'This system is for service providers who:',
       items: [],
     },
+    discountSectionEnabled: false,
+    discountCodes: [],
     googleMeetRoom: '',
     googleMeetRoomLastChanged: new Date().toISOString(),
   })
@@ -188,6 +190,10 @@ export default function AdminLabs() {
             ],
         whatYouGetEnabled: data.whatYouGetEnabled !== undefined ? data.whatYouGetEnabled : true,
         courseSectionEnabled: data.courseSectionEnabled !== undefined ? data.courseSectionEnabled : true,
+        waitlistPageEnabled: data.waitlistPageEnabled !== undefined ? data.waitlistPageEnabled : false,
+        waitlistSectionEnabled: data.waitlistSectionEnabled !== undefined ? data.waitlistSectionEnabled : true,
+        discountSectionEnabled: data.discountSectionEnabled !== undefined ? data.discountSectionEnabled : false,
+        discountCodes: Array.isArray(data.discountCodes) ? data.discountCodes : [],
         whatYouGet: data.whatYouGet || {
           title: 'What You Get',
           subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -1178,6 +1184,115 @@ export default function AdminLabs() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Waitlist Section on Labs Page */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-display text-brown mb-2">Waitlist Section on Labs Page</h2>
+              <p className="text-gray-600 text-sm">
+                Control the visibility of the "Join the Waitlist" section on the main Labs page. This section directs users to /labs/waitlist.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="waitlistSectionEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Waitlist Section:
+              </label>
+              <input
+                type="checkbox"
+                id="waitlistSectionEnabled"
+                checked={settings.waitlistSectionEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    waitlistSectionEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Waitlist Page Section */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-display text-brown mb-2">Waitlist Page</h2>
+              <p className="text-gray-600 text-sm">
+                Enable or disable the waitlist page at /labs/waitlist. When enabled, users can sign up for the waitlist.
+              </p>
+              <p className="text-gray-500 text-xs mt-2">
+                Note: You can manage waitlist settings (open/close dates, discount percentage) from the{' '}
+                <Link href="/admin/labs-waitlist" className="text-brown hover:underline font-semibold">
+                  Waitlist Management
+                </Link>{' '}
+                page.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="waitlistPageEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Waitlist Page:
+              </label>
+              <input
+                type="checkbox"
+                id="waitlistPageEnabled"
+                checked={settings.waitlistPageEnabled === true}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    waitlistPageEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Discount Section */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-display text-brown mb-2">Discount Codes</h2>
+              <p className="text-gray-600 text-sm mb-2">
+                Enable the discount code section on the consultation booking page. When enabled, users can enter the waitlist discount codes they received via email to get discounts on consultation fees.
+              </p>
+              <p className="text-gray-500 text-xs">
+                <strong>Note:</strong> This section uses waitlist discount codes. To manage waitlist discount settings (percentage, code prefix), go to the{' '}
+                <Link href="/admin/labs-waitlist" className="text-brown hover:underline font-semibold">
+                  Waitlist Management page
+                </Link>
+                .
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="discountSectionEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Discount Section:
+              </label>
+              <input
+                type="checkbox"
+                id="discountSectionEnabled"
+                checked={settings.discountSectionEnabled === true}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    discountSectionEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {settings.discountSectionEnabled && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 text-sm">
+                <strong>ℹ️ How it works:</strong> When enabled, a discount code input field will appear on the consultation booking page. Users can enter the discount codes they received when signing up for the waitlist. The discount percentage is configured in the Waitlist Management settings.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Who This is For Content Section */}

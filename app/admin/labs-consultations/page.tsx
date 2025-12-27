@@ -21,6 +21,9 @@ export default function AdminLabsConsultations() {
     { description: 'Consultation Fee', quantity: 1, unitPrice: 0, total: 0 },
   ])
   const [taxRate, setTaxRate] = useState<number>(0)
+  const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount')
+  const [discountValue, setDiscountValue] = useState<number>(0)
+  const [invoiceCurrency, setInvoiceCurrency] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
   const [dueDate, setDueDate] = useState<string>('')
   const [creatingInvoice, setCreatingInvoice] = useState(false)
@@ -204,6 +207,8 @@ export default function AdminLabsConsultations() {
     }
     
     setTaxRate(0)
+    setDiscountType('amount')
+    setDiscountValue(0)
     setNotes('')
     // Reset payment split to defaults
     setDownpaymentPercent(80)
@@ -323,8 +328,22 @@ export default function AdminLabsConsultations() {
   const calculateTotals = () => {
     const subtotal = invoiceItems.reduce((sum, item) => sum + item.total, 0)
     const tax = taxRate ? subtotal * (taxRate / 100) : 0
-    const total = subtotal + tax
-    return { subtotal, tax, total }
+    const subtotalAfterTax = subtotal + tax
+    
+    // Calculate discount
+    let discount = 0
+    if (discountValue > 0) {
+      if (discountType === 'percentage') {
+        discount = subtotalAfterTax * (discountValue / 100)
+      } else {
+        discount = discountValue
+      }
+      // Ensure discount doesn't exceed subtotal after tax
+      discount = Math.min(discount, subtotalAfterTax)
+    }
+    
+    const total = subtotalAfterTax - discount
+    return { subtotal, tax, discount, total }
   }
 
   const handleCreateInvoice = async () => {
@@ -360,16 +379,19 @@ export default function AdminLabsConsultations() {
       const response = await authorizedFetch('/api/admin/labs/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          consultationId: selectedConsultation.consultationId || selectedConsultation.submittedAt,
-          items: invoiceItems,
-          taxRate: taxRate || undefined,
-          notes: notes.trim() || undefined,
-          dueDate: dueDate || undefined,
-          invoiceType: invoiceType, // 'downpayment' or 'final'
-          downpaymentPercent: downpaymentPercent,
-          finalPaymentPercent: finalPaymentPercent,
-        }),
+          body: JSON.stringify({
+            consultationId: selectedConsultation.consultationId || selectedConsultation.submittedAt,
+            items: invoiceItems,
+            taxRate: taxRate || undefined,
+            discountType: discountValue > 0 ? discountType : undefined,
+            discountValue: discountValue > 0 ? discountValue : undefined,
+            currency: invoiceCurrency || selectedConsultation.currency || 'KES',
+            notes: notes.trim() || undefined,
+            dueDate: dueDate || undefined,
+            invoiceType: invoiceType, // 'downpayment' or 'final'
+            downpaymentPercent: downpaymentPercent,
+            finalPaymentPercent: finalPaymentPercent,
+          }),
       })
 
       if (!response.ok) {
@@ -1513,7 +1535,7 @@ export default function AdminLabsConsultations() {
                 </div>
               </div>
 
-              {/* Tax and Notes */}
+              {/* Tax, Discount and Notes */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-brown mb-2">
@@ -1540,6 +1562,99 @@ export default function AdminLabsConsultations() {
                     className="w-full px-3 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
                   />
                 </div>
+              </div>
+
+              {/* Discount Section */}
+              <div className="border-t-2 border-brown-light pt-4">
+                <h3 className="text-lg font-semibold text-brown mb-4">Discount</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-brown mb-2">
+                      Discount Type
+                    </label>
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value as 'amount' | 'percentage')}
+                      className="w-full px-3 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                    >
+                      <option value="amount">Fixed Amount</option>
+                      <option value="percentage">Percentage</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-brown mb-2">
+                      Discount {discountType === 'percentage' ? '(%)' : `(${invoiceCurrency})`}
+                    </label>
+                    <input
+                      type="number"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
+                      min="0"
+                      max={discountType === 'percentage' ? 100 : undefined}
+                      step="0.01"
+                      className="w-full px-3 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                      placeholder={discountType === 'percentage' ? '0' : '0.00'}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    {(() => {
+                      const { subtotal, tax, discount } = calculateTotals()
+                      const subtotalAfterTax = subtotal + tax
+                      const discountAmount = discountType === 'percentage' && discountValue > 0
+                        ? subtotalAfterTax * (discountValue / 100)
+                        : discountValue
+                      
+                      if (discountValue > 0) {
+                        return (
+                          <div className="w-full px-3 py-2 bg-green-50 border-2 border-green-300 rounded-lg">
+                            <p className="text-xs text-green-700 font-semibold mb-1">Discount Applied:</p>
+                            <p className="text-lg font-bold text-green-800">
+                              {formatCurrency(Math.min(discountAmount, subtotalAfterTax), selectedConsultation?.currency || 'KES')}
+                            </p>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                          <p className="text-sm text-gray-600">No discount applied</p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice Totals Summary */}
+              <div className="bg-[#F3E6DC] border-2 border-brown-light rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-brown mb-3">Invoice Summary</h3>
+                {(() => {
+                  const { subtotal, tax, discount, total } = calculateTotals()
+                  const currency = selectedConsultation?.currency || 'KES'
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6B4A3B]">Subtotal:</span>
+                        <span className="font-semibold text-[#7C4B31]">{formatCurrency(subtotal, currency)}</span>
+                      </div>
+                      {tax > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[#6B4A3B]">Tax ({taxRate}%):</span>
+                          <span className="font-semibold text-[#7C4B31]">{formatCurrency(tax, currency)}</span>
+                        </div>
+                      )}
+                      {discount > 0 && (
+                        <div className="flex justify-between text-sm text-green-700">
+                          <span>Discount {discountType === 'percentage' ? `(${discountValue}%)` : ''}:</span>
+                          <span className="font-semibold">-{formatCurrency(discount, currency)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-lg pt-2 border-t-2 border-brown-light">
+                        <span className="font-bold text-[#7C4B31]">Total:</span>
+                        <span className="font-bold text-[#7C4B31]">{formatCurrency(total, currency)}</span>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
 
               <div>

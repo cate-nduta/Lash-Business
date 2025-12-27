@@ -44,6 +44,15 @@ export interface BudgetRange {
   value: string
 }
 
+export interface DiscountCode {
+  code: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number // Percentage (0-100) or fixed amount in KES
+  expiresAt?: string // ISO date string - optional expiration date
+  maxUses?: number // Optional: maximum number of times this code can be used
+  usedCount?: number // Track how many times this code has been used
+}
+
 export interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
@@ -55,6 +64,10 @@ export interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   courseSectionEnabled?: boolean // Enable/disable Course section display
+  waitlistPageEnabled?: boolean // Enable/disable Waitlist page
+  waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
+  discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
+  discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
 }
@@ -157,6 +170,10 @@ const DEFAULT_SETTINGS: LabsSettings = {
   budgetRanges: DEFAULT_BUDGET_RANGES,
   whatYouGetEnabled: true, // What You Get section enabled by default
   courseSectionEnabled: true, // Course section enabled by default
+  waitlistPageEnabled: false, // Waitlist page disabled by default
+  waitlistSectionEnabled: true, // Waitlist section enabled by default
+  discountSectionEnabled: false, // Discount section disabled by default
+  discountCodes: [], // No discount codes by default
   whatYouGet: {
     title: 'What You Get',
     subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -225,6 +242,10 @@ export async function GET(request: NextRequest) {
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
+      waitlistPageEnabled: settings.waitlistPageEnabled !== undefined ? settings.waitlistPageEnabled : false,
+      waitlistSectionEnabled: settings.waitlistSectionEnabled !== undefined ? settings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled,
+      discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
+      discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }

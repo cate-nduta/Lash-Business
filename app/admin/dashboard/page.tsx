@@ -281,6 +281,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Labs Waitlist',
+      description: 'Manage waitlist settings, view signups, and send emails to waitlist members',
+      href: '/admin/labs-waitlist',
+      icon: '📝',
+      ownerOnly: false,
+    },
+    {
       title: 'Model Applications',
       description: 'View and manage model applications',
       href: '/admin/models',

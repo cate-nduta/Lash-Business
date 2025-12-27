@@ -173,6 +173,12 @@ export function createInvoiceEmailTemplate(invoice: ConsultationInvoice, payment
                   <span style="color:${textPrimary}; font-weight:600;">${formatCurrency(invoice.tax, invoice.currency)}</span>
                 </div>
                 ` : ''}
+                ${invoice.discount && invoice.discount > 0 ? `
+                <div style="display:flex; justify-content:space-between; padding:8px 0; ${!invoice.tax ? 'border-bottom:1px solid ' + accent + ';' : ''} font-size:15px;">
+                  <span style="color:#388e3c;">Discount${invoice.discountType === 'percentage' && invoice.discountValue ? ` (${invoice.discountValue}%)` : ''}:</span>
+                  <span style="color:#388e3c; font-weight:600;">-${formatCurrency(invoice.discount, invoice.currency)}</span>
+                </div>
+                ` : ''}
                 ${isSplitPayment && invoice.total !== displayAmount ? `
                 <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:15px;">
                   <span style="color:${textSecondary};">Project Total:</span>

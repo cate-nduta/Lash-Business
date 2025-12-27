@@ -80,7 +80,7 @@ Invoice Items:
 ${invoice.items.map(item => `- ${item.description} (Qty: ${item.quantity}) - ${formatCurrency(item.unitPrice, invoice.currency)} each = ${formatCurrency(item.total, invoice.currency)}`).join('\n')}
 
 Subtotal: ${formatCurrency(invoice.subtotal, invoice.currency)}
-${invoice.tax && invoice.taxRate ? `Tax (${invoice.taxRate}%): ${formatCurrency(invoice.tax, invoice.currency)}\n` : ''}${invoice.invoiceAmount && invoice.invoiceAmount !== invoice.total ? `Project Total: ${formatCurrency(invoice.total, invoice.currency)}\n${invoice.invoiceType === 'downpayment' ? `Downpayment (${invoice.downpaymentPercent || 80}%):` : invoice.invoiceType === 'final' ? `Final Payment (${invoice.finalPaymentPercent || 20}%):` : 'Amount Due:'} ${formatCurrency(invoice.invoiceAmount, invoice.currency)}\n` : `Total: ${formatCurrency(invoice.total, invoice.currency)}`}
+${invoice.tax && invoice.taxRate ? `Tax (${invoice.taxRate}%): ${formatCurrency(invoice.tax, invoice.currency)}\n` : ''}${invoice.discount && invoice.discount > 0 ? `Discount${invoice.discountType === 'percentage' && invoice.discountValue ? ` (${invoice.discountValue}%)` : ''}: -${formatCurrency(invoice.discount, invoice.currency)}\n` : ''}${invoice.invoiceAmount && invoice.invoiceAmount !== invoice.total ? `Project Total: ${formatCurrency(invoice.total, invoice.currency)}\n${invoice.invoiceType === 'downpayment' ? `Downpayment (${invoice.downpaymentPercent || 80}%):` : invoice.invoiceType === 'final' ? `Final Payment (${invoice.finalPaymentPercent || 20}%):` : 'Amount Due:'} ${formatCurrency(invoice.invoiceAmount, invoice.currency)}\n` : `Total: ${formatCurrency(invoice.total, invoice.currency)}`}
 
 ${invoice.notes ? `\nNotes:\n${invoice.notes}\n` : ''}
 
@@ -126,6 +126,9 @@ export interface ConsultationInvoice {
   subtotal: number
   tax?: number
   taxRate?: number
+  discount?: number
+  discountType?: 'amount' | 'percentage'
+  discountValue?: number // The input value (amount or percentage)
   total: number
   currency: string
   status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'expired'
@@ -182,6 +185,9 @@ export async function POST(request: NextRequest) {
       consultationId,
       items,
       taxRate,
+      discountType,
+      discountValue,
+      currency,
       notes,
       dueDate,
       invoiceType, // 'downpayment' or 'final'
@@ -219,7 +225,27 @@ export async function POST(request: NextRequest) {
     }, 0)
 
     const tax = taxRate ? subtotal * (taxRate / 100) : 0
-    const fullTotal = subtotal + tax // This is the full project total
+    const subtotalAfterTax = subtotal + tax
+    
+    // Calculate discount
+    let discount = 0
+    let discountTypeValue: 'amount' | 'percentage' | undefined = discountType
+    let discountValueNum: number | undefined = discountValue
+    
+    if (discountValueNum && discountValueNum > 0) {
+      if (discountTypeValue === 'percentage') {
+        discount = subtotalAfterTax * (discountValueNum / 100)
+      } else {
+        discount = discountValueNum
+      }
+      // Ensure discount doesn't exceed subtotal after tax
+      discount = Math.min(discount, subtotalAfterTax)
+    } else {
+      discountTypeValue = undefined
+      discountValueNum = undefined
+    }
+    
+    const fullTotal = subtotalAfterTax - discount // This is the full project total (after discount)
 
     // Determine invoice type and calculate invoice amount based on percentage
     const invoiceTypeValue: 'downpayment' | 'final' | undefined = invoiceType || undefined
@@ -285,8 +311,11 @@ export async function POST(request: NextRequest) {
       subtotal,
       tax: tax > 0 ? tax : undefined,
       taxRate: taxRate || undefined,
-      total: fullTotal, // Store the full project total
-      currency: consultation.currency || 'KES',
+      discount: discount > 0 ? discount : undefined,
+      discountType: discountTypeValue,
+      discountValue: discountValueNum,
+      total: fullTotal, // Store the full project total (after discount)
+      currency: currency || consultation.currency || 'KES',
       status: 'draft',
       notes: notes || undefined,
       paymentStructure,

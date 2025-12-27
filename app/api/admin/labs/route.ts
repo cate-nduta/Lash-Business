@@ -48,6 +48,15 @@ export interface BudgetRange {
   value: string
 }
 
+export interface DiscountCode {
+  code: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number // Percentage (0-100) or fixed amount in KES
+  expiresAt?: string // ISO date string - optional expiration date
+  maxUses?: number // Optional: maximum number of times this code can be used
+  usedCount?: number // Track how many times this code has been used
+}
+
 export interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
@@ -59,6 +68,10 @@ export interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   courseSectionEnabled?: boolean // Enable/disable Course section display
+  waitlistPageEnabled?: boolean // Enable/disable Waitlist page
+  waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
+  discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
+  discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
 }
@@ -200,6 +213,9 @@ const DEFAULT_SETTINGS: LabsSettings = {
   whoThisIsFor: DEFAULT_WHO_THIS_IS_FOR,
   whoThisIsForEnabled: true, // Who This is For section enabled by default
   courseSectionEnabled: true, // Course section enabled by default
+  waitlistSectionEnabled: true, // Waitlist section enabled by default
+  discountSectionEnabled: false, // Discount section disabled by default
+  discountCodes: [], // No discount codes by default
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
 }
@@ -224,6 +240,10 @@ export async function GET(request: NextRequest) {
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
+      waitlistSectionEnabled: settings.waitlistSectionEnabled !== undefined ? settings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled,
+      waitlistPageEnabled: settings.waitlistPageEnabled !== undefined ? settings.waitlistPageEnabled : false,
+      discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
+      discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
@@ -357,6 +377,10 @@ export async function POST(request: NextRequest) {
       whoThisIsFor: body.whoThisIsFor || currentSettings.whoThisIsFor || DEFAULT_WHO_THIS_IS_FOR,
       whoThisIsForEnabled: body.whoThisIsForEnabled !== undefined ? body.whoThisIsForEnabled : (currentSettings.whoThisIsForEnabled !== undefined ? currentSettings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled),
       courseSectionEnabled: body.courseSectionEnabled !== undefined ? body.courseSectionEnabled : (currentSettings.courseSectionEnabled !== undefined ? currentSettings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled),
+      waitlistSectionEnabled: body.waitlistSectionEnabled !== undefined ? body.waitlistSectionEnabled : (currentSettings.waitlistSectionEnabled !== undefined ? currentSettings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled),
+      waitlistPageEnabled: body.waitlistPageEnabled !== undefined ? body.waitlistPageEnabled : (currentSettings.waitlistPageEnabled !== undefined ? currentSettings.waitlistPageEnabled : false),
+      discountSectionEnabled: body.discountSectionEnabled !== undefined ? body.discountSectionEnabled : (currentSettings.discountSectionEnabled !== undefined ? currentSettings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled),
+      discountCodes: Array.isArray(body.discountCodes) ? body.discountCodes : (Array.isArray(currentSettings.discountCodes) ? currentSettings.discountCodes : DEFAULT_SETTINGS.discountCodes),
       googleMeetRoom: newMeetRoom,
       // Update last changed date if Meet room link was changed
       googleMeetRoomLastChanged: meetRoomChanged 
