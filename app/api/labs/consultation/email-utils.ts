@@ -8,74 +8,148 @@ import {
 import { formatCurrency, type Currency } from '@/lib/currency-utils'
 import type { ConsultationSubmission } from './route'
 
-// Generate iCal calendar file
-function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string | null): string {
-  const formatDateForICS = (dateStr: string, timeStr: string): Date => {
-    // Parse date string (expected format: YYYY-MM-DD)
-    // Extract just the date part to avoid timezone issues
-    const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
-    if (!dateMatch) {
-      // Fallback: try to parse as-is
-      const date = new Date(dateStr)
-      if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date format: ${dateStr}`)
-      }
-      // Set time to noon to avoid timezone issues, then we'll set the actual time
-      date.setHours(12, 0, 0, 0)
-      // Continue with time parsing below
+// Helper function to parse time string and convert to 24-hour format
+function parseTimeString(timeStr: string): { hour: number; minute: number } {
+  if (!timeStr || typeof timeStr !== 'string') {
+    throw new Error(`Invalid time string: ${timeStr}`)
+  }
+  
+  const normalizedTime = timeStr.trim().toLowerCase()
+  let hour = 10 // Default to 10 AM
+  let minute = 0
+  
+  // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM", "9:30AM" (no space)
+  const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i) || 
+                    normalizedTime.match(/(\d{1,2}):(\d{2})(am|pm)/i)
+  
+  if (timeMatch) {
+    hour = parseInt(timeMatch[1], 10)
+    minute = parseInt(timeMatch[2], 10)
+    const period = timeMatch[3].toLowerCase()
+    
+    // Validate hour and minute
+    if (isNaN(hour) || hour < 0 || hour > 12) {
+      throw new Error(`Invalid hour in time: ${timeStr}`)
+    }
+    if (isNaN(minute) || minute < 0 || minute > 59) {
+      throw new Error(`Invalid minute in time: ${timeStr}`)
     }
     
-    // Parse date components (YYYY-MM-DD format)
-    const [year, month, day] = dateMatch ? dateMatch[1].split('-').map(Number) : []
-    if (!year || !month || !day) {
-      throw new Error(`Invalid date format: ${dateStr}`)
+    // Convert to 24-hour format
+    if (period === 'pm' && hour !== 12) {
+      hour += 12
+    } else if (period === 'am' && hour === 12) {
+      hour = 0
     }
-    
-    // Parse actual time string (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
-    // Remove any whitespace and convert to lowercase for parsing
-    const normalizedTime = timeStr.trim().toLowerCase()
-    let hour = 10 // Default to 10 AM
-    let minute = 0
-    
-    // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM"
-    const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
-    if (timeMatch) {
-      hour = parseInt(timeMatch[1], 10)
-      minute = parseInt(timeMatch[2], 10)
-      const period = timeMatch[3].toLowerCase()
+  } else {
+    // Fallback: try to match common patterns or extract hour:minute from strings
+    // Handle formats like "9:30", "12:00", "15:30" (24-hour format)
+    const hourMinuteMatch = normalizedTime.match(/(\d{1,2}):(\d{2})/)
+    if (hourMinuteMatch) {
+      hour = parseInt(hourMinuteMatch[1], 10)
+      minute = parseInt(hourMinuteMatch[2], 10)
       
-      // Convert to 24-hour format
-      if (period === 'pm' && hour !== 12) {
-        hour += 12
-      } else if (period === 'am' && hour === 12) {
-        hour = 0
+      // If hour > 12, assume it's already in 24-hour format
+      // Otherwise, check if it's likely PM based on context
+      if (hour <= 12 && (normalizedTime.includes('pm') || normalizedTime.includes('afternoon') || normalizedTime.includes('evening'))) {
+        if (hour !== 12) hour += 12
       }
     } else {
-      // Fallback: try to match common patterns
-      if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30')) {
+      // Last resort: try to match common time patterns
+      if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30') || normalizedTime.includes('morning')) {
         hour = 9
         minute = 30
-      } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon')) {
+      } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon') || normalizedTime.includes('12pm')) {
         hour = 12
         minute = 0
-      } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30')) {
+      } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30') || normalizedTime.includes('afternoon')) {
         hour = 15
         minute = 30
+      } else {
+        // If we can't parse, throw an error to catch issues early
+        throw new Error(`Unable to parse time format: ${timeStr}`)
       }
     }
-    
-    // Create date in local timezone (Nairobi/EAT = UTC+3)
-    // Use the date components directly to avoid timezone conversion issues
-    const date = new Date(year, month - 1, day, hour, minute, 0, 0)
-    
-    return date
   }
+  
+  // Final validation
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    throw new Error(`Invalid time values: hour=${hour}, minute=${minute} from ${timeStr}`)
+  }
+  
+  return { hour, minute }
+}
 
-  const startDate = formatDateForICS(data.preferredDate, data.preferredTime)
-  const endDate = new Date(startDate)
-  endDate.setHours(endDate.getHours() + 1) // 1 hour duration
+// Create date in Nairobi timezone (UTC+3) explicitly
+function createDateInNairobiTimezone(dateStr: string, timeStr: string): Date {
+  // Parse date string (expected format: YYYY-MM-DD)
+  const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (!dateMatch) {
+    throw new Error(`Invalid date format: ${dateStr}`)
+  }
+  
+  // Parse date components (YYYY-MM-DD format)
+  const [year, month, day] = dateMatch[1].split('-').map(Number)
+  if (!year || !month || !day) {
+    throw new Error(`Invalid date format: ${dateStr}`)
+  }
+  
+  // Parse time
+  const { hour, minute } = parseTimeString(timeStr)
+  
+  // Create date string in Nairobi timezone format: YYYY-MM-DDTHH:MM:00+03:00
+  // This ensures the time is interpreted as Nairobi time (UTC+3)
+  const nairobiDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+03:00`
+  const date = new Date(nairobiDateStr)
+  
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date/time: ${dateStr} ${timeStr}`)
+  }
+  
+  return date
+}
+
+// Generate Google Calendar link with correct time
+function buildGoogleCalendarLink(data: ConsultationSubmission): string {
+  const startDate = createDateInNairobiTimezone(data.preferredDate, data.preferredTime)
+  // Add 1 hour to start date for end time (using UTC milliseconds to avoid timezone issues)
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000) // Add 1 hour in milliseconds
+  
+  // Format dates for Google Calendar (YYYYMMDDTHHMMSSZ in UTC)
+  const formatGoogleCalendarDate = (date: Date): string => {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  }
+  
+  const startDateStr = formatGoogleCalendarDate(startDate)
+  const endDateStr = formatGoogleCalendarDate(endDate)
+  
+  const eventTitle = encodeURIComponent(`Consultation with ${data.businessName}`)
+  const eventLocation = data.meetingType === 'online' 
+    ? 'Online Consultation'
+    : data.meetingCountry && data.meetingCity && data.meetingBuilding && data.meetingStreet
+      ? encodeURIComponent(`${data.meetingBuilding}, ${data.meetingStreet}, ${data.meetingCity}, ${data.meetingCountry}`)
+      : 'LashDiary Labs'
+  
+  const eventDetails = encodeURIComponent(
+    `Consultation with ${data.contactName} from ${data.businessName}\n\n` +
+    `Meeting Type: ${data.meetingType === 'online' ? 'Online' : 'Physical'}\n\n` +
+    `Business: ${data.businessName}\n` +
+    `Contact: ${data.contactName}\n` +
+    `Email: ${data.email}\n` +
+    `Phone: ${data.phone}`
+  )
+  
+  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&dates=${startDateStr}/${endDateStr}&location=${eventLocation}&details=${eventDetails}`
+}
+
+// Generate iCal calendar file
+function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string | null): string {
+  const startDate = createDateInNairobiTimezone(data.preferredDate, data.preferredTime)
+  // Add 1 hour to start date for end time (using UTC milliseconds to avoid timezone issues)
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000) // Add 1 hour in milliseconds
 
   const formatICSDate = (date: Date): string => {
+    // Convert to UTC for ICS format (Z suffix means UTC)
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
   }
 
@@ -140,23 +214,36 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
       const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
       if (dateMatch) {
         const [year, month, day] = dateMatch[1].split('-').map(Number)
-        // Create date at noon to avoid timezone issues (time component will be ignored in formatting)
-        const date = new Date(year, month - 1, day, 12, 0, 0)
-        return date.toLocaleDateString('en-US', {
+        
+        // Create date in UTC to avoid any timezone conversion issues
+        // This ensures the date is displayed exactly as provided, without any time component
+        const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+        
+        // Format date WITHOUT time - only date components
+        // Using UTC ensures no timezone conversion adds unwanted time
+        const formatted = date.toLocaleDateString('en-US', {
           weekday: 'long',
           year: 'numeric',
           month: 'long',
           day: 'numeric',
+          timeZone: 'UTC',
         })
+        return formatted
       }
-      // Fallback: try parsing as-is
+      // Fallback: try parsing as-is, but extract only date part
       const date = new Date(dateStr)
       if (isNaN(date.getTime())) return dateStr
-      return date.toLocaleDateString('en-US', {
+      // Extract only date components to avoid any time display
+      const year = date.getUTCFullYear()
+      const month = date.getUTCMonth()
+      const day = date.getUTCDate()
+      const dateOnly = new Date(Date.UTC(year, month, day, 12, 0, 0))
+      return dateOnly.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
+        timeZone: 'UTC',
       })
     } catch {
       return dateStr
@@ -403,6 +490,9 @@ export async function sendConsultationEmail(data: ConsultationSubmission) {
 
   // Generate calendar event (with Meet link if available)
   const calendarEvent = generateCalendarEvent(data, meetLink)
+  
+  // Generate Google Calendar link with correct time
+  const googleCalendarLink = buildGoogleCalendarLink(data)
 
   try {
     // Send notification email to business
@@ -557,9 +647,17 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
                 </p>
               </div>
 
-              <p style="margin:0 0 16px 0; font-size: 15px; line-height: 1.6; color: #3E2A20;">
-                <strong>📎 Add to Calendar:</strong> We've attached a calendar event file (.ics) to this email. You can download it and add it to your calendar to ensure you don't miss the consultation.
-              </p>
+              <div style="margin:0 0 16px 0; text-align: center;">
+                <p style="margin:0 0 12px 0; font-size: 15px; line-height: 1.6; color: #3E2A20;">
+                  <strong>📎 Add to Calendar:</strong>
+                </p>
+                <a href="${googleCalendarLink}" target="_blank" style="display: inline-block; background-color: #4285F4; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 14px; margin-bottom: 12px;">
+                  Add to Google Calendar
+                </a>
+                <p style="margin:12px 0 0 0; font-size: 13px; color: #6B4A3B; line-height: 1.5;">
+                  We've also attached a calendar event file (.ics) to this email. You can download it and add it to your calendar to ensure you don't miss the consultation.
+                </p>
+              </div>
 
               <p style="margin:0 0 24px 0; font-size: 15px; line-height: 1.6; color: #3E2A20;">
                 We'll be in touch soon with more details. If you have any questions, feel free to reply to this email.

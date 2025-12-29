@@ -129,14 +129,15 @@ export async function GET(request: NextRequest) {
     const showcaseBookings = await showcaseBookingsPromise
     
     // Extract booked slots from consultations (optimized)
-    // Only confirmed consultations block slots (pending/pending_payment don't block until confirmed)
+    // IMPORTANT: Block ALL non-cancelled consultations to prevent double booking
+    // This ensures slots are immediately unavailable once booked, even if payment is pending
     const consultationBookedSlots = consultationsData.consultations
       .filter(c => {
         if (!c.preferredDate || !c.preferredTime) return false
         const status = c.status?.toLowerCase()
-        // Only confirmed consultations block slots
-        // pending, pending_payment, and other non-confirmed statuses don't block
-        return status === 'confirmed'
+        // Block ALL non-cancelled consultations (pending, pending_payment, confirmed, etc.)
+        // Only cancelled consultations don't block slots
+        return status !== 'cancelled'
       })
       .map(c => ({
         date: normalizeDate(c.preferredDate) || c.preferredDate,
@@ -145,13 +146,14 @@ export async function GET(request: NextRequest) {
       .filter(slot => slot.date && slot.time)
 
     // Extract booked slots from showcase bookings
-    // Only confirmed showcase bookings block slots
+    // IMPORTANT: Block ALL non-cancelled bookings to prevent double booking
     const showcaseBookedSlots = showcaseBookings
       .filter(b => {
         if (!b.appointmentDate || !b.appointmentTime) return false
         const status = b.status?.toLowerCase()
-        // Only confirmed bookings block slots
-        return status === 'confirmed'
+        // Block ALL non-cancelled bookings (pending, confirmed, etc.)
+        // Only cancelled bookings don't block slots
+        return status !== 'cancelled'
       })
       .map(b => {
         // Normalize the date to YYYY-MM-DD format
@@ -196,22 +198,27 @@ export async function GET(request: NextRequest) {
     const bookedSlots = [...consultationBookedSlots, ...showcaseBookedSlots]
 
     // Extract booked dates from consultations
+    // IMPORTANT: Block ALL non-cancelled consultations to prevent double booking
     const consultationBookedDates = consultationsData.consultations
       .filter(c => {
         if (!c.preferredDate) return false
         const status = c.status?.toLowerCase()
-        // Only confirmed consultations block dates
-        return status === 'confirmed'
+        // Block ALL non-cancelled consultations (pending, pending_payment, confirmed, etc.)
+        // Only cancelled consultations don't block dates
+        return status !== 'cancelled'
       })
       .map(c => normalizeDate(c.preferredDate) || c.preferredDate)
       .filter((date): date is string => !!date)
 
     // Extract booked dates from showcase bookings
+    // IMPORTANT: Block ALL non-cancelled bookings to prevent double booking
     const showcaseBookedDates = showcaseBookings
       .filter(b => {
         if (!b.appointmentDate) return false
         const status = b.status?.toLowerCase()
-        return status === 'confirmed'
+        // Block ALL non-cancelled bookings (pending, confirmed, etc.)
+        // Only cancelled bookings don't block dates
+        return status !== 'cancelled'
       })
       .map(b => normalizeDate(b.appointmentDate) || b.appointmentDate)
       .filter((date): date is string => !!date)

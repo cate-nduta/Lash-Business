@@ -73,117 +73,9 @@ export interface ConsultationSubmission {
   meetingStreet?: string
 }
 
-// Generate iCal calendar file
-function generateCalendarEvent(data: ConsultationSubmission, meetLink?: string | null): string {
-  const formatDateForICS = (dateStr: string, timeStr: string): Date => {
-    // Parse date string (expected format: YYYY-MM-DD)
-    // Extract just the date part to avoid timezone issues
-    const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
-    if (!dateMatch) {
-      // Fallback: try to parse as-is
-    const date = new Date(dateStr)
-      if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date format: ${dateStr}`)
-      }
-      // Set time to noon to avoid timezone issues, then we'll set the actual time
-      date.setHours(12, 0, 0, 0)
-      // Continue with time parsing below
-    }
-    
-    // Parse date components (YYYY-MM-DD format)
-    const [year, month, day] = dateMatch ? dateMatch[1].split('-').map(Number) : []
-    if (!year || !month || !day) {
-      throw new Error(`Invalid date format: ${dateStr}`)
-    }
-    
-    // Parse actual time string (e.g., "9:30 AM", "12:00 PM", "3:30 PM")
-    // Remove any whitespace and convert to lowercase for parsing
-    const normalizedTime = timeStr.trim().toLowerCase()
-    let hour = 10 // Default to 10 AM
-    let minute = 0
-    
-    // Try to parse time formats like "9:30 AM", "12:00 PM", "3:30 PM"
-    const timeMatch = normalizedTime.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
-    if (timeMatch) {
-      hour = parseInt(timeMatch[1], 10)
-      minute = parseInt(timeMatch[2], 10)
-      const period = timeMatch[3].toLowerCase()
-      
-      // Convert to 24-hour format
-      if (period === 'pm' && hour !== 12) {
-        hour += 12
-      } else if (period === 'am' && hour === 12) {
-        hour = 0
-      }
-    } else {
-      // Fallback: try to match common patterns
-      if (normalizedTime.includes('9:30') || normalizedTime.includes('9.30')) {
-        hour = 9
-        minute = 30
-      } else if (normalizedTime.includes('12:00') || normalizedTime.includes('12.00') || normalizedTime.includes('noon')) {
-        hour = 12
-        minute = 0
-      } else if (normalizedTime.includes('3:30') || normalizedTime.includes('3.30') || normalizedTime.includes('15:30')) {
-        hour = 15
-        minute = 30
-      }
-    }
-    
-    // Create date in local timezone (Nairobi/EAT = UTC+3)
-    // Use the date components directly to avoid timezone conversion issues
-    const date = new Date(year, month - 1, day, hour, minute, 0, 0)
-    
-    return date
-  }
-
-  const startDate = formatDateForICS(data.preferredDate, data.preferredTime)
-  const endDate = new Date(startDate)
-  endDate.setHours(endDate.getHours() + 1) // 1 hour duration
-
-  const formatICSDate = (date: Date): string => {
-    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-  }
-
-  // For online meetings, location is just text - NO direct Meet link
-  const location = data.meetingType === 'online' 
-    ? 'Online Consultation' // Just text, no link
-    : data.meetingCountry && data.meetingCity && data.meetingBuilding && data.meetingStreet
-      ? `${data.meetingBuilding}, ${data.meetingStreet}, ${data.meetingCity}, ${data.meetingCountry}`
-      : 'LashDiary Labs'
-  
-  // Use time-gated link in description (NOT direct Meet link)
-  const timeGatedLink = data.consultationId 
-    ? `${process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'}/labs/meet/${data.consultationId}`
-    : null
-  const description = `Consultation with ${data.contactName} from ${data.businessName}\\n\\nMeeting Type: ${data.meetingType === 'online' ? 'Online' : 'Physical'}\\n\\nBusiness: ${data.businessName}\\nContact: ${data.contactName}\\nEmail: ${data.email}\\nPhone: ${data.phone}${timeGatedLink ? `\\n\\n🔒 SECURE MEETING LINK (Time-Gated):\\n${timeGatedLink}\\n\\n⚠️ IMPORTANT: Use ONLY this link to join. This link only works during your scheduled time slot. Do NOT use any direct Google Meet links - they will not work outside your scheduled time.` : '\\n\\nMeeting link will be sent via email.'}`
-
-  const icsContent = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//LashDiary Labs//Consultation//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:REQUEST',
-    'BEGIN:VEVENT',
-    `UID:${data.consultationId || `consult-${Date.now()}`}@lashdiarylabs.com`,
-    `DTSTAMP:${formatICSDate(new Date())}`,
-    `DTSTART:${formatICSDate(startDate)}`,
-    `DTEND:${formatICSDate(endDate)}`,
-    `SUMMARY:LashDiary Labs Consultation - ${data.businessName}`,
-    `DESCRIPTION:${description}`,
-    `LOCATION:${location}`,
-    'STATUS:CONFIRMED',
-    'SEQUENCE:0',
-    'BEGIN:VALARM',
-    'TRIGGER:-PT15M',
-    'ACTION:DISPLAY',
-    'DESCRIPTION:Reminder: Consultation in 15 minutes',
-    'END:VALARM',
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n')
-
-  return icsContent
-}
+// NOTE: Calendar event generation has been moved to email-utils.ts
+// This function is no longer used but kept for backward compatibility
+// All calendar generation now uses the fixed timezone-aware functions in email-utils.ts
 
 async function createGoogleCalendarEventWithMeet(data: ConsultationSubmission): Promise<string | null> {
   // NOTE: We're NOT generating unique Meet links anymore to prevent direct links in calendar
@@ -243,16 +135,20 @@ export async function POST(request: NextRequest) {
     }
     
     // Check consultations
+    // IMPORTANT: Block ALL non-cancelled consultations (pending, pending_payment, confirmed, etc.) to prevent double booking
+    // This ensures that once someone books a slot, it's immediately unavailable for others
     const isConsultationBooked = consultationsData.consultations.some(
       consultation => {
         if (!consultation.preferredDate || !consultation.preferredTime) return false
+        // Block ALL non-cancelled consultations to prevent double booking
+        if (consultation.status?.toLowerCase() === 'cancelled') return false
+        
         const consultationDate = consultation.preferredDate
         const consultationTime = normalizeTimeForComparison(consultation.preferredTime)
         const requestedTime = normalizeTimeForComparison(body.preferredTime)
         
         return consultationDate === body.preferredDate && 
-               consultationTime === requestedTime &&
-               consultation.status !== 'cancelled'
+               consultationTime === requestedTime
       }
     )
     
