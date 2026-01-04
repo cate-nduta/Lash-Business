@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 
 interface Product {
   id: string
@@ -31,6 +31,23 @@ export default function Shop() {
   const [pickupLocation, setPickupLocation] = useState('Pick up Mtaani')
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES)
+
+  useEffect(() => {
+    const loadExchangeRates = async () => {
+      try {
+        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          setExchangeRates(data)
+        }
+      } catch (error) {
+        console.error('Error loading exchange rates:', error)
+        // Keep default rates on error
+      }
+    }
+    loadExchangeRates()
+  }, [])
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -58,7 +75,7 @@ export default function Shop() {
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
-      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
+      const usdPrice = convertCurrency(price, 'KES', 'USD', exchangeRates)
       return formatCurrency(usdPrice)
     }
     return formatCurrency(price)

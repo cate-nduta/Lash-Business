@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { readDataFile } from '@/lib/data-utils'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,7 @@ interface SearchItem {
   location: string
   keywords: string[]
   category: 'panel' | 'feature' | 'workflow' | 'setting'
+  relevance?: number
 }
 
 const searchIndex: SearchItem[] = [
@@ -928,7 +930,10 @@ export async function GET(request: NextRequest) {
     }
 
     const queryLower = query.toLowerCase()
-    const results = searchIndex
+    const allResults: SearchItem[] = []
+
+    // 1. Search through static index (panel features)
+    const indexResults = searchIndex
       .filter(item => {
         const matchesTitle = item.title.toLowerCase().includes(queryLower)
         const matchesDescription = item.description.toLowerCase().includes(queryLower)
@@ -942,10 +947,194 @@ export async function GET(request: NextRequest) {
         ...item,
         relevance: calculateRelevance(item, queryLower)
       }))
-      .sort((a, b) => b.relevance - a.relevance)
-      .slice(0, 20) // Limit to top 20 results
+    
+    allResults.push(...indexResults)
 
-    return NextResponse.json({ results })
+    // 2. Search through actual settings data
+    try {
+      const settings = await readDataFile<any>('settings.json', {})
+      
+      // Search business information
+      if (settings.business) {
+        const businessFields = [
+          { field: 'name', label: 'Business Name', value: settings.business.name },
+          { field: 'phone', label: 'Phone Number', value: settings.business.phone },
+          { field: 'email', label: 'Business Email', value: settings.business.email },
+          { field: 'address', label: 'Business Address', value: settings.business.address },
+          { field: 'description', label: 'Business Description', value: settings.business.description },
+          { field: 'logoText', label: 'Logo Text', value: settings.business.logoText },
+          { field: 'taxPercentage', label: 'Tax Percentage', value: settings.business.taxPercentage?.toString() },
+        ]
+
+        businessFields.forEach(({ field, label, value }) => {
+          if (value && value.toString().toLowerCase().includes(queryLower)) {
+            allResults.push({
+              id: `settings-business-${field}`,
+              title: `${label}: ${value}`,
+              description: `Found in Settings - Business Information`,
+              panel: 'Settings',
+              panelHref: '/admin/settings',
+              location: `Settings page - Business Information - ${label}`,
+              keywords: [field, label.toLowerCase(), value.toString().toLowerCase()],
+              category: 'setting',
+              relevance: value.toString().toLowerCase() === queryLower ? 80 : 
+                        value.toString().toLowerCase().startsWith(queryLower) ? 60 : 40
+            })
+          }
+        })
+      }
+
+      // Search social media links
+      if (settings.social) {
+        const socialFields = [
+          { field: 'instagram', label: 'Instagram', value: settings.social.instagram },
+          { field: 'facebook', label: 'Facebook', value: settings.social.facebook },
+          { field: 'tiktok', label: 'TikTok', value: settings.social.tiktok },
+          { field: 'twitter', label: 'Twitter', value: settings.social.twitter },
+        ]
+
+        socialFields.forEach(({ field, label, value }) => {
+          if (value && value.toString().toLowerCase().includes(queryLower)) {
+            allResults.push({
+              id: `settings-social-${field}`,
+              title: `${label}: ${value}`,
+              description: `Found in Settings - Social Media Links`,
+              panel: 'Settings',
+              panelHref: '/admin/settings',
+              location: `Settings page - Social Media Links - ${label}`,
+              keywords: [field, label.toLowerCase(), value.toString().toLowerCase(), 'social media'],
+              category: 'setting',
+              relevance: value.toString().toLowerCase().includes(queryLower) ? 50 : 30
+            })
+          }
+        })
+      }
+
+      // Search newsletter settings
+      if (settings.newsletter) {
+        if (settings.newsletter.discountPercentage?.toString().includes(queryLower)) {
+          allResults.push({
+            id: 'settings-newsletter-discount',
+            title: `Newsletter Discount: ${settings.newsletter.discountPercentage}%`,
+            description: `Found in Settings - Newsletter Settings`,
+            panel: 'Settings',
+            panelHref: '/admin/settings',
+            location: 'Settings page - Newsletter Settings - Welcome Discount Percentage',
+            keywords: ['newsletter', 'discount', 'percentage', settings.newsletter.discountPercentage.toString()],
+            category: 'setting',
+            relevance: 50
+          })
+        }
+      }
+
+      // Search exchange rates
+      if (settings.exchangeRates) {
+        if (settings.exchangeRates.usdToKes?.toString().includes(queryLower)) {
+          allResults.push({
+            id: 'settings-exchange-rate',
+            title: `USD to KES Rate: ${settings.exchangeRates.usdToKes}`,
+            description: `Found in Settings - Currency Exchange Rates`,
+            panel: 'Settings',
+            panelHref: '/admin/settings',
+            location: 'Settings page - Currency Exchange Rates - USD to KES Rate',
+            keywords: ['exchange rate', 'usd', 'kes', 'currency', settings.exchangeRates.usdToKes.toString()],
+            category: 'setting',
+            relevance: 50
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error reading settings for search:', error)
+      // Continue with other searches even if settings read fails
+    }
+
+    // 3. Search through bookings (if query matches booking-related terms)
+    try {
+      const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
+      if (bookingsData.bookings && bookingsData.bookings.length > 0) {
+        const matchingBookings = bookingsData.bookings
+          .filter(booking => {
+            const name = booking.name?.toLowerCase() || ''
+            const email = booking.email?.toLowerCase() || ''
+            const phone = booking.phone?.toLowerCase() || ''
+            const services = booking.services?.join(' ').toLowerCase() || ''
+            const date = booking.date || ''
+            
+            return name.includes(queryLower) || 
+                   email.includes(queryLower) || 
+                   phone.includes(queryLower) || 
+                   services.includes(queryLower) ||
+                   date.includes(queryLower)
+          })
+          .slice(0, 5) // Limit to 5 booking results
+
+        matchingBookings.forEach((booking, index) => {
+          allResults.push({
+            id: `booking-${booking.id || index}`,
+            title: `Booking: ${booking.name || 'Unnamed'} - ${booking.date || 'No date'}`,
+            description: `Found in Bookings - ${booking.services?.join(', ') || 'No services'}`,
+            panel: 'Bookings',
+            panelHref: '/admin/bookings',
+            location: `Bookings page - Booking details`,
+            keywords: [
+              booking.name?.toLowerCase() || '',
+              booking.email?.toLowerCase() || '',
+              booking.phone?.toLowerCase() || '',
+              ...(booking.services || []).map((s: string) => s.toLowerCase())
+            ].filter(Boolean),
+            category: 'feature',
+            relevance: 35
+          })
+        })
+      }
+    } catch (error) {
+      console.error('Error reading bookings for search:', error)
+    }
+
+    // 4. Search through clients
+    try {
+      const clientsData = await readDataFile<{ clients: any[] }>('clients.json', { clients: [] })
+      if (clientsData.clients && clientsData.clients.length > 0) {
+        const matchingClients = clientsData.clients
+          .filter(client => {
+            const name = client.name?.toLowerCase() || ''
+            const email = client.email?.toLowerCase() || ''
+            const phone = client.phone?.toLowerCase() || ''
+            
+            return name.includes(queryLower) || 
+                   email.includes(queryLower) || 
+                   phone.includes(queryLower)
+          })
+          .slice(0, 5) // Limit to 5 client results
+
+        matchingClients.forEach((client, index) => {
+          allResults.push({
+            id: `client-${client.id || index}`,
+            title: `Client: ${client.name || 'Unnamed'}`,
+            description: `Found in Clients - ${client.email || 'No email'}`,
+            panel: 'Clients',
+            panelHref: '/admin/clients',
+            location: `Clients page - Client details`,
+            keywords: [
+              client.name?.toLowerCase() || '',
+              client.email?.toLowerCase() || '',
+              client.phone?.toLowerCase() || ''
+            ].filter(Boolean),
+            category: 'feature',
+            relevance: 35
+          })
+        })
+      }
+    } catch (error) {
+      console.error('Error reading clients for search:', error)
+    }
+
+    // Sort all results by relevance and return top 30
+    const sortedResults = allResults
+      .sort((a, b) => (b.relevance || 0) - (a.relevance || 0))
+      .slice(0, 30)
+
+    return NextResponse.json({ results: sortedResults })
   } catch (error: any) {
     if (error.status === 401) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

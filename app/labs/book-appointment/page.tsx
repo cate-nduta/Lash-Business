@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, type Currency, type ExchangeRates } from '@/lib/currency-utils'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 interface PricingTier {
   id: string
@@ -422,6 +423,16 @@ export default function LabsBookAppointment() {
     message: string
   }>({ type: null, message: '' })
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
+  const [confirmedConsultationEmail, setConfirmedConsultationEmail] = useState<string>('')
+  const [confirmedConsultationDetails, setConfirmedConsultationDetails] = useState<{
+    preferredDate: string
+    preferredTime: string
+    meetingType: 'online' | 'physical'
+    consultationId: string
+    businessName: string
+    contactName: string
+  } | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
   // Payment method will be selected on Paystack page
   const [paymentMethod] = useState<'mpesa' | 'card' | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<{
@@ -430,23 +441,34 @@ export default function LabsBookAppointment() {
     message: string
     orderTrackingId?: string
   }>({ loading: false, success: null, message: '' })
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    publicKey: string
+    email: string
+    amount: number
+    currency: string
+    reference: string
+    customerName: string
+    phone: string
+    consultationId: string
+  } | null>(null)
 
   const [exchangeRates, setExchangeRates] = useState<{ usdToKes: number } | null>(null)
 
   useEffect(() => {
     const loadExchangeRates = async () => {
       try {
-        const response = await fetch('/api/admin/settings', { cache: 'no-store' })
+        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
         if (response.ok) {
           const data = await response.json()
-          if (data.exchangeRates) {
-            setExchangeRates({
-              usdToKes: data.exchangeRates.usdToKes || 130,
-            })
-          }
+          setExchangeRates({
+            usdToKes: data.usdToKes || 130,
+          })
         }
       } catch (error) {
         console.error('Error loading exchange rates:', error)
+        // Set default rate on error
+        setExchangeRates({ usdToKes: 130 })
       }
     }
     loadExchangeRates()
@@ -889,17 +911,59 @@ export default function LabsBookAppointment() {
         }).catch(err => console.error('Error updating consultation with payment reference:', err))
       }
 
-      // Payment initialized successfully - redirect to Paystack
+      // Get Paystack public key from API
+      let paystackPublicKey = ''
+      try {
+        const publicKeyResponse = await fetch('/api/paystack/public-key')
+        const publicKeyData = await publicKeyResponse.json()
+        
+        if (publicKeyResponse.ok && publicKeyData.success && publicKeyData.publicKey) {
+          paystackPublicKey = publicKeyData.publicKey
+        } else {
+          // Fallback to environment variable (for client-side access if set)
+          paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+        }
+      } catch (error) {
+        console.error('Error fetching public key:', error)
+        // Fallback to environment variable
+        paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+      }
+      
+      if (!paystackPublicKey) {
+        setPaymentStatus({
+          loading: false,
+          success: false,
+          message: 'Payment gateway not configured. Please contact support.',
+        })
+        setSubmitStatus({
+          type: 'error',
+          message: 'Payment gateway not configured. Please contact support or try again later.',
+        })
+        setLoading(false)
+        return
+      }
+
+      // Payment initialized successfully - show inline payment modal
       setPaymentStatus({
         loading: false,
         success: true,
-        message: 'Redirecting to secure payment page...',
+        message: 'Opening secure payment form...',
       })
       
-      // Redirect to Paystack payment page
-      setTimeout(() => {
-        window.location.href = paymentData.authorizationUrl
-      }, 500)
+      // Set payment data for inline payment component
+      setPaymentData({
+        publicKey: paystackPublicKey,
+        email: formData.email,
+        amount: finalConsultationPrice,
+        currency: currency === 'USD' ? 'USD' : 'KES',
+        reference: paymentData.reference,
+        customerName: formData.contactName,
+        phone: fullPhone,
+        consultationId: consultationId,
+      })
+      
+      // Show payment modal
+      setShowPaymentModal(true)
 
       // Reset form immediately for better UX
       setFormData({
@@ -1982,14 +2046,30 @@ export default function LabsBookAppointment() {
                 </svg>
               </div>
               <h2 className="text-2xl sm:text-3xl font-display text-[var(--color-primary)] mb-4">
-                {isRebooking ? 'Consultation Rescheduled! ✅' : 'Booking Confirmed! ✅'}
+                {confirmedConsultationEmail 
+                  ? 'Payment Successful! ✅' 
+                  : isRebooking 
+                    ? 'Consultation Rescheduled! ✅' 
+                    : 'Booking Confirmed! ✅'}
               </h2>
               <p className="text-[var(--color-text)] mb-6 text-lg">
                 {isRebooking 
                   ? 'Your consultation has been successfully rescheduled!'
-                  : 'Your consultation request has been received successfully!'}
+                  : confirmedConsultationEmail 
+                    ? 'Payment successful! Your consultation has been confirmed!'
+                    : 'Your consultation request has been received successfully!'}
               </p>
-              {(isRebooking || consultationFeeKES === 0) && (
+              {confirmedConsultationEmail && (
+                <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4 mb-6">
+                  <p className="text-green-800 font-semibold mb-1">
+                    ✅ Payment Confirmed
+                  </p>
+                  <p className="text-green-700 text-sm">
+                    Your payment has been successfully processed. Your consultation is now confirmed!
+                  </p>
+                </div>
+              )}
+              {(isRebooking || (consultationFeeKES === 0 && !confirmedConsultationEmail)) && (
                 <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4 mb-6">
                   <p className="text-green-800 font-semibold mb-1">
                     ✅ No Payment Required
@@ -2006,23 +2086,252 @@ export default function LabsBookAppointment() {
                   <strong>📧 Check your email</strong>
                 </p>
                 <p className="text-[var(--color-text)]/80 text-sm">
-                  We've sent a {isRebooking ? 'rescheduling' : 'confirmation'} email to <strong>{formData.email || 'your email address'}</strong> with all the details{formData.meetingType === 'online' ? ', including your meeting link' : ''}.
+                  {confirmedConsultationEmail 
+                    ? (
+                      <>
+                        Click the button below to send your confirmation email to <strong>{confirmedConsultationEmail}</strong> with all the details{confirmedConsultationDetails?.meetingType === 'online' ? ', including your meeting link' : ''}.
+                      </>
+                    )
+                    : (
+                      <>
+                        We've sent a {isRebooking ? 'rescheduling' : 'confirmation'} email to <strong>{formData.email || 'your email address'}</strong> with all the details{formData.meetingType === 'online' ? ', including your meeting link' : ''}.
+                      </>
+                    )}
                 </p>
               </div>
-              {!isRebooking && (
+              {confirmedConsultationEmail && (
                 <p className="text-[var(--color-text)] mb-6 text-sm">
-                  We'll contact you within 24 hours to finalize your consultation schedule.
+                  Your consultation is confirmed and scheduled. Click the button below to receive your confirmation email with all the details and meeting link.
                 </p>
               )}
               <button
-                onClick={() => setShowConfirmationModal(false)}
-                className="w-full bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold hover:bg-[var(--color-primary-dark)] transition-colors"
+                onClick={async () => {
+                  if (confirmedConsultationDetails && confirmedConsultationEmail) {
+                    setSendingEmail(true)
+                    try {
+                      console.log('Sending consultation email:', {
+                        consultationId: confirmedConsultationDetails.consultationId,
+                        email: confirmedConsultationEmail,
+                      })
+
+                      // Send consultation confirmation email
+                      const response = await fetch('/api/labs/consultation/send-email', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          consultationId: confirmedConsultationDetails.consultationId,
+                          email: confirmedConsultationEmail,
+                        }),
+                      })
+
+                      const data = await response.json()
+                      console.log('Email send response:', { status: response.status, data })
+
+                      if (response.ok && data.success) {
+                        // Email sent successfully
+                        alert(`Confirmation email sent successfully to ${confirmedConsultationEmail}! Please check your inbox.`)
+                        setShowConfirmationModal(false)
+                        setConfirmedConsultationEmail('')
+                        setConfirmedConsultationDetails(null)
+                      } else {
+                        const errorMsg = data.details 
+                          ? `${data.error}: ${data.details}` 
+                          : data.error || 'Failed to send email. Please contact support.'
+                        alert(errorMsg)
+                        console.error('Email send failed:', data)
+                      }
+                    } catch (error: any) {
+                      console.error('Error sending email:', error)
+                      alert(`Error sending email: ${error.message || 'Please contact support.'}`)
+                    } finally {
+                      setSendingEmail(false)
+                    }
+                  } else {
+                    // No consultation details, just close modal
+                    setShowConfirmationModal(false)
+                    setConfirmedConsultationEmail('')
+                    setConfirmedConsultationDetails(null)
+                  }
+                }}
+                disabled={sendingEmail || !confirmedConsultationDetails}
+                className="w-full bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Got it!
+                {sendingEmail ? 'Sending Email...' : 'Send Email'}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Paystack Inline Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <PaystackInlinePayment
+          publicKey={paymentData.publicKey}
+          email={paymentData.email}
+          amount={paymentData.amount}
+          currency={paymentData.currency}
+          reference={paymentData.reference}
+          customerName={paymentData.customerName}
+          phone={paymentData.phone}
+          metadata={{
+            payment_type: 'consultation',
+            consultation_id: paymentData.consultationId,
+            business_name: formData.businessName,
+          }}
+          onSuccess={async (reference) => {
+            // Payment successful - verify and handle
+            setShowPaymentModal(false)
+            setPaymentStatus({
+              loading: true,
+              success: null,
+              message: 'Verifying payment...',
+            })
+
+            try {
+              // Verify payment with backend
+              const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+              const verifyData = await verifyResponse.json()
+
+              if (verifyResponse.ok && verifyData.success) {
+                // Payment verified successfully
+                // Update consultation status immediately (don't wait for webhook)
+                try {
+                  const updateResponse = await fetch('/api/labs/consultation', {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      consultationId: paymentData.consultationId,
+                      paymentStatus: 'paid',
+                      status: 'confirmed',
+                      paymentOrderTrackingId: reference,
+                      paymentTransactionId: reference,
+                      paymentMethod: 'paystack',
+                      paidAt: new Date().toISOString(),
+                    }),
+                  })
+                  
+                  if (updateResponse.ok) {
+                    console.log('✅ Consultation updated after payment verification')
+                    // Email will be sent when user clicks "Send Email" button
+                  }
+                } catch (updateError) {
+                  console.error('Error updating consultation:', updateError)
+                  // Continue anyway - webhook will handle it
+                }
+
+                setPaymentStatus({
+                  loading: false,
+                  success: true,
+                  message: 'Payment successful! Your consultation has been confirmed.',
+                  orderTrackingId: reference,
+                })
+                
+                // Store consultation details for confirmation modal before resetting form
+                const consultationEmail = formData.email
+                const consultationDetails = {
+                  preferredDate: formData.preferredDate,
+                  preferredTime: formData.preferredTime,
+                  meetingType: formData.meetingType,
+                  consultationId: paymentData.consultationId,
+                  businessName: formData.businessName,
+                  contactName: formData.contactName,
+                }
+                
+                setConfirmedConsultationEmail(consultationEmail)
+                setConfirmedConsultationDetails(consultationDetails)
+
+                // Reset form
+                setFormData({
+                  businessName: '',
+                  contactName: '',
+                  email: '',
+                  businessType: '',
+                  isBusinessRegistered: '',
+                  serviceType: '',
+                  currentWebsite: '',
+                  hasWebsite: '',
+                  monthlyClients: '',
+                  currentBookingSystem: '',
+                  currentPaymentSystem: '',
+                  mainPainPoints: '',
+                  budgetRange: '',
+                  timeline: '',
+                  preferredContact: 'email',
+                  additionalDetails: '',
+                  preferredDate: '',
+                  preferredTime: '',
+                  interestedTier: '',
+                  meetingType: 'online' as 'online' | 'physical',
+                  meetingCountry: '',
+                  meetingCity: '',
+                  meetingBuilding: '',
+                  meetingStreet: '',
+                })
+                setPhoneLocalNumber('')
+                setPaymentData(null)
+                
+                // Show confirmation modal
+                setShowConfirmationModal(true)
+
+                // Refresh booked slots
+                fetch('/api/labs/consultation/availability', { 
+                  cache: 'no-store',
+                  headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                  },
+                })
+                  .then(response => response.ok ? response.json() : null)
+                  .then(data => {
+                    if (data) {
+                      setBookedDates(data.bookedDates || [])
+                      setBookedSlots(data.bookedSlots || [])
+                      setAvailableDates(data.availableDates || [])
+                      setTimeSlots(data.timeSlots || [])
+                      setBlockedDates(data.blockedDates || [])
+                    }
+                  })
+                  .catch(error => {
+                    console.error('Error refreshing availability after payment:', error)
+                  })
+              } else {
+                // Payment verification failed
+                setPaymentStatus({
+                  loading: false,
+                  success: false,
+                  message: verifyData.error || 'Payment verification failed. Please contact support.',
+                })
+                setSubmitStatus({
+                  type: 'error',
+                  message: 'Payment verification failed. Please contact support with your payment reference.',
+                })
+              }
+            } catch (error) {
+              console.error('Error verifying payment:', error)
+              setPaymentStatus({
+                loading: false,
+                success: false,
+                message: 'Error verifying payment. Please contact support.',
+              })
+            } finally {
+              setLoading(false)
+            }
+          }}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentData(null)
+            setPaymentStatus({
+              loading: false,
+              success: null,
+              message: '',
+            })
+            setLoading(false)
+          }}
+        />
       )}
     </div>
   )

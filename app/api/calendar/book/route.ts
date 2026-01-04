@@ -495,6 +495,9 @@ export async function POST(request: NextRequest) {
             dateTime: endTime.toISOString(),
             timeZone: 'Africa/Nairobi',
           },
+          // Note: Service accounts cannot invite attendees without Domain-Wide Delegation
+          // Instead, we add attendees without sending invitations
+          // Email notifications will be sent via the email service instead
           attendees: [
             { email: CALENDAR_EMAIL },
             { email: email },
@@ -508,16 +511,27 @@ export async function POST(request: NextRequest) {
           },
         }
 
+        // Service accounts cannot use sendUpdates without Domain-Wide Delegation
+        // We'll create the event without sending invitations and rely on email notifications instead
         const response = await calendar.events.insert({
           calendarId: CALENDAR_ID,
           requestBody: event,
-          sendUpdates: 'all', // Send email notifications
+          // Removed sendUpdates: 'all' - service accounts can't send invitations
+          // Email notifications are handled separately via the email service
         })
 
         eventId = response.data.id
+        console.log('✅ Calendar event created successfully:', eventId)
       } catch (calendarError: any) {
         console.error('Error creating calendar event:', calendarError)
+        // Log specific error details for debugging
+        if (calendarError.code === 403) {
+          console.warn('⚠️ Calendar API 403 error - Service account may need Domain-Wide Delegation for attendee invitations')
+          console.warn('Calendar error details:', calendarError.message)
+        }
         // Continue to send email notification even if calendar fails
+        // Don't fail the booking - calendar is optional
+        eventId = null
       }
     }
 
@@ -878,12 +892,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if it's an authentication error
+    // Check if it's an authentication error - but don't fail booking for calendar errors
+    // Calendar is optional, booking should succeed even if calendar fails
     if (error.code === 401 || error.code === 403) {
-      return NextResponse.json(
-        { error: 'Calendar authentication failed. Please check your Google Calendar API setup.' },
-        { status: 500 }
-      )
+      console.warn('Calendar authentication error, but continuing with booking:', error.message)
+      // Don't return error - let the booking proceed without calendar
+      // The calendar error is already handled in the try-catch above
     }
 
     // Provide more detailed error message

@@ -49,27 +49,51 @@ export async function POST(request: NextRequest) {
     if (existingReservation) {
       // Check if it's the same booking reference (same user retrying)
       if (existingReservation.bookingReference !== bookingReference) {
-        return NextResponse.json(
-          { error: 'This time slot is temporarily reserved. Please try another slot.' },
-          { status: 409 }
-        )
+        // Check if the existing reservation is about to expire (less than 2 minutes left)
+        const expiresAt = new Date(existingReservation.expiresAt)
+        const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+        const TWO_MINUTES = 2 * 60 * 1000
+        
+        if (timeUntilExpiry < TWO_MINUTES) {
+          // Reservation is about to expire, allow override
+          console.log(`Slot reservation expiring soon (${Math.round(timeUntilExpiry / 1000)}s), allowing override`)
+          // Remove the old reservation and create new one
+          const index = activeReservations.findIndex(r => r.bookingReference === existingReservation.bookingReference)
+          if (index !== -1) {
+            activeReservations.splice(index, 1)
+          }
+          // Create new reservation below
+        } else {
+          // Reservation is still active, return conflict
+          return NextResponse.json(
+            { error: 'This time slot is temporarily reserved. Please try another slot.' },
+            { status: 409 }
+          )
+        }
+      } else {
+        // Same reference - extend reservation
+        existingReservation.expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        const index = activeReservations.findIndex(r => r.bookingReference === bookingReference)
+        if (index !== -1) {
+          activeReservations[index] = existingReservation
+        }
+        await writeDataFile('pending-booking-reservations.json', activeReservations)
+        return NextResponse.json({
+          success: true,
+          reserved: true,
+          expiresAt: existingReservation.expiresAt,
+        })
       }
-      // Same reference - extend reservation
-      existingReservation.expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
-      const index = activeReservations.findIndex(r => r.bookingReference === bookingReference)
-      if (index !== -1) {
-        activeReservations[index] = existingReservation
-      }
-    } else {
-      // Create new reservation
-      activeReservations.push({
-        bookingReference,
-        date,
-        timeSlot,
-        reservedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
-      })
     }
+    
+    // Create new reservation (either new slot or override of expiring reservation)
+    activeReservations.push({
+      bookingReference,
+      date,
+      timeSlot,
+      reservedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
+    })
 
     await writeDataFile('pending-booking-reservations.json', activeReservations)
 

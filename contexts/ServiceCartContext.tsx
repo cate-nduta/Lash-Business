@@ -19,7 +19,7 @@ interface ServiceCartContextType {
   removeService: (serviceId: string) => void
   clearCart: () => void
   getTotalItems: () => number
-  getTotalPrice: (currency: Currency) => number
+  getTotalPrice: (currency: Currency, exchangeRates?: { usdToKes: number }) => number
   getTotalDuration: () => number
   hasService: (serviceId: string) => boolean
 }
@@ -84,7 +84,8 @@ export function ServiceCartProvider({ children }: { children: ReactNode }) {
     return items.length
   }
 
-  const getTotalPrice = (currency: Currency) => {
+  const getTotalPrice = (currency: Currency, exchangeRates?: { usdToKes: number }) => {
+    const rates = exchangeRates || DEFAULT_EXCHANGE_RATES
     return items.reduce((total, item) => {
       if (currency === 'KES') {
         return total + item.price
@@ -92,8 +93,8 @@ export function ServiceCartProvider({ children }: { children: ReactNode }) {
       if (currency === 'USD' && item.priceUSD !== undefined) {
         return total + item.priceUSD
       }
-      // For USD without priceUSD, convert from KES
-      return total + convertCurrency(item.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
+      // For USD without priceUSD, convert from KES using provided exchange rates
+      return total + convertCurrency(item.price, 'KES', currency, rates)
     }, 0)
   }
 

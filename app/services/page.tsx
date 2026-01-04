@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { type ServiceCatalog, type ServiceCategory } from '@/lib/services-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATES, type Currency } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES, type Currency, type ExchangeRates } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import Link from 'next/link'
 
@@ -43,13 +43,13 @@ const serviceDescriptions: Record<string, string> = {
   'Lash Removal': 'Professional removal of existing lash extensions. Recommended before getting a new full set for best results.',
 }
 
-const toDisplayServices = (category: ServiceCategory, currency: Currency, formatCurrency: (amount: number) => string): DisplayService[] =>
+const toDisplayServices = (category: ServiceCategory, currency: Currency, formatCurrency: (amount: number) => string, exchangeRates: ExchangeRates): DisplayService[] =>
   category.services.map((service) => {
     let price = service.price || 0
     if (currency === 'USD' && service.priceUSD !== undefined) {
       price = service.priceUSD
     } else if (currency !== 'KES' && service.price) {
-      price = convertCurrency(service.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
+      price = convertCurrency(service.price, 'KES', currency, exchangeRates)
     }
     return {
       id: service.id,
@@ -68,10 +68,28 @@ export default function Services() {
   const [loading, setLoading] = useState(true)
   const [addedServiceId, setAddedServiceId] = useState<string | null>(null)
   const [massageInfo, setMassageInfo] = useState<MassageInfo | null>(null)
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES)
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   })
+
+  // Load exchange rates
+  useEffect(() => {
+    const loadExchangeRates = async () => {
+      try {
+        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          setExchangeRates(data)
+        }
+      } catch (error) {
+        console.error('Error loading exchange rates:', error)
+        // Keep default rates on error
+      }
+    }
+    loadExchangeRates()
+  }, [])
 
   // Load services and homepage data in parallel for faster loading
   useEffect(() => {
@@ -365,7 +383,7 @@ export default function Services() {
                   ref={ref}
                   className={`space-y-6 transition-opacity ${inView ? 'animate-fade-in-up' : 'opacity-0'}`}
                 >
-                  {toDisplayServices(activeCategory, currency, formatCurrency).map((displayService, index) => {
+                  {toDisplayServices(activeCategory, currency, formatCurrency, exchangeRates).map((displayService, index) => {
                     const fullService = activeCategory.services.find(s => s.id === displayService.id)
                     const isInCart = hasService(displayService.id)
                     const justAdded = addedServiceId === displayService.id
@@ -375,13 +393,8 @@ export default function Services() {
                         addService({
                           serviceId: fullService.id,
                           name: fullService.name,
-                          price: currency === 'KES' 
-                            ? fullService.price || 0
-                            : currency === 'USD' && fullService.priceUSD !== undefined 
-                            ? fullService.priceUSD 
-                            : fullService.price
-                            ? convertCurrency(fullService.price, 'KES', currency, DEFAULT_EXCHANGE_RATES)
-                            : 0,
+                          // Always store KES price in the price field
+                          price: fullService.price || 0,
                           priceUSD: fullService.priceUSD,
                           duration: fullService.duration,
                           categoryId: activeCategory.id,

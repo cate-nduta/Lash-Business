@@ -91,10 +91,12 @@ export async function POST(request: NextRequest) {
           ],
         }
 
+        // Service accounts cannot use sendUpdates without Domain-Wide Delegation
+        // Email notifications are handled separately via the email service
         const response = await calendar.events.insert({
           calendarId: CALENDAR_ID,
           requestBody: event,
-          sendUpdates: 'all',
+          // Removed sendUpdates: 'all' - service accounts can't send invitations
         })
 
         eventId = response.data.id
@@ -177,10 +179,49 @@ export async function POST(request: NextRequest) {
     const updatedReservations = reservations.filter(r => r.bookingReference !== bookingReference)
     await writeDataFile('pending-booking-reservations.json', updatedReservations)
 
-    // NOTE: Email confirmation is NOT sent automatically after payment
-    // User must click the button on the payment success page to send the email
-    // This prevents sending emails before payment is fully confirmed
-    console.log('✅ Booking created after payment. Email will be sent when user clicks button on success page.')
+    // Send booking confirmation email automatically after payment is confirmed
+    let emailSent = false
+    let emailError = null
+    try {
+      const emailResult = await sendEmailNotification({
+        name: bookingData.name,
+        email: bookingData.email,
+        phone: bookingData.phone,
+        service: bookingData.service || '',
+        date: bookingData.date,
+        timeSlot: bookingData.timeSlot,
+        location: bookingData.location || STUDIO_LOCATION,
+        originalPrice: bookingData.originalPrice || 0,
+        discount: bookingData.discount || 0,
+        finalPrice: bookingData.finalPrice || 0,
+        deposit: bookingData.deposit || 0,
+        bookingId,
+        manageToken,
+        policyWindowHours: CLIENT_MANAGE_WINDOW_HOURS,
+        notes: bookingData.notes,
+        appointmentPreference: bookingData.appointmentPreference,
+        desiredLook: bookingData.desiredLook || 'Custom',
+        desiredLookStatus: bookingData.desiredLookStatus || 'custom',
+        isGiftCardBooking: !!bookingData.giftCardCode,
+      })
+
+      if (emailResult && emailResult.success && emailResult.ownerEmailSent) {
+        emailSent = true
+        console.log('✅ Booking confirmation email sent automatically after payment:', {
+          bookingId,
+          email: bookingData.email,
+          ownerEmailSent: emailResult.ownerEmailSent,
+          customerEmailSent: emailResult.customerEmailSent,
+        })
+      } else {
+        emailError = emailResult?.error || 'Email service unavailable'
+        console.warn('⚠️ Booking confirmation email not sent:', emailError)
+      }
+    } catch (emailErr: any) {
+      emailError = emailErr.message || 'Email service error'
+      console.error('❌ Error sending booking confirmation email:', emailErr)
+      // Don't fail the booking creation if email fails
+    }
 
     // Create/update client account
     try {
@@ -250,6 +291,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       bookingId,
+      emailSent,
+      emailError,
       message: 'Booking created successfully after payment confirmation',
     })
   } catch (error: any) {

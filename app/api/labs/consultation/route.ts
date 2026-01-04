@@ -253,51 +253,17 @@ export async function POST(request: NextRequest) {
     const consultationPrice = consultationData.consultationPrice || 0
     const isFree = consultationPrice === 0
 
-    // If NOT free and payment is required, store as pending consultation instead of creating immediately
-    if (!isFree && (body.paymentStatus === 'pending_payment' || body.paymentMethod === 'paystack')) {
-      // Store pending consultation data - will be created after payment confirmation
-      const pendingConsultations = await readDataFile<Array<{
-        consultationId: string
-        consultationData: ConsultationSubmission
-        createdAt: string
-      }>>('pending-consultations.json', [])
-
-      pendingConsultations.push({
-        consultationId,
-        consultationData: {
-          ...consultationData,
-          status: 'pending_payment',
-        },
-        createdAt: new Date().toISOString(),
-      })
-
-      await writeDataFile('pending-consultations.json', pendingConsultations)
-
-      // Return success but indicate consultation is pending payment
-      return NextResponse.json({
-        success: true,
-        consultationId,
-        pendingPayment: true,
-        message: 'Consultation will be created after payment confirmation',
-      })
-    }
-
-    // For free consultations or legacy support, create immediately
-    consultationData.status = isFree ? 'confirmed' : (body.paymentStatus === 'pending_payment' ? 'pending_payment' : 'confirmed')
-    consultationData.paymentStatus = isFree ? 'not_required' : (body.paymentStatus || 'pending')
-
-    // Only send email if payment is already completed (for rebooking or manual confirmations)
-    // For new consultations with pending payment, email will be sent after IPN confirms payment
-    const shouldSendEmail = consultationData.paymentStatus !== 'pending_payment'
+    // IMPORTANT: Always create consultation in main file so it shows in admin
+    // Even if payment is pending, we want to see the consultation request
+    // The status will be updated when payment is confirmed
+    consultationData.status = isFree ? 'confirmed' : 'pending_payment'
+    consultationData.paymentStatus = isFree ? 'not_required' : 'pending_payment'
 
     // Use admin-configured Meet room for all consultations (for online meetings)
-    // This prevents direct Meet links from appearing in calendar events
-    // The Meet room can be changed weekly in admin settings for security
     if (consultationData.meetingType === 'online') {
       try {
         const { readDataFile } = await import('@/lib/data-utils')
         const labsSettings = await readDataFile<{ googleMeetRoom?: string }>('labs-settings.json', {})
-        // Priority: Admin settings first, then env variable as fallback
         const adminMeetRoom = labsSettings.googleMeetRoom || process.env.STATIC_GOOGLE_MEET_ROOM || process.env.GOOGLE_MEET_ROOM || null
         
         if (adminMeetRoom && adminMeetRoom.trim()) {
@@ -308,7 +274,6 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.warn('Error loading admin Meet room settings:', error)
-        // Final fallback to environment variable if admin settings fail to load
         const envMeetRoom = process.env.STATIC_GOOGLE_MEET_ROOM || process.env.GOOGLE_MEET_ROOM || null
         if (envMeetRoom && envMeetRoom.trim()) {
           consultationData.meetLink = envMeetRoom.trim()
@@ -319,17 +284,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Store consultation request in data file
+    // Store consultation request in data file (ALWAYS - so it shows in admin)
     try {
       const consultationsData = await readDataFile<{ consultations: ConsultationSubmission[] }>('labs-consultations.json', { consultations: [] })
       consultationsData.consultations.push(consultationData)
       await writeDataFile('labs-consultations.json', consultationsData)
+      console.log('✅ Consultation created:', consultationId, 'Status:', consultationData.status)
     } catch (error) {
       console.error('Error storing consultation data:', error)
-      // Continue even if storage fails - email is more important
+      return NextResponse.json(
+        { error: 'Failed to store consultation data' },
+        { status: 500 }
+      )
     }
 
-    // Send email notification (with time-gated link) only if payment is not pending
+    // Only send email if payment is already completed (for free consultations or rebooking)
+    // For paid consultations, email will be sent after payment confirmation
+    const shouldSendEmail = isFree || consultationData.paymentStatus === 'not_required'
+
     if (shouldSendEmail) {
       console.log('📧 Attempting to send consultation confirmation email:', {
         consultationId: consultationData.consultationId,
@@ -338,19 +310,23 @@ export async function POST(request: NextRequest) {
         paymentStatus: consultationData.paymentStatus,
         isFree,
       })
-    try {
-      await sendConsultationEmail(consultationData)
+      try {
+        await sendConsultationEmail(consultationData)
         console.log('✅ Consultation confirmation email sent successfully')
-    } catch (error) {
+      } catch (error) {
         console.error('❌ Error sending consultation email:', error)
-      // Still return success if email fails - data is stored
       }
     } else {
-      console.log('📧 Email will be sent after payment is confirmed via IPN')
+      console.log('📧 Email will be sent after payment is confirmed')
     }
 
     return NextResponse.json({
       success: true,
+      consultation: {
+        consultationId,
+        status: consultationData.status,
+        paymentStatus: consultationData.paymentStatus,
+      },
       message: 'Consultation request submitted successfully',
     })
   } catch (error: any) {
@@ -365,3 +341,107 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * PATCH endpoint to update consultation
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { consultationId, ...updates } = body
+
+    if (!consultationId) {
+      return NextResponse.json(
+        { error: 'Consultation ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Read consultations
+    const consultationsData = await readDataFile<{ consultations: ConsultationSubmission[] }>(
+      'labs-consultations.json',
+      { consultations: [] }
+    )
+
+    // Find consultation
+    const consultationIndex = consultationsData.consultations.findIndex(
+      (c) => c.consultationId === consultationId
+    )
+
+    if (consultationIndex === -1) {
+      // Check pending consultations
+      const pendingConsultations = await readDataFile<Array<{
+        consultationId: string
+        consultationData: ConsultationSubmission
+        createdAt: string
+      }>>('pending-consultations.json', [])
+
+      const pendingIndex = pendingConsultations.findIndex(
+        (pc) => pc.consultationId === consultationId
+      )
+
+      if (pendingIndex !== -1) {
+        // Update pending consultation
+        const pendingConsultation = pendingConsultations[pendingIndex]
+        const updatedConsultation = {
+          ...pendingConsultation.consultationData,
+          ...updates,
+        }
+
+        // If payment is confirmed, move to main consultations
+        if (updates.paymentStatus === 'paid' || updates.status === 'confirmed') {
+          consultationsData.consultations.push(updatedConsultation)
+          await writeDataFile('labs-consultations.json', consultationsData)
+
+          // Remove from pending
+          pendingConsultations.splice(pendingIndex, 1)
+          await writeDataFile('pending-consultations.json', pendingConsultations)
+
+          console.log('✅ Consultation moved from pending to confirmed:', consultationId)
+        } else {
+          // Update in place
+          pendingConsultations[pendingIndex] = {
+            ...pendingConsultation,
+            consultationData: updatedConsultation,
+          }
+          await writeDataFile('pending-consultations.json', pendingConsultations)
+        }
+
+        return NextResponse.json({
+          success: true,
+          consultation: updatedConsultation,
+        })
+      }
+
+      return NextResponse.json(
+        { error: 'Consultation not found' },
+        { status: 404 }
+      )
+    }
+
+    // Update consultation
+    const consultation = consultationsData.consultations[consultationIndex]
+    const updatedConsultation = {
+      ...consultation,
+      ...updates,
+    }
+
+    consultationsData.consultations[consultationIndex] = updatedConsultation
+    await writeDataFile('labs-consultations.json', consultationsData)
+
+    console.log('✅ Consultation updated:', consultationId, updates)
+
+    return NextResponse.json({
+      success: true,
+      consultation: updatedConsultation,
+    })
+  } catch (error: any) {
+    console.error('Error updating consultation:', error)
+    return NextResponse.json(
+      {
+        error: 'Failed to update consultation',
+        details: error.message || 'Unknown error',
+      },
+      { status: 500 }
+    )
+  }
+}

@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyWebhookSignature, verifyTransaction, convertFromSubunits } from '@/lib/paystack-utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailViaZoho, BUSINESS_NOTIFICATION_EMAIL } from '@/lib/email/zoho-config'
+import { getCalendarClientWithWrite } from '@/lib/google-calendar-client'
+import { sendEmailNotification } from '@/app/api/booking/email/utils'
+import { updateFullyBookedState } from '@/lib/availability-utils'
+import { getSalonCommissionSettings } from '@/lib/discount-utils'
+import { redeemGiftCard } from '@/lib/gift-card-utils'
+import { randomBytes } from 'crypto'
+import { type ClientData, type ClientUsersData, type LashHistory } from '@/types/client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -29,7 +36,11 @@ export async function POST(request: NextRequest) {
     }
 
     const event = JSON.parse(body)
-    console.log('Paystack webhook event:', event.event, event.data?.reference)
+    console.log('📥 Paystack webhook event received:', {
+      event: event.event,
+      reference: event.data?.reference,
+      metadata: event.data?.metadata,
+    })
 
     // Handle different event types
     if (event.event === 'charge.success') {
@@ -60,12 +71,18 @@ export async function POST(request: NextRequest) {
       })
 
       // Handle different payment types
+      console.log('🔄 Processing payment type:', paymentType, 'for reference:', verifiedTransaction.reference)
+      
       switch (paymentType) {
         case 'course_purchase':
           await handleCoursePurchasePayment(verifiedTransaction, metadata)
           break
 
         case 'consultation':
+          console.log('📋 Handling consultation payment:', {
+            consultationId: metadata.consultation_id,
+            reference: verifiedTransaction.reference,
+          })
           await handleConsultationPayment(verifiedTransaction, metadata)
           break
 
@@ -162,11 +179,25 @@ async function handleCoursePurchasePayment(transaction: any, metadata: any) {
 async function handleConsultationPayment(transaction: any, metadata: any) {
   try {
     const consultationId = metadata.consultation_id
-    if (!consultationId) return
+    if (!consultationId) {
+      console.warn('⚠️ No consultation_id in payment metadata:', metadata)
+      return
+    }
+    
+    console.log('🔍 Processing consultation payment:', {
+      consultationId,
+      reference: transaction.reference,
+      amount: transaction.amount,
+    })
 
     // Check if consultation already exists (legacy support)
     const consultations = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
     const existingConsultation = consultations.consultations.find(c => c.consultationId === consultationId)
+    
+    console.log('📋 Consultation lookup:', {
+      foundInMain: !!existingConsultation,
+      totalConsultations: consultations.consultations.length,
+    })
 
     if (existingConsultation) {
       // Update existing consultation payment status (legacy)
@@ -341,6 +372,7 @@ async function handleBookingPayment(transaction: any, metadata: any) {
 
       if (existingBooking) {
         // Update existing booking payment status (legacy)
+        const wasNotPaid = existingBooking.paymentStatus !== 'paid'
         existingBooking.paymentStatus = 'paid'
         existingBooking.paymentMethod = 'paystack'
         existingBooking.paymentTransactionId = transaction.reference
@@ -351,6 +383,46 @@ async function handleBookingPayment(transaction: any, metadata: any) {
         if (bookingIndex !== -1) {
           bookings[bookingIndex] = existingBooking
           await writeDataFile('bookings.json', bookings)
+        }
+
+        // Send confirmation email if booking was just paid (not already paid)
+        if (wasNotPaid && existingBooking.email) {
+          try {
+            const { sendEmailNotification } = await import('@/app/api/booking/email/utils')
+            const emailResult = await sendEmailNotification({
+              name: existingBooking.name,
+              email: existingBooking.email,
+              phone: existingBooking.phone,
+              service: existingBooking.service || '',
+              date: existingBooking.date,
+              timeSlot: existingBooking.timeSlot,
+              location: existingBooking.location || process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya',
+              originalPrice: existingBooking.originalPrice || 0,
+              discount: existingBooking.discount || 0,
+              finalPrice: existingBooking.finalPrice || 0,
+              deposit: existingBooking.deposit || 0,
+              bookingId: existingBooking.bookingId,
+              manageToken: existingBooking.manageToken,
+              policyWindowHours: existingBooking.cancellationWindowHours || 72,
+              notes: existingBooking.notes,
+              appointmentPreference: existingBooking.appointmentPreference,
+              desiredLook: existingBooking.desiredLook || 'Custom',
+              desiredLookStatus: existingBooking.desiredLookStatus || 'custom',
+              isGiftCardBooking: !!existingBooking.giftCardCode,
+            })
+
+            if (emailResult && emailResult.success) {
+              console.log('✅ Booking confirmation email sent via webhook:', {
+                bookingId: existingBooking.bookingId,
+                email: existingBooking.email,
+              })
+            } else {
+              console.warn('⚠️ Failed to send booking confirmation email:', emailResult?.error)
+            }
+          } catch (emailError) {
+            console.error('❌ Error sending booking confirmation email via webhook:', emailError)
+            // Don't fail the webhook if email fails
+          }
         }
 
         console.log('Booking payment processed (existing booking):', bookingReference, existingBooking.bookingId)
@@ -371,28 +443,9 @@ async function handleBookingPayment(transaction: any, metadata: any) {
       const pendingBooking = pendingBookings.find(pb => pb.bookingReference === bookingReference)
 
       if (pendingBooking) {
-        // Create the actual booking now that payment is confirmed
-        try {
-          const createResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}/api/booking/create-from-payment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              bookingReference,
-              paymentReference: transaction.reference,
-            }),
-          })
-
-          if (createResponse.ok) {
-            console.log('Booking created from pending data after payment confirmation:', bookingReference)
-          } else {
-            const errorText = await createResponse.text()
-            console.error('Failed to create booking from pending data:', errorText)
-          }
-        } catch (fetchError) {
-          console.error('Error calling create-from-payment endpoint:', fetchError)
-          // Note: We can't create booking directly here as it requires many dependencies
-          // The endpoint should be accessible, but if it fails, we'll log it
-        }
+        // Create the actual booking directly in webhook (no fetch needed)
+        console.log('📝 Processing pending booking:', bookingReference)
+        await createBookingDirectlyInWebhook(pendingBooking.bookingData, bookingReference, transaction)
         return
       }
     } catch (error) {
@@ -402,6 +455,308 @@ async function handleBookingPayment(transaction: any, metadata: any) {
     console.log('No pending booking found for reference:', bookingReference)
   } catch (error) {
     console.error('Error handling booking payment:', error)
+  }
+}
+
+/**
+ * Create booking directly in webhook (fallback when fetch fails)
+ */
+async function createBookingDirectlyInWebhook(bookingData: any, bookingReference: string, transaction: any) {
+  try {
+    console.log('📝 Creating booking directly in webhook:', bookingReference)
+    const bookingId = `booking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const manageToken = randomBytes(24).toString('hex')
+    const createdAt = new Date().toISOString()
+    const salonCommissionSettings = await getSalonCommissionSettings()
+    const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
+    const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+    const CALENDAR_EMAIL = process.env.GOOGLE_CALENDAR_EMAIL || 'hello@lashdiary.co.ke'
+    const STUDIO_LOCATION = process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
+    
+    const startTime = new Date(bookingData.timeSlot)
+    const cancellationCutoff = new Date(startTime.getTime() - CLIENT_MANAGE_WINDOW_HOURS * 60 * 60 * 1000)
+
+    // Create calendar event if configured
+    let eventId = null
+    try {
+      const calendar = await getCalendarClientWithWrite()
+      if (calendar) {
+        const endTime = new Date(startTime)
+        endTime.setHours(endTime.getHours() + (bookingData.totalDuration || 2))
+
+        const event = {
+          summary: `Lash Appointment - ${bookingData.name}`,
+          description: `
+            Client: ${bookingData.name}
+            Email: ${bookingData.email}
+            Phone: ${bookingData.phone}
+            Service: ${bookingData.service}
+            Location: ${bookingData.location || STUDIO_LOCATION}
+            Deposit: KSH ${bookingData.deposit || 0}
+          `,
+          start: {
+            dateTime: startTime.toISOString(),
+            timeZone: 'Africa/Nairobi',
+          },
+          end: {
+            dateTime: endTime.toISOString(),
+            timeZone: 'Africa/Nairobi',
+          },
+          attendees: [
+            { email: CALENDAR_EMAIL },
+            { email: bookingData.email },
+          ],
+        }
+
+        const response = await calendar.events.insert({
+          calendarId: CALENDAR_ID,
+          requestBody: event,
+        })
+
+        eventId = response.data.id
+        console.log('✅ Calendar event created:', eventId)
+      }
+    } catch (calendarError: any) {
+      console.error('⚠️ Error creating calendar event:', calendarError?.message || calendarError)
+    }
+
+    // Redeem gift card if provided
+    let giftCardRedeemed = false
+    let giftCardRemainingBalance = 0
+    if (bookingData.giftCardCode && bookingData.deposit > 0) {
+      try {
+        const redeemResult = await redeemGiftCard(
+          bookingData.giftCardCode,
+          bookingData.deposit,
+          bookingId,
+          bookingData.email
+        )
+        if (redeemResult.success) {
+          giftCardRedeemed = true
+          giftCardRemainingBalance = redeemResult.remainingBalance || 0
+        }
+      } catch (error) {
+        console.error('Error redeeming gift card:', error)
+      }
+    }
+
+    // Create the actual booking
+    const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
+    const bookings = bookingsData.bookings || []
+
+    const originalServicePrice = Number(bookingData.originalPrice || bookingData.finalPrice || 0)
+    const salonCommissionTotal = Math.round(
+      originalServicePrice * (salonCommissionSettings.totalPercentage / 100),
+    )
+
+    const newBooking = {
+      id: bookingId,
+      bookingId,
+      bookingReference,
+      name: bookingData.name,
+      email: bookingData.email,
+      phone: bookingData.phone,
+      service: bookingData.service || '',
+      services: bookingData.services || [],
+      serviceDetails: bookingData.serviceDetails || null,
+      date: bookingData.date,
+      timeSlot: bookingData.timeSlot,
+      location: bookingData.location || STUDIO_LOCATION,
+      originalPrice: bookingData.originalPrice || 0,
+      discount: bookingData.discount || 0,
+      finalPrice: bookingData.finalPrice || 0,
+      deposit: bookingData.deposit || 0,
+      paymentMethod: 'paystack',
+      paymentStatus: 'paid',
+      paymentOrderTrackingId: transaction.reference,
+      paymentTransactionId: transaction.reference,
+      paidAt: transaction.paidAt || new Date().toISOString(),
+      status: 'confirmed',
+      calendarEventId: eventId,
+      createdAt,
+      manageToken,
+      manageTokenGeneratedAt: createdAt,
+      manageTokenLastUsedAt: null,
+      cancellationWindowHours: CLIENT_MANAGE_WINDOW_HOURS,
+      cancellationCutoffAt: cancellationCutoff.toISOString(),
+      lastClientManageActionAt: null,
+      clientManageDisabled: false,
+      testimonialRequested: false,
+      testimonialRequestedAt: null,
+      cancelledAt: null,
+      cancelledBy: null,
+      cancellationReason: null,
+      refundStatus: 'not_applicable',
+      refundAmount: 0,
+      refundNotes: null,
+      rescheduledAt: null,
+      rescheduledBy: null,
+      rescheduleHistory: [],
+      giftCardCode: bookingData.giftCardCode || null,
+      giftCardRedeemed: giftCardRedeemed || false,
+      giftCardRemainingBalance: giftCardRemainingBalance || 0,
+      notes: bookingData.notes || '',
+      appointmentPreference: bookingData.appointmentPreference || '',
+      desiredLook: bookingData.desiredLook || 'Custom',
+      desiredLookStatus: bookingData.desiredLookStatus || 'custom',
+      lastFullSetDate: bookingData.lastFullSetDate || null,
+      promoCode: bookingData.promoCode || null,
+      discountType: bookingData.discountType || null,
+      salonReferral: bookingData.salonReferral || null,
+      isFirstTimeClient: bookingData.isFirstTimeClient || false,
+    }
+
+    bookings.push(newBooking)
+    await writeDataFile('bookings.json', { bookings })
+    console.log('✅ Booking created in bookings.json:', bookingId)
+
+    // Remove from pending bookings
+    const pendingBookings = await readDataFile<Array<{
+      bookingReference: string
+      bookingData: any
+      createdAt: string
+    }>>('pending-bookings.json', [])
+    const updatedPending = pendingBookings.filter(pb => pb.bookingReference !== bookingReference)
+    await writeDataFile('pending-bookings.json', updatedPending)
+    console.log('✅ Removed from pending bookings')
+
+    // Remove reservation
+    const reservations = await readDataFile<Array<{
+      bookingReference: string
+      date: string
+      timeSlot: string
+    }>>('pending-booking-reservations.json', [])
+    const updatedReservations = reservations.filter(r => r.bookingReference !== bookingReference)
+    await writeDataFile('pending-booking-reservations.json', updatedReservations)
+    console.log('✅ Removed from pending reservations')
+
+    // Update fully booked state
+    try {
+      await updateFullyBookedState(bookingData.date, bookings, {
+        onDayFullyBooked: async (dateStr: string) => {
+          console.log('📅 Date fully booked:', dateStr)
+        },
+      })
+    } catch (stateError) {
+      console.error('Error updating fully booked state:', stateError)
+    }
+
+    // Send booking confirmation email
+    let emailSent = false
+    try {
+      const emailResult = await sendEmailNotification({
+        name: bookingData.name,
+        email: bookingData.email,
+        phone: bookingData.phone,
+        service: bookingData.service || '',
+        date: bookingData.date,
+        timeSlot: bookingData.timeSlot,
+        location: bookingData.location || STUDIO_LOCATION,
+        originalPrice: bookingData.originalPrice || 0,
+        discount: bookingData.discount || 0,
+        finalPrice: bookingData.finalPrice || 0,
+        deposit: bookingData.deposit || 0,
+        bookingId,
+        manageToken,
+        policyWindowHours: CLIENT_MANAGE_WINDOW_HOURS,
+        notes: bookingData.notes,
+        appointmentPreference: bookingData.appointmentPreference,
+        desiredLook: bookingData.desiredLook || 'Custom',
+        desiredLookStatus: bookingData.desiredLookStatus || 'custom',
+        isGiftCardBooking: !!bookingData.giftCardCode,
+      })
+
+      if (emailResult && emailResult.success && emailResult.ownerEmailSent) {
+        emailSent = true
+        console.log('✅ Booking confirmation emails sent:', {
+          bookingId,
+          email: bookingData.email,
+          ownerEmailSent: emailResult.ownerEmailSent,
+          customerEmailSent: emailResult.customerEmailSent,
+        })
+      } else {
+        console.warn('⚠️ Booking confirmation email not sent:', emailResult?.error)
+      }
+    } catch (emailErr: any) {
+      console.error('❌ Error sending booking confirmation email:', emailErr)
+    }
+
+    // Create/update client account
+    try {
+      const normalizedEmail = bookingData.email.toLowerCase().trim()
+      const usersData = await readDataFile<ClientUsersData>('users.json', { users: [] })
+      
+      let user = usersData.users.find(u => u.email.toLowerCase().trim() === normalizedEmail)
+      
+      if (!user) {
+        const userId = randomBytes(16).toString('hex')
+        const now = new Date().toISOString()
+        
+        user = {
+          id: userId,
+          email: normalizedEmail,
+          name: bookingData.name,
+          phone: bookingData.phone,
+          passwordHash: '',
+          createdAt: now,
+          isActive: true,
+          emailVerified: false,
+        }
+        
+        usersData.users.push(user)
+        await writeDataFile('users.json', usersData)
+        
+        const clientData: ClientData = {
+          profile: user,
+          lashHistory: [],
+          preferences: {
+            preferredCurl: null,
+            lengthRange: null,
+            densityLevel: null,
+            eyeShape: null,
+            mappingStyle: null,
+            signatureLook: null,
+          },
+          allergies: { hasReaction: false },
+          aftercare: {},
+          lashMaps: [],
+          retentionCycles: [],
+        }
+        
+        await writeDataFile(`client-${userId}.json`, clientData)
+      }
+      
+      // Add to lash history
+      const clientDataFile = `client-${user.id}.json`
+      const clientData = await readDataFile<ClientData>(clientDataFile, undefined)
+      
+      if (clientData) {
+        const lashHistoryEntry: LashHistory = {
+          appointmentId: bookingId,
+          date: bookingData.date,
+          service: bookingData.service || '',
+          serviceType: 'full-set',
+          lashTech: 'Lash Technician',
+        }
+        
+        clientData.lashHistory.push(lashHistoryEntry)
+        await writeDataFile(clientDataFile, clientData)
+      }
+    } catch (clientError) {
+      console.error('Error creating client account:', clientError)
+    }
+
+    console.log('✅ Booking creation completed in webhook:', {
+      bookingId,
+      bookingReference,
+      emailSent,
+    })
+  } catch (error: any) {
+    console.error('❌ Error creating booking directly in webhook:', {
+      error: error.message || error,
+      stack: error.stack,
+      bookingReference,
+    })
   }
 }
 

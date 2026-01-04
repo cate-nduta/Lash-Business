@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/contexts/CartContext'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
+import { convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import Link from 'next/link'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 export default function Cart() {
   const router = useRouter()
@@ -22,6 +23,35 @@ export default function Cart() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [orderDetails, setOrderDetails] = useState<any>(null)
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    publicKey: string
+    email: string
+    amount: number
+    currency: string
+    reference: string
+    customerName: string
+    phone?: string
+    orderId: string
+  } | null>(null)
+
+  // Load exchange rates
+  useEffect(() => {
+    const loadExchangeRates = async () => {
+      try {
+        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          setExchangeRates(data)
+        }
+      } catch (error) {
+        console.error('Error loading exchange rates:', error)
+        // Keep default rates on error
+      }
+    }
+    loadExchangeRates()
+  }, [])
 
   // Load shop settings
   useEffect(() => {
@@ -36,7 +66,7 @@ export default function Cart() {
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
-      const usdPrice = convertCurrency(price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
+      const usdPrice = convertCurrency(price, 'KES', 'USD', exchangeRates)
       return formatCurrency(usdPrice)
     }
     return formatCurrency(price)
@@ -122,12 +152,43 @@ export default function Cart() {
 
         const paymentData = await paymentResponse.json()
 
-        if (paymentResponse.ok && paymentData.success && paymentData.authorizationUrl) {
-          // Payment reference will be handled by Paystack webhook when payment is confirmed
-          // No need to update here - webhook will handle order status update
+        if (paymentResponse.ok && paymentData.success && paymentData.reference) {
+          // Get Paystack public key from API
+          let paystackPublicKey = ''
+          try {
+            const publicKeyResponse = await fetch('/api/paystack/public-key')
+            const publicKeyData = await publicKeyResponse.json()
+            
+            if (publicKeyResponse.ok && publicKeyData.success && publicKeyData.publicKey) {
+              paystackPublicKey = publicKeyData.publicKey
+            } else {
+              paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+            }
+          } catch (error) {
+            console.error('Error fetching public key:', error)
+            paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+          }
+          
+          if (!paystackPublicKey) {
+            alert('Payment gateway not configured. Please contact support.')
+            setProcessing(false)
+            return
+          }
 
-          // Redirect to Paystack payment page
-          window.location.href = paymentData.authorizationUrl
+          // Set payment data for inline payment component
+          setPaymentData({
+            publicKey: paystackPublicKey,
+            email: email || data.customerEmail || 'customer@example.com',
+            amount: data.total || data.amount,
+            currency: 'KES',
+            reference: paymentData.reference,
+            customerName: data.customerName || 'Customer',
+            phone: phoneNumber || data.customerPhone || undefined,
+            orderId: data.orderId,
+          })
+          
+          // Show payment modal
+          setShowPaymentModal(true)
           return
         } else {
           alert(paymentData.error || 'Failed to initialize payment. Please try again.')
@@ -472,6 +533,51 @@ export default function Cart() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Paystack Inline Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <PaystackInlinePayment
+          publicKey={paymentData.publicKey}
+          email={paymentData.email}
+          amount={paymentData.amount}
+          currency={paymentData.currency}
+          reference={paymentData.reference}
+          customerName={paymentData.customerName}
+          phone={paymentData.phone}
+          metadata={{
+            payment_type: 'shop_order',
+            order_id: paymentData.orderId,
+          }}
+          onSuccess={async (reference) => {
+            // Payment successful - verify and handle
+            setShowPaymentModal(false)
+            setProcessing(true)
+
+            try {
+              // Verify payment with backend
+              const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+              const verifyData = await verifyResponse.json()
+
+              if (verifyResponse.ok && verifyData.success) {
+                // Payment verified successfully - reload to show success
+                window.location.reload()
+              } else {
+                alert(verifyData.error || 'Payment verification failed. Please contact support.')
+                setProcessing(false)
+              }
+            } catch (error) {
+              console.error('Error verifying payment:', error)
+              alert('Error verifying payment. Please contact support.')
+              setProcessing(false)
+            }
+          }}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentData(null)
+            setProcessing(false)
+          }}
+        />
       )}
     </div>
   )

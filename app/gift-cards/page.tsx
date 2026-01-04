@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 import Link from 'next/link'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 // Secret token for private gift card access
 // Change this to your own secret token

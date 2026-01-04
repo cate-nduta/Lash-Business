@@ -86,6 +86,12 @@ const isPublicAdminApiPath = (pathname: string) =>
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  
+  // Skip middleware for Next.js internal paths and static assets
+  if (pathname.startsWith('/_next') || pathname.startsWith('/static')) {
+    return NextResponse.next()
+  }
+  
   const isAdminPage = pathname.startsWith('/admin')
   const isAdminApi = pathname.startsWith('/api/admin')
 

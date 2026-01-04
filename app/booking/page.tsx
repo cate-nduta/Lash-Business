@@ -5,8 +5,9 @@ import { useInView } from 'react-intersection-observer'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
-import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
+import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 // Lazy load CalendarPicker for faster initial page load
 const CalendarPicker = lazy(() => import('@/components/CalendarPicker'))
@@ -116,6 +117,7 @@ export default function Booking() {
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES)
   // Payment method will be selected on Paystack page, default to paystack
   const [paymentMethod] = useState<'mpesa' | 'card' | string>('paystack')
   const [paymentSettings, setPaymentSettings] = useState<any>(null)
@@ -224,6 +226,18 @@ export default function Booking() {
     success: null,
     message: '',
   })
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    publicKey: string
+    email: string
+    amount: number
+    currency: string
+    reference: string
+    customerName: string
+    phone?: string
+    bookingReference: string
+    isFullPayment: boolean
+  } | null>(null)
 const [returningDiscountPercent, setReturningDiscountPercent] = useState(0)
 const [lastPaymentDate, setLastPaymentDate] = useState<string | null>(null)
 const [returningDaysSince, setReturningDaysSince] = useState<number | null>(null)
@@ -666,7 +680,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       })
     : null
 
-  // Load payment settings
+  // Load payment settings and exchange rates
   useEffect(() => {
     const loadPaymentSettings = async () => {
       try {
@@ -682,7 +696,22 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         setLoadingPaymentSettings(false)
       }
     }
+    
+    const loadExchangeRates = async () => {
+      try {
+        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          setExchangeRates(data)
+        }
+      } catch (error) {
+        console.error('Error loading exchange rates:', error)
+        // Keep default rates on error
+      }
+    }
+    
     loadPaymentSettings()
+    loadExchangeRates()
   }, [])
 
   // Load services and pre-appointment guidelines in parallel - no cache for real-time updates
@@ -1276,11 +1305,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   }
 
   // Calculate pricing with discount (first-time OR promo code, not both)
+  // Always returns prices in KES (base currency) - conversion happens at display time
   const calculatePricing = (services: string[] | string) => {
     // Handle both single service (backward compatibility) and multiple services
     const serviceList = Array.isArray(services) ? services : services ? [services] : []
     
-    // Get total price for all services in selected currency
+    // Get total price for all services in KES (base currency)
     const getTotalServicePrice = (): number => {
       if (serviceList.length === 0) return 0
       
@@ -1288,22 +1318,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         // Try to find service in cart items first (more accurate)
         const cartItem = cartItems.find(item => item.name === serviceName)
         if (cartItem) {
-          return total + (currency === 'USD' && cartItem.priceUSD !== undefined 
-            ? cartItem.priceUSD 
-            : cartItem.price)
+          // Always use KES price (cartItem.price is in KES)
+          return total + cartItem.price
         }
         
-        // Fallback to service prices map
-        if (currency === 'USD' && servicePricesUSD[serviceName] !== undefined) {
-          return total + servicePricesUSD[serviceName]
-        }
-        if (currency === 'KES') {
-          return total + (servicePrices[serviceName] || 0)
-        }
-        // Fallback: convert KES to USD if USD price not set
-        if (currency === 'USD' && servicePrices[serviceName]) {
-          return total + convertCurrency(servicePrices[serviceName], 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
-        }
+        // Fallback to service prices map (always in KES)
         return total + (servicePrices[serviceName] || 0)
       }, 0)
     }
@@ -1385,12 +1404,39 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     // Friday night bookings require configurable deposit percentage
     const isFridayNight = isFridayNightBooking()
     const effectiveDepositPercentage = isFridayNight ? fridayNightDepositPercentage : depositPercentage
-    let deposit = Math.round(finalPrice * (effectiveDepositPercentage / 100))
+    
+    // Calculate deposit as percentage of final price - ALWAYS required
+    // For KSH 10 with 40%: 10 * 0.40 = 4.0 KSH exactly
+    // Use precise calculation to avoid floating point errors
+    const depositPercentageDecimal = effectiveDepositPercentage / 100
+    const exactDeposit = finalPrice * depositPercentageDecimal
+    
+    // For KES, round to nearest whole number (no decimals), minimum 1 KSH
+    // For USD, round to 2 decimal places, minimum 0.01 USD
+    let deposit: number
+    if (currency === 'KES') {
+      // Round to nearest integer for KES (e.g., 4.0 -> 4, 4.5 -> 5)
+      deposit = Math.max(1, Math.round(exactDeposit))
+    } else {
+      // Round to 2 decimal places for USD (e.g., 0.40 -> 0.40, 0.401 -> 0.40)
+      deposit = Math.max(0.01, Math.round(exactDeposit * 100) / 100)
+    }
     
     // Apply gift card balance to deposit if available
     const giftCardBalance = giftCardData?.valid ? giftCardData.amount : 0
     if (giftCardBalance > 0) {
+      // Reduce deposit by gift card balance, but ensure minimum payment requirement
+      // If gift card covers entire deposit, deposit becomes 0 (but booking still requires confirmation)
       deposit = Math.max(0, deposit - giftCardBalance)
+    }
+    
+    // CRITICAL: Ensure deposit is always calculated as percentage of final price
+    // If somehow deposit is 0 and finalPrice > 0, recalculate (shouldn't happen, but safety check)
+    if (deposit === 0 && finalPrice > 0 && giftCardBalance === 0) {
+      // Recalculate deposit - this should never happen, but ensures correctness
+      deposit = currency === 'KES' 
+        ? Math.max(1, Math.round(finalPrice * depositPercentageDecimal))
+        : Math.max(0.01, Math.round(finalPrice * depositPercentageDecimal * 100) / 100)
     }
 
     return {
@@ -1411,7 +1457,25 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
   const pricing = calculatePricing(selectedServiceNames)
   const promoOverridesFirstTimeNotice = allowFirstTimePromoOverride && !selectedServiceIsFill
-  const depositAmount = pricing.deposit
+  
+  // Convert pricing from KES to selected currency for display
+  const getPriceInCurrency = (priceInKES: number): number => {
+    if (currency === 'USD') {
+      return convertCurrency(priceInKES, 'KES', 'USD', exchangeRates)
+    }
+    return priceInKES
+  }
+  
+  // Create pricing object with converted values for display
+  const pricingInCurrency = {
+    ...pricing,
+    originalPrice: getPriceInCurrency(pricing.originalPrice),
+    discount: getPriceInCurrency(pricing.discount),
+    finalPrice: getPriceInCurrency(pricing.finalPrice),
+    deposit: getPriceInCurrency(pricing.deposit),
+  }
+  
+  const depositAmount = pricingInCurrency.deposit
 
   const formatDateDisplay = (value?: string | null, options?: Intl.DateTimeFormatOptions) => {
     if (!value || typeof value !== 'string') return null
@@ -1670,7 +1734,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         },
         body: JSON.stringify({
           email: formData.email,
-          amount: amount,
+          amount: Number(amount) || 0, // Ensure amount is a valid number
           currency: currency === 'USD' ? 'USD' : 'KES',
           metadata: {
             payment_type: 'booking',
@@ -1685,17 +1749,54 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
       const data = await response.json()
 
-      if (response.ok && data.success && data.authorizationUrl) {
+      if (response.ok && data.success && data.reference) {
+        // Get Paystack public key from API
+        let paystackPublicKey = ''
+        try {
+          const publicKeyResponse = await fetch('/api/paystack/public-key')
+          const publicKeyData = await publicKeyResponse.json()
+          
+          if (publicKeyResponse.ok && publicKeyData.success && publicKeyData.publicKey) {
+            paystackPublicKey = publicKeyData.publicKey
+          } else {
+            paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+          }
+        } catch (error) {
+          console.error('Error fetching public key:', error)
+          paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+        }
+        
+        if (!paystackPublicKey) {
+          setMpesaStatus({
+            loading: false,
+            success: false,
+            message: 'Payment gateway not configured. Please contact support.',
+          })
+          return { success: false, error: 'Payment gateway not configured' }
+        }
+
         setMpesaStatus({
           loading: false,
           success: true,
-          message: 'Redirecting to secure payment page...',
+          message: 'Opening secure payment form...',
           orderTrackingId: data.reference,
         })
-        // Redirect to Paystack payment page
-        setTimeout(() => {
-          window.location.href = data.authorizationUrl
-        }, 100)
+        
+        // Set payment data for inline payment component
+        setPaymentData({
+          publicKey: paystackPublicKey,
+          email: formData.email,
+          amount: Number(amount) || 0, // Ensure amount is a valid number
+          currency: currency === 'USD' ? 'USD' : 'KES',
+          reference: data.reference,
+          customerName: formData.name,
+          phone: fullPhone,
+          bookingReference: bookingReference,
+          isFullPayment: isFullPayment,
+        })
+        
+        // Show payment modal
+        setShowPaymentModal(true)
         return { success: true, orderTrackingId: data.reference, reference: data.reference }
       } else {
         const errorMessage = data.error || 'Failed to initiate payment. Please check your details and try again.'
@@ -1886,6 +1987,54 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }
       
       const pricingDetails = calculatePricing(selectedServiceNames)
+      
+      // Convert deposit amount to selected currency for payment
+      const getPriceInCurrency = (priceInKES: number): number => {
+        if (!priceInKES || isNaN(priceInKES) || priceInKES <= 0) {
+          return 0
+        }
+        if (currency === 'USD') {
+          const converted = convertCurrency(priceInKES, 'KES', 'USD', exchangeRates)
+          // Ensure minimum of 0.01 USD for very small amounts
+          return Math.max(0.01, converted)
+        }
+        // For KES, ensure minimum of 1 KSH
+        return Math.max(1, Math.round(priceInKES))
+      }
+      const depositAmountInCurrency = getPriceInCurrency(pricingDetails.deposit)
+      
+      // Validate deposit amount before proceeding - deposit is REQUIRED (40% of final price)
+      if (!depositAmountInCurrency || depositAmountInCurrency <= 0 || isNaN(depositAmountInCurrency)) {
+        console.error('Invalid deposit amount:', {
+          depositAmountInCurrency,
+          pricingDetailsDeposit: pricingDetails.deposit,
+          finalPrice: pricingDetails.finalPrice,
+          depositPercentage: pricingDetails.depositPercentage,
+          currency,
+        })
+        setSubmitStatus({
+          type: 'error',
+          message: 'Deposit Required',
+          details: `A ${pricingDetails.depositPercentage}% deposit is required to secure your booking. Calculated deposit: ${formatCurrencyContext(pricingDetails.deposit)}. Please contact support if this issue persists.`,
+        })
+        setLoading(false)
+        return
+      }
+      
+      // Ensure deposit meets minimum requirement (at least the configured percentage)
+      const expectedDepositPercent = pricingDetails.depositPercentage || 40
+      const expectedDepositAmount = pricingDetails.finalPrice * (expectedDepositPercent / 100)
+      const minDepositKES = Math.max(1, Math.round(expectedDepositAmount))
+      
+      if (pricingDetails.deposit < minDepositKES * 0.95) { // Allow 5% tolerance for rounding
+        console.warn('Deposit amount may be too low:', {
+          calculatedDeposit: pricingDetails.deposit,
+          expectedMinDeposit: minDepositKES,
+          finalPrice: pricingDetails.finalPrice,
+          depositPercentage: expectedDepositPercent,
+        })
+      }
+      
       const referralType = referralMode === 'friend' ? 'friend' : referralMode === 'salon' ? 'salon' : null
       const salonReferralContext = promoCodeData?.isSalonReferral
         ? {
@@ -1938,8 +2087,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             originalPrice: pricingDetails.originalPrice,
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
-          deposit: pricingDetails.finalPrice, // Full payment (Paystack handles method selection)
-            paymentType: 'full',
+          deposit: pricingDetails.deposit, // Deposit amount in KES (40% by default, configurable)
+            paymentType: 'deposit',
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
@@ -1973,58 +2122,97 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           })
         }
         
-        if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
-          bookingCreated = true
-          createdBookingId = bookingData.bookingId
-          
-        // Now initiate payment with booking ID (Paystack will handle method selection)
-          const cardResult = await initiateCardPayment(pricingDetails.finalPrice, bookingReference)
-          paymentResult = { ...cardResult }
-          
-          if (cardResult.success && cardResult.orderTrackingId) {
-            // Update booking with Paystack reference
-            try {
-              await fetch(`/api/booking/update-payment-tracking`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  bookingId: createdBookingId,
-                  paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
-                  paymentMethod: 'paystack',
-                }),
+        if (bookingResponse.ok && bookingData.success) {
+          // Handle pending payment bookings (bookingId will be null, but bookingReference exists)
+          if (bookingData.pendingPayment && bookingData.bookingReference) {
+            // Validate deposit amount before initiating payment
+            if (!depositAmountInCurrency || depositAmountInCurrency <= 0 || isNaN(depositAmountInCurrency)) {
+              console.error('Invalid deposit amount:', {
+                depositAmountInCurrency,
+                pricingDetailsDeposit: pricingDetails.deposit,
+                currency,
               })
-            } catch (error) {
-              console.error('Error updating booking with Paystack reference:', error)
+              setSubmitStatus({
+                type: 'error',
+                message: 'Invalid Deposit Amount',
+                details: `The deposit amount (${depositAmountInCurrency}) is invalid. Please contact support.`,
+              })
+              setLoading(false)
+              return
             }
+            // Booking is reserved, now initiate payment with deposit amount in selected currency
+            const cardResult = await initiateCardPayment(depositAmountInCurrency, bookingData.bookingReference)
+            paymentResult = { ...cardResult }
             
-            setLoading(false)
-            return // User will be redirected to payment page
-          } else {
-            setSubmitStatus({
-              type: 'error',
-              message: 'Payment Failed',
-            details: cardResult.error || 'Failed to initiate payment. Please try again.',
-            })
-            setLoading(false)
-            return
+            if (cardResult.success && cardResult.orderTrackingId) {
+              setLoading(false)
+              return // User will be redirected to payment page
+            } else {
+              setSubmitStatus({
+                type: 'error',
+                message: 'Payment Failed',
+                details: cardResult.error || 'Failed to initiate payment. Please try again.',
+              })
+              setLoading(false)
+              return
+            }
           }
-        } else {
-          const errorMessage = bookingData.error || bookingData.details || 'Failed to create booking. Please try again.'
-          console.error('Booking creation failed:', {
-            status: bookingResponse.status,
-            error: bookingData.error,
-            details: bookingData.details,
-            fullResponse: bookingData
-          })
           
-          setSubmitStatus({
-            type: 'error',
-            message: 'Booking Failed',
-            details: errorMessage,
-          })
-          setLoading(false)
-          return
-      }
+          // Handle confirmed bookings (with bookingId)
+          if (bookingData.bookingId) {
+            bookingCreated = true
+            createdBookingId = bookingData.bookingId
+            
+            // Now initiate payment with deposit amount in selected currency (Paystack will handle method selection)
+            const cardResult = await initiateCardPayment(depositAmountInCurrency, bookingReference)
+            paymentResult = { ...cardResult }
+            
+            if (cardResult.success && cardResult.orderTrackingId) {
+              // Update booking with Paystack reference
+              try {
+                await fetch(`/api/booking/update-payment-tracking`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    bookingId: createdBookingId,
+                    paymentOrderTrackingId: cardResult.orderTrackingId || cardResult.reference,
+                    paymentMethod: 'paystack',
+                  }),
+                })
+              } catch (error) {
+                console.error('Error updating booking with Paystack reference:', error)
+              }
+              
+              setLoading(false)
+              return // User will be redirected to payment page
+            } else {
+              setSubmitStatus({
+                type: 'error',
+                message: 'Payment Failed',
+                details: cardResult.error || 'Failed to initiate payment. Please try again.',
+              })
+              setLoading(false)
+              return
+            }
+          }
+        }
+        
+        // If we get here, booking failed
+        const errorMessage = bookingData.error || bookingData.details || 'Failed to create booking. Please try again.'
+        console.error('Booking creation failed:', {
+          status: bookingResponse.status,
+          error: bookingData.error,
+          details: bookingData.details,
+          fullResponse: bookingData
+        })
+        
+        setSubmitStatus({
+          type: 'error',
+          message: 'Booking Failed',
+          details: errorMessage,
+        })
+        setLoading(false)
+        return
       
       // Legacy M-Pesa code removed - Paystack handles all payment methods
       if (false) {
@@ -2464,9 +2652,16 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               ) : (
                 <div className="space-y-3">
                   {cartItems.map((item) => {
-                    const price = currency === 'USD' && item.priceUSD !== undefined 
-                      ? item.priceUSD 
-                      : item.price
+                    // Convert price to selected currency
+                    let price = item.price // Default to KES price
+                    if (currency === 'USD') {
+                      if (item.priceUSD !== undefined) {
+                        price = item.priceUSD
+                      } else {
+                        // Convert from KES to USD using exchange rate
+                        price = convertCurrency(item.price, 'KES', 'USD', exchangeRates)
+                      }
+                    }
                     return (
                       <div
                         key={item.serviceId}
@@ -2497,7 +2692,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm sm:text-base">
                       <span className="font-semibold text-brown-dark break-words pr-2">Subtotal ({cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}):</span>
-                      <span className="font-semibold text-brown-dark whitespace-nowrap">{formatCurrencyContext(getTotalPrice(currency))}</span>
+                      <span className="font-semibold text-brown-dark whitespace-nowrap">{formatCurrencyContext(getTotalPrice(currency, exchangeRates))}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs sm:text-sm text-brown-dark/70 pt-2 border-t border-brown-light/50">
                       <span>Total Duration:</span>
@@ -2764,9 +2959,16 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       <div className="mb-2 pb-2 border-b border-brown-light/50">
                         <div className="text-xs text-brown-dark/70 mb-1">Services Breakdown:</div>
                         {cartItems.map((item, idx) => {
-                          const itemPrice = currency === 'USD' && item.priceUSD !== undefined 
-                            ? item.priceUSD 
-                            : item.price
+                          // Convert price to selected currency for display
+                          let itemPrice = item.price // Default to KES price
+                          if (currency === 'USD') {
+                            if (item.priceUSD !== undefined) {
+                              itemPrice = item.priceUSD
+                            } else {
+                              // Convert from KES to USD using exchange rate
+                              itemPrice = convertCurrency(item.price, 'KES', 'USD', exchangeRates)
+                            }
+                          }
                           return (
                             <div key={item.serviceId} className="flex justify-between items-center text-xs text-brown-dark/80 mb-1">
                               <span>{idx + 1}. {item.name}</span>
@@ -2776,7 +2978,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                         })}
                         <div className="flex justify-between items-center text-xs font-semibold text-brown-dark mt-2 pt-2 border-t border-brown-light/30">
                           <span>Subtotal:</span>
-                          <span>{formatCurrencyContext(pricing.originalPrice)}</span>
+                          <span>{formatCurrencyContext(pricingInCurrency.originalPrice)}</span>
                         </div>
                       </div>
                     )}
@@ -2784,12 +2986,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       <span className="text-brown-dark font-semibold text-sm sm:text-base break-words pr-2">
                         {cartItems.length > 1 ? 'Total Service Price:' : 'Service Price:'}
                       </span>
-                      <span className="text-brown-dark font-bold text-sm sm:text-base whitespace-nowrap">{formatCurrencyContext(pricing.originalPrice)}</span>
+                      <span className="text-brown-dark font-bold text-sm sm:text-base whitespace-nowrap">{formatCurrencyContext(pricingInCurrency.originalPrice)}</span>
                     </div>
                     {pricing.discountType === 'first-time' && (
                       <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 text-green-700">
                         <span className="font-semibold text-xs sm:text-sm break-words pr-2">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>
-                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricing.discount)}</span>
+                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricingInCurrency.discount)}</span>
                       </div>
                     )}
                     {/* Returning client discount display removed - discounts will be applied manually */}
@@ -2802,22 +3004,22 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                             : ` ${formatCurrencyContext(promoCodeData.discountValue)}`
                           }
                         </span>
-                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricing.discount)}</span>
+                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">- {formatCurrencyContext(pricingInCurrency.discount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 pt-2 border-t border-brown-light/50">
                       <span className="text-brown-dark font-semibold text-sm sm:text-base break-words pr-2">Final Price:</span>
-                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(pricing.finalPrice)}</span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(pricingInCurrency.finalPrice)}</span>
                     </div>
                     <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 pt-2 border-t border-brown-light/50">
                       <span className="text-brown-dark font-semibold text-xs sm:text-sm break-words pr-2">
                         Required Deposit ({pricing.depositPercentage}%{pricing.isFridayNight ? ' - Friday Night' : ''}):
                       </span>
-                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(depositAmount)}</span>
+                      <span className="text-brown-dark font-bold text-base sm:text-lg whitespace-nowrap">{formatCurrencyContext(pricingInCurrency.deposit)}</span>
                     </div>
                     {cartItems.length > 1 && (
                       <div className="text-xs text-brown-dark/60 italic pt-1">
-                        💡 Calculation: {pricing.depositPercentage}% of {formatCurrencyContext(pricing.finalPrice)} = {formatCurrencyContext(depositAmount)}
+                        💡 Calculation: {pricing.depositPercentage}% of {formatCurrencyContext(pricingInCurrency.finalPrice)} = {formatCurrencyContext(pricingInCurrency.deposit)}
                       </div>
                     )}
                   </div>
@@ -3158,6 +3360,75 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             </div>
           </div>
         </div>
+      )}
+
+      {/* Paystack Inline Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <PaystackInlinePayment
+          publicKey={paymentData.publicKey}
+          email={paymentData.email}
+          amount={paymentData.amount}
+          currency={paymentData.currency}
+          reference={paymentData.reference}
+          customerName={paymentData.customerName}
+          phone={paymentData.phone}
+          metadata={{
+            payment_type: 'booking',
+            booking_reference: paymentData.bookingReference,
+            is_full_payment: paymentData.isFullPayment,
+          }}
+          onSuccess={async (reference) => {
+            // Payment successful - verify and handle
+            setShowPaymentModal(false)
+            setMpesaStatus({
+              loading: true,
+              success: null,
+              message: 'Verifying payment...',
+            })
+
+            try {
+              // Verify payment with backend
+              const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+              const verifyData = await verifyResponse.json()
+
+              if (verifyResponse.ok && verifyData.success) {
+                // Payment verified successfully
+                setMpesaStatus({
+                  loading: false,
+                  success: true,
+                  message: 'Payment successful! Your booking has been confirmed.',
+                  orderTrackingId: reference,
+                })
+                
+                // Reload page to show booking confirmation
+                window.location.reload()
+              } else {
+                // Payment verification failed
+                setMpesaStatus({
+                  loading: false,
+                  success: false,
+                  message: verifyData.error || 'Payment verification failed. Please contact support.',
+                })
+              }
+            } catch (error) {
+              console.error('Error verifying payment:', error)
+              setMpesaStatus({
+                loading: false,
+                success: false,
+                message: 'Error verifying payment. Please contact support.',
+              })
+            }
+          }}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentData(null)
+            setMpesaStatus({
+              loading: false,
+              success: null,
+              message: '',
+            })
+          }}
+        />
       )}
     </div>
   )

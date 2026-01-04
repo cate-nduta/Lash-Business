@@ -23,14 +23,17 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validation
-    if (!email || !amount) {
+    if (!email || amount === undefined || amount === null) {
       return NextResponse.json(
         { error: 'Email and amount are required' },
         { status: 400 }
       )
     }
 
-    if (typeof amount !== 'number' || amount <= 0) {
+    // Convert to number if it's a string
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+    
+    if (isNaN(numericAmount) || numericAmount <= 0) {
       return NextResponse.json(
         { error: 'Amount must be a positive number' },
         { status: 400 }
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Initialize transaction
     const params: InitializeTransactionParams = {
       email: email.toLowerCase().trim(),
-      amount,
+      amount: numericAmount, // Use the validated numeric amount
       currency,
       reference,
       callbackUrl,

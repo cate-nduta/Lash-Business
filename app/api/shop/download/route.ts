@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 interface Product {
   id: string
   name: string

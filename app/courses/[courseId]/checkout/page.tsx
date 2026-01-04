@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { type Course } from '@/types/course'
 import { getCourseSlug } from '@/lib/courses-utils'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 export default function CourseCheckoutPage() {
   const params = useParams()
@@ -19,6 +20,16 @@ export default function CourseCheckoutPage() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    publicKey: string
+    email: string
+    amount: number
+    currency: string
+    reference: string
+    customerName: string
+    purchaseId: string
+  } | null>(null)
 
   useEffect(() => {
     const loadCourse = async () => {
@@ -86,21 +97,53 @@ export default function CourseCheckoutPage() {
         // Free course - redirect immediately to first module
         router.push(data.redirectUrl)
       } else if (data.requiresPayment) {
-        // Paid course - MUST redirect to Paystack payment page
-        if (data.authorizationUrl) {
-          // Redirect directly to Paystack (use window.location for external redirect)
-          console.log('Redirecting to Paystack:', data.authorizationUrl)
-          window.location.href = data.authorizationUrl
-          return // Stop execution after redirect
-        } else if (data.redirectUrl && (data.redirectUrl.startsWith('http://') || data.redirectUrl.startsWith('https://'))) {
-          // External URL (Paystack) - use window.location
-          console.log('Redirecting to Paystack (redirectUrl):', data.redirectUrl)
-          window.location.href = data.redirectUrl
-          return // Stop execution after redirect
+        // Paid course - use inline payment
+        if (data.reference) {
+          // Get Paystack public key from API
+          let paystackPublicKey = ''
+          try {
+            const publicKeyResponse = await fetch('/api/paystack/public-key')
+            const publicKeyData = await publicKeyResponse.json()
+            
+            if (publicKeyResponse.ok && publicKeyData.success && publicKeyData.publicKey) {
+              paystackPublicKey = publicKeyData.publicKey
+            } else {
+              paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+            }
+          } catch (error) {
+            console.error('Error fetching public key:', error)
+            paystackPublicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || ''
+          }
+          
+          if (!paystackPublicKey) {
+            setError('Payment gateway not configured. Please contact support.')
+            setProcessing(false)
+            return
+          }
+
+          // Set payment data for inline payment component
+          setPaymentData({
+            publicKey: paystackPublicKey,
+            email: email,
+            amount: data.amount || course?.priceUSD || 0,
+            currency: data.currency || 'KES',
+            reference: data.reference,
+            customerName: name,
+            purchaseId: purchaseId || '',
+          })
+          
+          // Show payment modal
+          setShowPaymentModal(true)
+          return
         } else {
-          // No Paystack URL - this should not happen
-          console.error('No Paystack authorization URL received:', data)
-          setError('Payment initialization failed. Please try again or contact support.')
+          // Fallback to redirect if no reference
+          if (data.authorizationUrl) {
+            window.location.href = data.authorizationUrl
+            return
+          } else {
+            console.error('No Paystack reference or URL received:', data)
+            setError('Payment initialization failed. Please try again or contact support.')
+          }
         }
       }
     } catch (error) {
@@ -238,6 +281,50 @@ export default function CourseCheckoutPage() {
           </form>
         </div>
       </div>
+
+      {/* Paystack Inline Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <PaystackInlinePayment
+          publicKey={paymentData.publicKey}
+          email={paymentData.email}
+          amount={paymentData.amount}
+          currency={paymentData.currency}
+          reference={paymentData.reference}
+          customerName={paymentData.customerName}
+          metadata={{
+            payment_type: 'course_purchase',
+            purchase_id: paymentData.purchaseId,
+          }}
+          onSuccess={async (reference) => {
+            // Payment successful - verify and redirect
+            setShowPaymentModal(false)
+            setProcessing(true)
+
+            try {
+              // Verify payment with backend
+              const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+              const verifyData = await verifyResponse.json()
+
+              if (verifyResponse.ok && verifyData.success) {
+                // Payment verified - redirect to course
+                router.push(`/courses/${courseId}`)
+              } else {
+                setError(verifyData.error || 'Payment verification failed. Please contact support.')
+                setProcessing(false)
+              }
+            } catch (error) {
+              console.error('Error verifying payment:', error)
+              setError('Error verifying payment. Please contact support.')
+              setProcessing(false)
+            }
+          }}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentData(null)
+            setProcessing(false)
+          }}
+        />
+      )}
     </div>
   )
 }

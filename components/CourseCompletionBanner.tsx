@@ -76,3 +76,4 @@ export default function CourseCompletionBanner({ course, totalLessons }: CourseC
 
 
 
+
