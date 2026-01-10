@@ -40,6 +40,11 @@ interface WebServicesData {
     autoAddContactForm: boolean
     suggestBusinessEmail: boolean
   }
+  keyFeatures?: {
+    timelineText?: string
+    deliveryText?: string
+    learningText?: string
+  }
 }
 
 function BuildOnYourOwnContent() {
@@ -53,6 +58,7 @@ function BuildOnYourOwnContent() {
     autoAddContactForm: true,
     suggestBusinessEmail: true,
   })
+  const [webServicesData, setWebServicesData] = useState<WebServicesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -107,6 +113,8 @@ function BuildOnYourOwnContent() {
             autoAddContactForm: true,
             suggestBusinessEmail: true,
           })
+          // Store the full data including keyFeatures
+          setWebServicesData(data)
         }
 
         if (capacityResponse.ok) {
@@ -243,32 +251,41 @@ function BuildOnYourOwnContent() {
                 
                 {/* Key Features */}
                 <div className="space-y-3 mb-5">
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-brown-dark/80 text-sm md:text-base">
-                      Your website will be designed and built within <strong className="text-brown-dark font-semibold">21 days</strong>
-                    </p>
-                  </div>
+                  {webServicesData?.keyFeatures?.timelineText && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p 
+                        className="text-brown-dark/80 text-sm md:text-base"
+                        dangerouslySetInnerHTML={{ __html: webServicesData?.keyFeatures?.timelineText || '' }}
+                      />
+                    </div>
+                  )}
                   
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-brown-dark/80 text-sm md:text-base">
-                      You'll receive your <strong className="text-brown-dark font-semibold">live domain</strong>, <strong className="text-brown-dark font-semibold">admin login details</strong>, and a <strong className="text-brown-dark font-semibold">scheduled online walkthrough</strong>
-                    </p>
-                  </div>
+                  {webServicesData?.keyFeatures?.deliveryText && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p 
+                        className="text-brown-dark/80 text-sm md:text-base"
+                        dangerouslySetInnerHTML={{ __html: webServicesData?.keyFeatures?.deliveryText || '' }}
+                      />
+                    </div>
+                  )}
                   
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-brown-dark/80 text-sm md:text-base">
-                      Learn how to use and manage your website with confidence
-                    </p>
-                  </div>
+                  {webServicesData?.keyFeatures?.learningText && (
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p 
+                        className="text-brown-dark/80 text-sm md:text-base"
+                        dangerouslySetInnerHTML={{ __html: webServicesData?.keyFeatures?.learningText || '' }}
+                      />
+                    </div>
+                  )}
                 </div>
                 
                 {/* Minimum Order Value - Highlighted */}

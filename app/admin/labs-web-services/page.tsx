@@ -49,6 +49,11 @@ interface WebServicesData {
     partialPaymentThreshold: number
     partialPaymentPercentage: number
   }
+  keyFeatures?: {
+    timelineText?: string
+    deliveryText?: string
+    learningText?: string
+  }
 }
 
 const generateId = () =>
@@ -77,6 +82,11 @@ export default function AdminLabsWebServices() {
       fullPaymentThreshold: 50000,
       partialPaymentThreshold: 50000,
       partialPaymentPercentage: 80,
+    },
+    keyFeatures: {
+      timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
+      deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
+      learningText: 'Learn how to use and manage your website with confidence',
     },
   })
   const [originalData, setOriginalData] = useState<WebServicesData>(data)
@@ -170,6 +180,11 @@ export default function AdminLabsWebServices() {
             fullPaymentThreshold: loadedData.checkoutRules?.fullPaymentThreshold || 50000,
             partialPaymentThreshold: loadedData.checkoutRules?.partialPaymentThreshold || 50000,
             partialPaymentPercentage: loadedData.checkoutRules?.partialPaymentPercentage || 80,
+          },
+          keyFeatures: loadedData.keyFeatures || {
+            timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
+            deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
+            learningText: 'Learn how to use and manage your website with confidence',
           },
         }
         
@@ -788,6 +803,85 @@ export default function AdminLabsWebServices() {
                 className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
                 placeholder="Select the services and features you want. Our smart cart will help ensure you have everything you need."
               />
+            </div>
+
+            {/* Key Features Text */}
+            <div className="border-t border-brown-light/50 pt-6">
+              <h3 className="text-xl font-semibold text-brown-dark mb-4">Key Features Text</h3>
+              <p className="text-xs text-brown-dark/60 mb-4">
+                Edit the text that appears in the key features section on the Custom Website Builds page. You can use HTML tags like &lt;strong&gt; for bold text.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Timeline Text
+                  </label>
+                  <textarea
+                    value={data.keyFeatures?.timelineText || ''}
+                    onChange={(e) =>
+                      setData((prev) => ({
+                        ...prev,
+                        keyFeatures: {
+                          ...(prev.keyFeatures || {}),
+                          timelineText: e.target.value,
+                        },
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+                    placeholder="Your website will be designed and built within <strong>21 days</strong>"
+                  />
+                  <p className="text-xs text-brown-dark/60 mt-2">
+                    Example: Your website will be designed and built within &lt;strong&gt;21 days&lt;/strong&gt;
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Delivery Text
+                  </label>
+                  <textarea
+                    value={data.keyFeatures?.deliveryText || ''}
+                    onChange={(e) =>
+                      setData((prev) => ({
+                        ...prev,
+                        keyFeatures: {
+                          ...(prev.keyFeatures || {}),
+                          deliveryText: e.target.value,
+                        },
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+                    placeholder="You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>"
+                  />
+                  <p className="text-xs text-brown-dark/60 mt-2">
+                    Example: You'll receive your &lt;strong&gt;live domain&lt;/strong&gt;, &lt;strong&gt;admin login details&lt;/strong&gt;, and a &lt;strong&gt;scheduled online walkthrough&lt;/strong&gt;
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Learning Text
+                  </label>
+                  <textarea
+                    value={data.keyFeatures?.learningText || ''}
+                    onChange={(e) =>
+                      setData((prev) => ({
+                        ...prev,
+                        keyFeatures: {
+                          ...(prev.keyFeatures || {}),
+                          learningText: e.target.value,
+                        },
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+                    placeholder="Learn how to use and manage your website with confidence"
+                  />
+                  <p className="text-xs text-brown-dark/60 mt-2">
+                    Example: Learn how to use and manage your website with confidence
+                  </p>
+                </div>
+              </div>
             </div>
             
             {/* Banner Settings */}

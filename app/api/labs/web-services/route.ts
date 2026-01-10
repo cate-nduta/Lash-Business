@@ -47,6 +47,11 @@ interface WebServicesData {
     partialPaymentThreshold: number // Above this, pay 80% at checkout
     partialPaymentPercentage: number // Default 80
   }
+  keyFeatures?: {
+    timelineText?: string // Timeline text: "Your website will be designed and built within 21 days"
+    deliveryText?: string // Delivery text: "You'll receive your live domain, admin login details, and a scheduled online walkthrough"
+    learningText?: string // Learning text: "Learn how to use and manage your website with confidence"
+  }
 }
 
 const DEFAULT_DATA: WebServicesData = {
@@ -73,6 +78,11 @@ const DEFAULT_DATA: WebServicesData = {
     partialPaymentThreshold: 50000,
     partialPaymentPercentage: 80,
   },
+  keyFeatures: {
+    timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
+    deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
+    learningText: 'Learn how to use and manage your website with confidence',
+  },
 }
 
 export async function GET(request: NextRequest) {
@@ -85,6 +95,10 @@ export async function GET(request: NextRequest) {
     // Ensure enableBusinessInfo exists (for backward compatibility)
     if (typeof data.enableBusinessInfo === 'undefined') {
       data.enableBusinessInfo = DEFAULT_DATA.enableBusinessInfo
+    }
+    // Ensure keyFeatures exists (for backward compatibility)
+    if (!data.keyFeatures) {
+      data.keyFeatures = DEFAULT_DATA.keyFeatures
     }
     return NextResponse.json(data)
   } catch (error: any) {
@@ -180,6 +194,23 @@ export async function POST(request: NextRequest) {
           ? Math.max(0, Math.min(100, body.checkoutRules.partialPaymentPercentage))
           : DEFAULT_DATA.checkoutRules.partialPaymentPercentage,
       },
+      keyFeatures: body.keyFeatures && typeof body.keyFeatures === 'object'
+        ? {
+            timelineText: typeof body.keyFeatures?.timelineText === 'string'
+              ? body.keyFeatures.timelineText.trim()
+              : (DEFAULT_DATA.keyFeatures?.timelineText || ''),
+            deliveryText: typeof body.keyFeatures?.deliveryText === 'string'
+              ? body.keyFeatures.deliveryText.trim()
+              : (DEFAULT_DATA.keyFeatures?.deliveryText || ''),
+            learningText: typeof body.keyFeatures?.learningText === 'string'
+              ? body.keyFeatures.learningText.trim()
+              : (DEFAULT_DATA.keyFeatures?.learningText || ''),
+          }
+        : (DEFAULT_DATA.keyFeatures || {
+            timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
+            deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
+            learningText: 'Learn how to use and manage your website with confidence',
+          }),
     }
 
     await writeDataFile('labs-web-services.json', data)
