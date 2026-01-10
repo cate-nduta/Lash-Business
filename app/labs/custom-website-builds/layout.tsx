@@ -1,16 +1,16 @@
-import { LabsCartProvider } from './cart-context'
-import CustomWebsiteBuildsBanner from '@/components/CustomWebsiteBuildsBanner'
+import type { Metadata } from 'next'
+import ClientWrapper from './client-wrapper'
+
+export const metadata: Metadata = {
+  title: 'Website Labs - Custom Website Builds',
+  description: 'Custom website building services - Build your own professional website',
+}
 
 export default function BuildOnYourOwnLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <LabsCartProvider>
-      <CustomWebsiteBuildsBanner />
-      {children}
-    </LabsCartProvider>
-  )
+  return <ClientWrapper>{children}</ClientWrapper>
 }
 

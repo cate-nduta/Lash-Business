@@ -92,6 +92,24 @@ export const normalizeCourse = (raw: any): Course => {
   let priceUSD = 0
   if (typeof raw?.priceUSD === 'number' && raw.priceUSD >= 0) {
     priceUSD = raw.priceUSD
+  } else if (typeof raw?.priceUSD === 'string') {
+    const parsed = parseFloat(raw.priceUSD)
+    if (!isNaN(parsed) && parsed >= 0) {
+      priceUSD = parsed
+    }
+  }
+  
+  // Handle title field - ensure it's always a string
+  let courseTitle: string
+  if (typeof raw?.title === 'string' && raw.title.trim().length > 0) {
+    courseTitle = raw.title.trim()
+  } else if (Array.isArray(raw?.title)) {
+    // If title is an array, use the first non-empty string element
+    const firstString = raw.title.find((item: any) => typeof item === 'string' && item.trim().length > 0)
+    courseTitle = firstString ? firstString.trim() : 'Untitled Course'
+    console.warn('[normalizeCourse] Title was an array, using first string element:', courseTitle)
+  } else {
+    courseTitle = 'Untitled Course'
   }
   
   // Preserve instructor object if it exists
@@ -112,12 +130,10 @@ export const normalizeCourse = (raw: any): Course => {
     id: typeof raw?.id === 'string' && raw.id.trim().length > 0 
       ? raw.id.trim() 
       : generateCourseId('course'),
-    title: typeof raw?.title === 'string' && raw.title.trim().length > 0 
-      ? raw.title.trim() 
-      : 'Untitled Course',
-    slug: typeof raw?.title === 'string' && raw.title.trim().length > 0
+    title: courseTitle,
+    slug: courseTitle && courseTitle !== 'Untitled Course'
       ? (() => {
-          const slug = generateCourseSlug(raw.title.trim())
+          const slug = generateCourseSlug(courseTitle)
           return slug && slug.length > 0 ? slug : undefined
         })()
       : undefined,

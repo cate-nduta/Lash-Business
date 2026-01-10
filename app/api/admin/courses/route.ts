@@ -149,14 +149,20 @@ export async function POST(request: NextRequest) {
     // Validate that all courses have required fields
     for (let i = 0; i < catalog.courses.length; i++) {
       const course = catalog.courses[i]
+      if (!course || typeof course !== 'object') {
+        throw new Error(`Course at index ${i} is not a valid object`)
+      }
       if (!course.id || typeof course.id !== 'string') {
-        throw new Error(`Course at index ${i} is missing a valid ID`)
+        throw new Error(`Course at index ${i} is missing a valid ID. Received: ${typeof course.id}`)
       }
       if (!course.title || typeof course.title !== 'string' || course.title.trim().length === 0) {
-        throw new Error(`Course at index ${i} (ID: ${course.id}) is missing a valid title`)
+        const courseTitle = course.title
+        const titleType = typeof courseTitle
+        const titleValue = Array.isArray(courseTitle) ? `Array(${courseTitle.length})` : String(courseTitle)
+        throw new Error(`Course at index ${i} (ID: ${course.id}) is missing a valid title. Received type: ${titleType}, value: ${titleValue}`)
       }
-      if (typeof course.priceUSD !== 'number') {
-        throw new Error(`Course at index ${i} (ID: ${course.id}) has invalid priceUSD`)
+      if (typeof course.priceUSD !== 'number' || isNaN(course.priceUSD)) {
+        throw new Error(`Course at index ${i} (ID: ${course.id}, Title: "${course.title}") has invalid priceUSD. Received: ${typeof course.priceUSD}, value: ${course.priceUSD}`)
       }
     }
 
