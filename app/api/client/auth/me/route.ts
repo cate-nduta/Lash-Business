@@ -7,7 +7,17 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getClientUserId()
+    let userId: string | null = null
+    try {
+      userId = await getClientUserId()
+    } catch (authError: any) {
+      // If auth check fails, treat as not authenticated (401)
+      console.warn('[Client Auth Me] Auth check failed, returning 401:', authError?.message)
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
     
     if (!userId) {
       return NextResponse.json(
@@ -18,7 +28,16 @@ export async function GET(request: NextRequest) {
 
     // Load client data
     const clientDataFile = `client-${userId}.json`
-    const clientData = await readDataFile<ClientData>(clientDataFile, undefined)
+    let clientData: ClientData | undefined
+    try {
+      clientData = await readDataFile<ClientData>(clientDataFile, undefined)
+    } catch (readError: any) {
+      console.error('[Client Auth Me] Error reading client data:', readError)
+      return NextResponse.json(
+        { error: 'Failed to load user data' },
+        { status: 500 }
+      )
+    }
 
     if (!clientData) {
       return NextResponse.json(
@@ -56,7 +75,8 @@ export async function GET(request: NextRequest) {
     const daysRemaining = show7DayWarning ? 7 - daysSinceCreation : null
 
     // Calculate retention score statistics
-    const lashHistoryWithScores = clientData.lashHistory.filter(h => h.retentionScore !== undefined)
+    const lashHistory = clientData.lashHistory || []
+    const lashHistoryWithScores = lashHistory.filter(h => h.retentionScore !== undefined)
     const retentionScores = lashHistoryWithScores.map(h => h.retentionScore!).filter(score => score >= 1 && score <= 3)
     const averageRetentionScore = retentionScores.length > 0
       ? retentionScores.reduce((sum, score) => sum + score, 0) / retentionScores.length
@@ -80,9 +100,9 @@ export async function GET(request: NextRequest) {
       preferences: clientData.preferences,
       allergies: clientData.allergies,
       aftercare: clientData.aftercare,
-      lashHistory: clientData.lashHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-      lashHistoryCount: clientData.lashHistory.length,
-      lashMapsCount: clientData.lashMaps.length,
+      lashHistory: lashHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      lashHistoryCount: lashHistory.length,
+      lashMapsCount: (clientData.lashMaps || []).length,
       show7DayWarning,
       daysRemaining,
       retentionStats: {
@@ -101,9 +121,17 @@ export async function GET(request: NextRequest) {
 
     return response
   } catch (error: any) {
-    console.error('Get user error:', error)
+    console.error('[Client Auth Me] Unexpected error:', error)
+    console.error('[Client Auth Me] Error stack:', error?.stack)
+    // If it's an auth-related error, return 401 instead of 500
+    if (error?.message?.includes('authenticated') || error?.message?.includes('auth')) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
     return NextResponse.json(
-      { error: error.message || 'Failed to load user data' },
+      { error: error?.message || 'Failed to load user data' },
       { status: 500 }
     )
   }

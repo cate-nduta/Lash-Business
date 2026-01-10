@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getCalendarClient } from '@/lib/google-calendar-client'
 import { readDataFile } from '@/lib/data-utils'
 
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
+// Calendar check removed to prevent timeout errors
 
 interface UnsubscribeRecord {
   email: string
@@ -15,7 +14,7 @@ interface UnsubscribeRecord {
   originallyUnsubscribedAt?: string // Track when they first unsubscribed (permanent)
 }
 
-// getCalendarClient is now imported from lib/google-calendar-client
+// Calendar API calls removed to prevent timeout errors
 
 export async function GET(request: NextRequest) {
   try {
@@ -71,49 +70,13 @@ export async function GET(request: NextRequest) {
       // Continue with other checks if unsubscribe check fails
     }
 
-    // Check if this email has made a booking before
-    const calendar = await getCalendarClient()
+    // DISABLED: Calendar check removed to prevent timeouts
+    // Always return as first-time client to avoid blocking the booking flow
+    // Calendar checks were causing timeout errors and blocking user experience
+    // This prevents the "TimeoutError: signal timed out" error
     let isFirstTime = true
-
-    if (calendar) {
-      try {
-        // Search for events with this email in the description or summary
-        // We'll search events from the past to see if this email has booked before
-        const oneYearAgo = new Date()
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-        
-        const response = await calendar.events.list({
-          calendarId: CALENDAR_ID,
-          timeMin: oneYearAgo.toISOString(),
-          maxResults: 2500, // Maximum allowed
-          singleEvents: true,
-          orderBy: 'startTime',
-        })
-
-        const events = response.data.items || []
-        
-        // Check if any event contains this email
-        for (const event of events) {
-          const description = event.description || ''
-          const summary = event.summary || ''
-          const attendees = event.attendees || []
-          
-          // Check if email appears in description, summary, or attendees
-          if (
-            description.toLowerCase().includes(email.toLowerCase()) ||
-            summary.toLowerCase().includes(email.toLowerCase()) ||
-            attendees.some((attendee: { email?: string | null }) => attendee.email?.toLowerCase() === email.toLowerCase())
-          ) {
-            isFirstTime = false
-            break
-          }
-        }
-      } catch (error) {
-        console.warn('Error checking calendar for existing bookings:', error)
-        // If we can't check, assume it's a first-time client (safer to give discount)
-        isFirstTime = true
-      }
-    }
+    
+    // No calendar API calls - removed to prevent timeouts
 
     return NextResponse.json({ 
       isFirstTime,

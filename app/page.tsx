@@ -88,6 +88,7 @@ interface Testimonial {
   status?: 'pending' | 'approved' | 'rejected'
 }
 
+// Home page component
 export default function Home() {
   const [homepageData, setHomepageData] = useState<HomepageData | null>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
@@ -104,19 +105,77 @@ export default function Home() {
   useEffect(() => {
     let isMounted = true
     const timestamp = Date.now()
-    const fetchOptions: RequestInit = { 
-      cache: 'default' as RequestCache, // Use default cache for better performance
-      // Add timeout to prevent hanging
-      signal: AbortSignal.timeout(8000) // 8 second timeout
+    // Create controllers for each request to handle timeouts properly
+    const homepageController = new AbortController()
+    const testimonialsController = new AbortController()
+    const availabilityController = new AbortController()
+    let homepageTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => homepageController.abort(), 8000)
+    let testimonialsTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => testimonialsController.abort(), 8000)
+    let availabilityTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => availabilityController.abort(), 8000)
+
+    // Helper to safely clear timeout
+    const clearTimeoutSafely = (timeout: ReturnType<typeof setTimeout> | null) => {
+      if (timeout) {
+        clearTimeout(timeout)
+        return null
+      }
+      return null
     }
 
     // Fetch all data in parallel for faster loading with error handling
     Promise.allSettled([
-      fetch(`/api/homepage?t=${timestamp}`, fetchOptions).then((res) => res.json()),
-      fetch(`/api/testimonials?t=${timestamp}`, fetchOptions).then((res) => res.json()),
-      fetch(`/api/availability?t=${timestamp}`, fetchOptions).then((res) => res.json()),
+      fetch(`/api/homepage?t=${timestamp}`, { 
+        cache: 'default' as RequestCache,
+        signal: homepageController.signal 
+      }).then((res) => {
+        homepageTimeout = clearTimeoutSafely(homepageTimeout)
+        if (!res.ok) return null
+        return res.json()
+      }).catch((error: any) => {
+        homepageTimeout = clearTimeoutSafely(homepageTimeout)
+        // Silently handle abort/timeout errors
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null
+        }
+        throw error
+      }),
+      fetch(`/api/testimonials?t=${timestamp}`, { 
+        cache: 'default' as RequestCache,
+        signal: testimonialsController.signal 
+      }).then((res) => {
+        testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
+        if (!res.ok) return { testimonials: [] }
+        return res.json()
+      }).catch((error: any) => {
+        testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
+        // Silently handle abort/timeout errors
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return { testimonials: [] }
+        }
+        throw error
+      }),
+      fetch(`/api/availability?t=${timestamp}`, { 
+        cache: 'default' as RequestCache,
+        signal: availabilityController.signal 
+      }).then((res) => {
+        availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
+        if (!res.ok) return null
+        return res.json()
+      }).catch((error: any) => {
+        availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
+        // Silently handle abort/timeout errors
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null
+        }
+        throw error
+      }),
     ])
       .then((results) => {
+        // Ensure all timeouts are cleared
+        homepageTimeout = clearTimeoutSafely(homepageTimeout)
+        testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
+        availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
+        
         if (!isMounted) return
         
         const homepageData = results[0].status === 'fulfilled' ? results[0].value : null
@@ -134,12 +193,34 @@ export default function Home() {
         setFridaySlotsActivated(isActivated)
         setLoading(false)
       })
-      .catch((error) => {
+      .catch((error: any) => {
+        // Ensure all timeouts are cleared
+        homepageTimeout = clearTimeoutSafely(homepageTimeout)
+        testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
+        availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
+        
         if (!isMounted) return
+        // Silently handle timeout/abort errors - they're expected and handled by individual promises
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.message?.includes('timeout')) {
+          setLoading(false)
+          setFridaySlotsActivated(false)
+          return
+        }
         console.error('Error loading homepage data:', error)
         setLoading(false)
         setFridaySlotsActivated(false)
       })
+      
+      // Cleanup on unmount
+      return () => {
+        isMounted = false
+        homepageTimeout = clearTimeoutSafely(homepageTimeout)
+        testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
+        availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
+        homepageController.abort()
+        testimonialsController.abort()
+        availabilityController.abort()
+      }
     
     return () => {
       isMounted = false

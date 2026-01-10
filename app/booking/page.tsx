@@ -271,10 +271,17 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     const loadClientData = async () => {
       setLoadingClientData(true)
       try {
+        // Add timeout to prevent hanging
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        
         const response = await fetch('/api/client/auth/me', {
           credentials: 'include',
           cache: 'default',
+          signal: controller.signal,
         })
+        
+        clearTimeout(timeoutId)
         
         // 401 is expected for non-authenticated users - not an error
         if (response.status === 401) {
@@ -322,9 +329,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           // Other errors - user not logged in or other issue
           setClientData(null)
         }
-      } catch (error) {
-        // Silently handle errors - user might not be logged in
-        console.debug('Client data not available (user may not be logged in)')
+      } catch (error: any) {
+        // Silently handle errors - user might not be logged in or request timed out
+        // Don't show errors to prevent unhandled runtime errors
+        if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+          // Timeout - silently fail
+        }
         setClientData(null)
       } finally {
         setLoadingClientData(false)
@@ -346,22 +356,36 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       setCheckingFirstTime(true)
       try {
         const timestamp = Date.now()
+        // Reduced timeout to 5 seconds to prevent hanging
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+        
         const response = await fetch(`/api/booking/check-first-time?email=${encodeURIComponent(formData.email)}&t=${timestamp}`, {
           cache: 'no-store',
+          signal: controller.signal,
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
           }
         })
+        
+        clearTimeout(timeoutId)
+        
         if (!response.ok) {
           throw new Error(`Failed to check first-time client: ${response.status}`)
         }
         const data = await response.json()
         setIsFirstTimeClient(data.isFirstTime === true)
-      } catch (error) {
-        console.error('Error checking first-time client:', error)
-        // Default to first-time client if check fails (safer to give discount)
-        setIsFirstTimeClient(true)
+      } catch (error: any) {
+        // Silently fail - don't show errors to user, just default to first-time
+        // This prevents unhandled runtime errors from blocking the booking flow
+        if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+          // Timeout - default to first-time client
+          setIsFirstTimeClient(true)
+        } else {
+          // Any other error - default to first-time client
+          setIsFirstTimeClient(true)
+        }
       } finally {
         setCheckingFirstTime(false)
       }
@@ -403,19 +427,31 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     const loadBlockedDates = async () => {
       try {
         const timestamp = Date.now()
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 second timeout
+        
         const response = await fetch(`/api/calendar/available-slots?fullyBookedOnly=true&t=${timestamp}`, { 
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
-          }
+          },
+          signal: controller.signal,
         })
+        
+        clearTimeout(timeoutId)
+        
         if (response.ok) {
           const data = await response.json()
           setFullyBookedDates(Array.isArray(data?.fullyBookedDates) ? data.fullyBookedDates : [])
         }
-      } catch (error) {
-        console.error('Error loading blocked dates:', error)
+      } catch (error: any) {
+        // Silently handle timeout errors
+        if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+          console.warn('Timeout loading blocked dates - continuing without them')
+        } else {
+          console.error('Error loading blocked dates:', error)
+        }
       }
     }
     loadBlockedDates()
@@ -426,39 +462,76 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     let isMounted = true
     const timestamp = Date.now()
     // NO CACHE for availability-related calls - must be fresh every time
+    // Create controllers for each fetch with proper timeout handling
+    const discountsController = new AbortController()
+    const contactController = new AbortController()
+    const availabilityController = new AbortController()
+    const discountsTimeout = setTimeout(() => discountsController.abort(), 10000)
+    const contactTimeout = setTimeout(() => contactController.abort(), 10000)
+    const availabilityTimeout = setTimeout(() => availabilityController.abort(), 10000)
+
     const availabilityFetchOptions: RequestInit = { 
       cache: 'no-store',
       headers: {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
       },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    }
-    // Other data can use default cache (discounts, contact don't change as frequently)
-    const defaultFetchOptions: RequestInit = { 
-      cache: 'no-store', // Changed to no-store for consistency
-      signal: AbortSignal.timeout(10000)
+      signal: availabilityController.signal
     }
     
     // Fetch all initial data in parallel with individual error handling
     // Load calendar dates in parallel too to avoid waterfall loading
     Promise.allSettled([
-      fetch(`/api/discounts?t=${timestamp}`, defaultFetchOptions).then((res) => {
+      fetch(`/api/discounts?t=${timestamp}`, { 
+        cache: 'no-store',
+        signal: discountsController.signal 
+      }).then((res) => {
+        clearTimeout(discountsTimeout)
         if (!res.ok) throw new Error(`Failed to load discounts: ${res.status}`)
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(discountsTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
-      fetch(`/api/contact?t=${timestamp}`, defaultFetchOptions).then((res) => {
+      fetch(`/api/contact?t=${timestamp}`, { 
+        cache: 'no-store',
+        signal: contactController.signal 
+      }).then((res) => {
+        clearTimeout(contactTimeout)
         if (!res.ok) return null
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(contactTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
       fetch(`/api/availability?t=${timestamp}`, availabilityFetchOptions).then((res) => {
+        clearTimeout(availabilityTimeout)
         if (!res.ok) return null
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(availabilityTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
       // Load calendar dates in parallel - don't wait for other data
       fetch(`/api/calendar/available-slots?t=${timestamp}`, availabilityFetchOptions).then((res) => {
+        clearTimeout(availabilityTimeout)
         if (!res.ok) return null
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(availabilityTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
     ])
       .then((results) => {
@@ -719,23 +792,48 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     let isMounted = true
     const timestamp = Date.now()
     // NO CACHE - ensure fresh data on every page load
-    const fetchOptions: RequestInit = { 
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      },
-      signal: AbortSignal.timeout(8000), // 8 second timeout
-    }
+    // Create controllers for proper timeout handling
+    const servicesController = new AbortController()
+    const guidelinesController = new AbortController()
+    const servicesTimeout = setTimeout(() => servicesController.abort(), 8000)
+    const guidelinesTimeout = setTimeout(() => guidelinesController.abort(), 8000)
     
     Promise.allSettled([
-      fetch(`/api/services?t=${timestamp}`, fetchOptions).then((res) => {
+      fetch(`/api/services?t=${timestamp}`, { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+        signal: servicesController.signal 
+      }).then((res) => {
+        clearTimeout(servicesTimeout)
         if (!res.ok) throw new Error('Failed to load services')
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(servicesTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
-      fetch(`/api/pre-appointment-guidelines?t=${timestamp}`, fetchOptions).then((res) => {
+      fetch(`/api/pre-appointment-guidelines?t=${timestamp}`, { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+        signal: guidelinesController.signal 
+      }).then((res) => {
+        clearTimeout(guidelinesTimeout)
         if (!res.ok) return null
         return res.json()
+      }).catch((error: any) => {
+        clearTimeout(guidelinesTimeout)
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          return null // Return null on timeout/abort instead of throwing
+        }
+        throw error
       }),
     ])
       .then((results) => {
@@ -1539,16 +1637,25 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       if (shouldShowLoading) {
         setLoadingDates(true)
       }
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
       try {
         const timestamp = Date.now()
+        const controller = new AbortController()
+        timeoutId = setTimeout(() => controller.abort(), 8000) // 8 second timeout
+        
         const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, { 
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
           },
-          signal: AbortSignal.timeout(8000) // 8 second timeout
+          signal: controller.signal
         })
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+        
         if (!response.ok) {
           throw new Error(`Failed to refresh available dates: ${response.status}`)
         }
@@ -1565,12 +1672,25 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         if (Array.isArray(data?.fullyBookedDates)) {
           setFullyBookedDates(data.fullyBookedDates)
         }
-      } catch (error) {
+        if (shouldShowLoading) {
+          setLoadingDates(false)
+        }
+      } catch (error: any) {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+        // Silently handle timeout/abort errors - they're expected
+        if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          if (shouldShowLoading) {
+            setLoadingDates(false)
+          }
+          return
+        }
         if (!cancelled) {
           console.error('Error refreshing available dates:', error)
         }
-      } finally {
-        if (!cancelled && shouldShowLoading) {
+        if (shouldShowLoading) {
           setLoadingDates(false)
         }
       }
@@ -2060,13 +2180,18 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       let createdBookingId: string | null = null
 
       // Payment method will be selected on Paystack page
-        // Create booking first with pending payment status
+      // Create booking first with pending payment status
+      try {
         const timestamp = Date.now()
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout for booking creation
+        
         const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          signal: controller.signal,
           body: JSON.stringify({
             ...formData,
             service: selectedServiceNames.length > 0 
@@ -2100,6 +2225,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             desiredLook: 'Custom',
           }),
         })
+        
+        clearTimeout(timeoutId)
 
         const bookingData = await bookingResponse.json()
         
@@ -2120,6 +2247,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             },
             fullResponse: bookingData
           })
+          throw new Error(bookingData.error || 'Failed to create booking')
         }
         
         if (bookingResponse.ok && bookingData.success) {
@@ -2213,6 +2341,25 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         })
         setLoading(false)
         return
+      } catch (error: any) {
+        // Handle timeout errors specifically
+        if (error.name === 'AbortError' || error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+          setSubmitStatus({
+            type: 'error',
+            message: 'Request Timeout',
+            details: 'The booking request took too long. Please try again or contact us if the problem persists.',
+          })
+        } else {
+          console.error('Booking creation error:', error)
+          setSubmitStatus({
+            type: 'error',
+            message: error.message || 'Failed to create booking',
+            details: error.details || 'Please try again or contact us if the problem persists.',
+          })
+        }
+        setLoading(false)
+        return
+      }
       
       // Legacy M-Pesa code removed - Paystack handles all payment methods
       if (false) {
@@ -2250,11 +2397,15 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
         // Payment initiation successful - now create booking
         const timestamp = Date.now()
+        const controller2 = new AbortController()
+        const timeoutId2 = setTimeout(() => controller2.abort(), 15000) // 15 second timeout for booking creation
+        
         const bookingResponse = await fetch(`/api/calendar/book?t=${timestamp}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          signal: controller2.signal,
           body: JSON.stringify({
             ...formData,
             service: selectedServiceNames.length > 0 
@@ -2289,6 +2440,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             desiredLook: 'Custom',
           }),
         })
+        
+        clearTimeout(timeoutId2)
 
         const bookingData = await bookingResponse.json()
         if (bookingResponse.ok && bookingData.success && bookingData.bookingId) {
@@ -2310,11 +2463,23 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         }
       }
     } catch (error: any) {
+      // Outer catch block for the main try block (line 1899)
       console.error('Failed to book appointment:', error)
-      setSubmitStatus({
-        type: 'error',
-        message: 'An error occurred. Please try again later.',
-      })
+      
+      // Handle timeout errors specifically
+      if (error.name === 'AbortError' || error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'Request Timeout',
+          details: 'The request took too long to complete. This may be due to a slow connection or server issue. Please try again or contact us if the problem persists.',
+        })
+      } else {
+        setSubmitStatus({
+          type: 'error',
+          message: error.message || 'An error occurred. Please try again later.',
+          details: error.details || 'Please check your connection and try again.',
+        })
+      }
     } finally {
       setLoading(false)
     }

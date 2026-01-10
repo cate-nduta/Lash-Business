@@ -65,6 +65,18 @@ export default function AdminTheme() {
     root.style.setProperty('--color-on-primary', colors.onPrimary || '#ffffff')
     root.style.setProperty('--color-on-secondary', colors.onSecondary || colors.text)
 
+    // Save to localStorage so other pages/tabs can pick it up immediately
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem('current-theme-colors', JSON.stringify(colors))
+        localStorage.setItem('theme-changed', Date.now().toString())
+        // Trigger storage event for other tabs
+        window.dispatchEvent(new Event('storage'))
+      } catch (error) {
+        console.error('Error saving theme to localStorage:', error)
+      }
+    }
+
     setTimeout(() => {
       root.style.transition = previousRootTransition
       document.body.style.transition = previousBodyTransition
@@ -157,7 +169,22 @@ export default function AdminTheme() {
           updated?.themes?.[updated.currentTheme]?.name ||
           themeData?.themes?.[themeName]?.name ||
           'Selected theme'
-        setMessage({ type: 'success', text: `Theme changed to ${themeNameLabel}!` })
+        setMessage({ type: 'success', text: `Theme changed to ${themeNameLabel}! The theme is now applied across all pages.` })
+        
+        // Trigger theme refresh across all pages
+        if (typeof window !== 'undefined') {
+          // Dispatch custom event for same-page components
+          window.dispatchEvent(new CustomEvent('theme-changed', { detail: { themeName } }))
+          
+          // Trigger storage event for cross-tab communication
+          try {
+            localStorage.setItem('theme-changed', Date.now().toString())
+            window.dispatchEvent(new Event('storage'))
+          } catch (e) {
+            // Ignore localStorage errors
+          }
+        }
+        
         setTimeout(() => {
           router.refresh()
         }, 400)

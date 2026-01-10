@@ -54,9 +54,14 @@ export async function POST(request: NextRequest) {
     }
 
     await writeDataFile('theme.json', updatedData)
+    // Revalidate all pages to ensure theme is applied everywhere
     revalidatePath('/', 'layout')
-    revalidatePath('/admin/dashboard')
-    revalidatePath('/admin/theme')
+    revalidatePath('/admin')
+    revalidatePath('/labs')
+    revalidatePath('/booking')
+    revalidatePath('/services')
+    revalidatePath('/gallery')
+    revalidatePath('/contact')
     await recordActivity({
       module: 'themes',
       action: 'apply',

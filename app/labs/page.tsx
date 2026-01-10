@@ -53,6 +53,7 @@ interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean
   courseSectionEnabled?: boolean
+  buildOnYourOwnEnabled?: boolean
   waitlistSectionEnabled?: boolean
 }
 
@@ -701,6 +702,27 @@ export default function LabsPage() {
                 </div>
               </div>
             )}
+
+          {/* Custom Website Builds Section */}
+          {settings?.buildOnYourOwnEnabled !== false && (
+            <div className="bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/20 mb-12">
+              <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] text-center mb-4">
+                Custom Website Builds
+              </h2>
+              <p className="text-lg text-[var(--color-text)] mb-6 text-center max-w-3xl mx-auto">
+                Need specific services for your website? Choose exactly what you need from our à la carte menu. 
+                Build your perfect booking system by selecting only the features and services that matter to you.
+              </p>
+              <div className="text-center">
+                <Link
+                  href="/labs/custom-website-builds"
+                  className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-8 py-4 rounded-lg font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
+                >
+                  Browse Services
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* Course Section */}
           {settings?.courseSectionEnabled !== false && (

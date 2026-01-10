@@ -64,12 +64,16 @@ export interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   courseSectionEnabled?: boolean // Enable/disable Course section display
+  buildOnYourOwnEnabled?: boolean // Enable/disable Custom Website Builds section display
   waitlistPageEnabled?: boolean // Enable/disable Waitlist page
   waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
   discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
+  whatsappNumber?: string // WhatsApp phone number for chat widget
+  whatsappMessage?: string // Default message for WhatsApp chat
+  whatsappEnabled?: boolean // Enable/disable WhatsApp chat widget
 }
 
 export const dynamic = 'force-dynamic'
@@ -170,6 +174,7 @@ const DEFAULT_SETTINGS: LabsSettings = {
   budgetRanges: DEFAULT_BUDGET_RANGES,
   whatYouGetEnabled: true, // What You Get section enabled by default
   courseSectionEnabled: true, // Course section enabled by default
+    buildOnYourOwnEnabled: true, // Custom Website Builds section enabled by default
   waitlistPageEnabled: false, // Waitlist page disabled by default
   waitlistSectionEnabled: true, // Waitlist section enabled by default
   discountSectionEnabled: false, // Discount section disabled by default
@@ -212,6 +217,9 @@ const DEFAULT_SETTINGS: LabsSettings = {
   },
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
+  whatsappNumber: '',
+  whatsappMessage: 'Hello! I have a question about LashDiary Labs.',
+  whatsappEnabled: false, // Disabled by default - admin must enable it
 }
 
 // Public GET endpoint - no authentication required
@@ -242,12 +250,16 @@ export async function GET(request: NextRequest) {
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
+      buildOnYourOwnEnabled: settings.buildOnYourOwnEnabled !== undefined ? settings.buildOnYourOwnEnabled : DEFAULT_SETTINGS.buildOnYourOwnEnabled,
       waitlistPageEnabled: settings.waitlistPageEnabled !== undefined ? settings.waitlistPageEnabled : false,
       waitlistSectionEnabled: settings.waitlistSectionEnabled !== undefined ? settings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled,
       discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
+      whatsappNumber: settings.whatsappNumber || '',
+      whatsappMessage: settings.whatsappMessage || DEFAULT_SETTINGS.whatsappMessage,
+      whatsappEnabled: settings.whatsappEnabled !== undefined ? settings.whatsappEnabled : DEFAULT_SETTINGS.whatsappEnabled,
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults

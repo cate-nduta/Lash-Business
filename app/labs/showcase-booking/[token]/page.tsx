@@ -229,9 +229,16 @@ export default function ShowcaseBookingPage() {
           const data = await response.json()
           if (mounted) {
             setProjectInfo(data.project)
-            setClientName(data.project?.contactName || '')
-            setClientEmail(data.project?.email || '')
-            setClientPhone(data.project?.phone || '')
+            // Handle both build projects and orders
+            if (data.project?.type === 'web-service-order') {
+              setClientName(data.project?.contactName || data.project?.businessName || '')
+              setClientEmail(data.project?.email || '')
+              setClientPhone(data.project?.phone || '')
+            } else {
+              setClientName(data.project?.contactName || '')
+              setClientEmail(data.project?.email || '')
+              setClientPhone(data.project?.phone || '')
+            }
           }
         } else {
           if (mounted) {

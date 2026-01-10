@@ -1,35 +1,42 @@
 import { NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 import { type CourseCatalog } from '@/types/course'
-import { readFileSync } from 'fs'
-import path from 'path'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    // CRITICAL FIX: Always read directly from local file system first
-    // Supabase may have outdated data with different IDs
-    // The local file has the correct data with both courses
+    // Use readDataFile which handles both Supabase (production) and local file system (development)
+    // This ensures it works in both localhost and production environments
     let catalog: CourseCatalog = { courses: [], discounts: [] }
     
     try {
-      const filePath = path.join(process.cwd(), 'data', 'courses.json')
-      const fileContent = readFileSync(filePath, 'utf-8')
-      catalog = JSON.parse(fileContent) as CourseCatalog
-      console.log(`[Courses API] ✓ Read from local file: Found ${catalog.courses.length} courses`)
+      catalog = await readDataFile<CourseCatalog>('courses.json', { courses: [], discounts: [] })
+      console.log(`[Courses API] ✓ Loaded courses: Found ${catalog.courses.length} courses`)
       catalog.courses.forEach(c => {
         console.log(`[Courses API]   - "${c.title}" (ID: ${c.id}, Active: ${c.isActive})`)
       })
-    } catch (fileError) {
-      console.warn(`[Courses API] Failed to read from local file, falling back to readDataFile:`, fileError)
-      // Fallback to readDataFile if local file read fails
-      catalog = await readDataFile<CourseCatalog>('courses.json', { courses: [], discounts: [] })
+    } catch (readError: any) {
+      console.error(`[Courses API] Failed to read courses data:`, readError)
+      console.error(`[Courses API] Error details:`, readError?.message, readError?.stack)
+      // Use empty catalog as fallback
+      catalog = { courses: [], discounts: [] }
+    }
+    
+    // Ensure catalog has required properties
+    if (!catalog) {
+      catalog = { courses: [], discounts: [] }
+    }
+    if (!Array.isArray(catalog.courses)) {
+      catalog.courses = []
+    }
+    if (!Array.isArray(catalog.discounts)) {
+      catalog.discounts = []
     }
     
     // Only return active courses - handle boolean true
-    let activeCourses = catalog.courses.filter(course => {
+    let activeCourses = (catalog.courses || []).filter(course => {
       const isActive = course.isActive === true
       if (!isActive) {
         console.log(`[Courses API] Filtering out inactive course: "${course.title}" (ID: ${course.id}, isActive: ${course.isActive}, type: ${typeof course.isActive})`)
@@ -65,20 +72,30 @@ export async function GET() {
     
     // Apply active discounts to courses
     const now = new Date()
-    const activeDiscounts = catalog.discounts.filter(discount => {
-      if (!discount.isActive) return false
+    const activeDiscounts = (catalog.discounts || []).filter(discount => {
+      if (!discount || !discount.isActive) return false
       
       // Check if discount is within date range
       if (discount.startDate) {
-        const startDate = new Date(discount.startDate)
-        if (now < startDate) return false
+        try {
+          const startDate = new Date(discount.startDate)
+          if (now < startDate) return false
+        } catch (e) {
+          console.warn(`[Courses API] Invalid startDate for discount:`, discount.startDate)
+          return false
+        }
       }
       
       if (discount.endDate) {
-        const endDate = new Date(discount.endDate)
-        // Set end date to end of day
-        endDate.setHours(23, 59, 59, 999)
-        if (now > endDate) return false
+        try {
+          const endDate = new Date(discount.endDate)
+          // Set end date to end of day
+          endDate.setHours(23, 59, 59, 999)
+          if (now > endDate) return false
+        } catch (e) {
+          console.warn(`[Courses API] Invalid endDate for discount:`, discount.endDate)
+          return false
+        }
       }
       
       return true
@@ -129,11 +146,11 @@ export async function GET() {
     
     // Get banner setting from catalog - return the actual value (true, false, or undefined)
     // Component will handle the logic explicitly
-    const bannerCourseId = catalog.coursesDiscountBannerCourseId
+    const bannerCourseId = catalog?.coursesDiscountBannerCourseId
     
     return NextResponse.json({ 
-      courses: activeCourses,
-      coursesDiscountBannerEnabled: catalog.coursesDiscountBannerEnabled, // Return actual value, not computed
+      courses: activeCourses || [],
+      coursesDiscountBannerEnabled: catalog?.coursesDiscountBannerEnabled ?? false, // Return actual value, not computed
       coursesDiscountBannerCourseId: bannerCourseId
     }, {
       headers: {
@@ -142,15 +159,17 @@ export async function GET() {
         'Access-Control-Allow-Methods': 'GET',
       },
     })
-  } catch (error) {
-    console.error('Error loading courses:', error)
+  } catch (error: any) {
+    console.error('[Courses API] Error loading courses:', error)
+    console.error('[Courses API] Error stack:', error?.stack)
     // Return empty array with 200 status to prevent page crashes
     // The page will handle empty courses gracefully
     // Return false for banner enabled to ensure it doesn't show on error
     return NextResponse.json({ 
       courses: [],
       coursesDiscountBannerEnabled: false,
-      coursesDiscountBannerCourseId: undefined
+      coursesDiscountBannerCourseId: undefined,
+      error: process.env.NODE_ENV === 'development' ? error?.message : undefined
     }, { 
       status: 200,
       headers: {

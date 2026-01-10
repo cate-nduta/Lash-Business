@@ -108,6 +108,8 @@ export default function PaymentSuccessPage() {
               ? 'Payment Successful & Appointment Booked!' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Payment Successful & Appointment Booked!'
+              : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
+              ? 'Payment Successful & Order Confirmed!'
               : 'Payment Successful!'}
           </h1>
           <p className="text-[#6B4A3B]">
@@ -115,6 +117,8 @@ export default function PaymentSuccessPage() {
               ? 'Your payment was successful and your consultation appointment has been booked.' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Your payment was successful and your lash appointment has been booked.'
+              : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
+              ? 'Your payment was successful! Your website build order has been confirmed. You\'ll receive an email shortly with details about your 7-day build timeline.'
               : 'Your payment has been processed successfully.'}
           </p>
         </div>
@@ -169,6 +173,21 @@ export default function PaymentSuccessPage() {
               <li className="flex items-start">
                 <span className="mr-2">✓</span>
                 <span>You'll receive all appointment details in the confirmation email</span>
+              </li>
+            </ul>
+          ) : (paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services') ? (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>You'll receive a confirmation email with your order details</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your website build will take approximately 7 days</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>We'll send you website details and a meeting link once it's ready</span>
               </li>
             </ul>
           ) : (

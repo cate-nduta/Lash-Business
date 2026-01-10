@@ -13,6 +13,10 @@ interface TierOrder {
   phone?: string
   paymentMethod: 'mpesa' | 'card' | 'free'
   amountKES: number
+  originalAmountKES?: number
+  referralDiscount?: number
+  appliedReferralCode?: string
+  referrerEmail?: string
   currency: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   checkoutRequestID?: string
@@ -27,7 +31,7 @@ export async function POST(request: NextRequest) {
   let body: any = {}
   try {
     body = await request.json()
-    const { tierId, businessName, email, phone, paymentMethod, currency } = body
+    const { tierId, businessName, email, phone, paymentMethod, currency, referralCode } = body
 
     // Validate required fields (paymentMethod is optional for free tiers)
     if (!tierId || !businessName || !email) {
@@ -84,6 +88,46 @@ export async function POST(request: NextRequest) {
       subdomain = `business-${Date.now()}`
     }
 
+    // Apply referral code discount if provided
+    let finalAmountKES = tier.priceKES
+    let referralDiscount = 0
+    let appliedReferralCode: string | null = null
+    let referrerEmail: string | null = null
+    
+    if (referralCode && referralCode.trim() && !isFreeTier) {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url.split('/api')[0]
+        const referralResponse = await fetch(new URL('/api/labs/referrals', baseUrl), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'apply',
+            code: referralCode.trim().toUpperCase(),
+            userEmail: email.trim().toLowerCase(),
+          }),
+        })
+        
+        if (referralResponse.ok) {
+          const referralData = await referralResponse.json()
+          if (referralData.success) {
+            appliedReferralCode = referralData.code
+            referrerEmail = referralData.referrerEmail
+            
+            // Load referral discount percentage from settings
+            const webServicesData = await readDataFile<any>('labs-web-services.json', {
+              referralDiscountPercentage: 10,
+            })
+            const discountPercentage = webServicesData.referralDiscountPercentage || 10
+            referralDiscount = Math.round(tier.priceKES * (discountPercentage / 100))
+            finalAmountKES = tier.priceKES - referralDiscount
+          }
+        }
+      } catch (error) {
+        console.error('Error applying referral code:', error)
+        // Continue without discount if referral code fails
+      }
+    }
+
     // Create order
     const order: TierOrder = {
       orderId,
@@ -92,7 +136,11 @@ export async function POST(request: NextRequest) {
       email: email.trim().toLowerCase(),
       phone: phone?.trim(),
       paymentMethod: isFreeTier ? 'free' : (paymentMethod || 'card'), // Use 'free' for free tiers
-      amountKES: tier.priceKES,
+      amountKES: finalAmountKES, // Use discounted amount
+      originalAmountKES: tier.priceKES, // Store original amount
+      referralDiscount: referralDiscount > 0 ? referralDiscount : undefined,
+      appliedReferralCode: appliedReferralCode || undefined,
+      referrerEmail: referrerEmail || undefined,
       currency: currency || 'KES',
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -293,7 +341,7 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone: phone.replace(/^\+/, ''), // Remove + if present
-            amount: tier.priceKES,
+            amount: finalAmountKES, // Use discounted amount
             accountReference: orderId,
             transactionDesc: `LashDiary Labs - ${tier.name}`,
           }),
@@ -330,19 +378,61 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (paymentMethod === 'card') {
-      // For card payments, you would integrate with a payment gateway
-      // For now, we'll mark it as processing and return success
-      // In production, you'd redirect to payment gateway or use Stripe/PayPal etc.
-      
-      order.status = 'processing'
-      const updatedOrders = orders.map(o => o.orderId === orderId ? order : o)
-      await writeDataFile('labs-orders.json', updatedOrders)
+      // For card payments, use Paystack
+      // Save order first
+      orders.push(order)
+      await writeDataFile('labs-orders.json', orders)
 
-      return NextResponse.json({
-        success: true,
-        orderId,
-        message: 'Card payment processing (integration pending)',
-      })
+      // Initialize Paystack payment
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url.split('/api')[0]
+        const paystackResponse = await fetch(new URL('/api/paystack/initialize', baseUrl), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: order.email,
+            amount: finalAmountKES, // Use discounted amount
+            currency: currency || 'KES',
+            metadata: {
+              payment_type: 'labs_tier',
+              order_id: orderId,
+              tier_id: tierId,
+              tier_name: tier.name,
+              business_name: order.businessName,
+              referral_code: appliedReferralCode || undefined,
+              referrer_email: referrerEmail || undefined,
+              original_amount_kes: tier.priceKES, // Store original amount for reward calculation
+            },
+            customerName: order.businessName,
+            phone: order.phone || undefined,
+          }),
+        })
+
+        const paystackData = await paystackResponse.json()
+
+        if (paystackResponse.ok && paystackData.success && paystackData.reference) {
+          return NextResponse.json({
+            success: true,
+            orderId,
+            paymentReference: paystackData.reference,
+            publicKey: paystackData.publicKey,
+            amount: finalAmountKES,
+            currency: currency || 'KES',
+            message: 'Payment initialized. Please complete payment.',
+          })
+        } else {
+          return NextResponse.json(
+            { error: paystackData.error || 'Failed to initialize payment' },
+            { status: 500 }
+          )
+        }
+      } catch (error: any) {
+        console.error('Paystack initialization error:', error)
+        return NextResponse.json(
+          { error: 'Failed to initialize payment. Please try again.' },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json(

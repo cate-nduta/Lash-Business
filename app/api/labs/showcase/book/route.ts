@@ -38,18 +38,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find project by token
+    // Find project by token - first check build projects, then orders
+    // Direct match works for both new readable format and old hex format
     const projects = await readDataFile<BuildProject[]>('labs-build-projects.json', [])
-    const projectIndex = projects.findIndex(p => p.showcaseBookingToken === token)
+    let projectIndex = projects.findIndex(p => p.showcaseBookingToken === token)
+    let project: any = null
+    let isOrder = false
 
-    if (projectIndex === -1) {
+    if (projectIndex !== -1) {
+      project = projects[projectIndex]
+    } else {
+      // Try to find in orders (direct match works for both new readable format and old hex format)
+      const orders = await readDataFile<any[]>('labs-web-services-orders.json', [])
+      const orderIndex = orders.findIndex(o => o.showcaseBookingToken === token)
+      
+      if (orderIndex !== -1) {
+        const order = orders[orderIndex]
+        // Convert order to project-like format
+        project = {
+          projectId: order.id,
+          consultationId: '',
+          invoiceId: '',
+          businessName: order.businessName || order.name || order.email.split('@')[0],
+          contactName: order.name || order.email.split('@')[0],
+          email: order.email,
+          phone: order.phoneNumber || '',
+          tierName: 'Web Services',
+          totalAmount: order.total || 0,
+          currency: 'KES',
+          showcaseBookingToken: order.showcaseBookingToken,
+        }
+        isOrder = true
+      }
+    }
+
+    if (!project) {
       return NextResponse.json(
         { error: 'Invalid booking token' },
         { status: 404 }
       )
     }
-
-    const project = projects[projectIndex]
 
     // Parse time from label (e.g., "9:30 AM" -> "09:30:00")
     const parseTimeLabel = (timeLabel: string): string => {
@@ -205,7 +233,7 @@ export async function POST(request: NextRequest) {
     const showcaseBooking = {
       bookingId,
       projectId: project.projectId,
-      consultationId: project.consultationId,
+      consultationId: project.consultationId || '',
       clientName,
       clientEmail,
       clientPhone: clientPhone || project.phone || '',
@@ -215,23 +243,41 @@ export async function POST(request: NextRequest) {
       meetLink: meetLink || null,
       status: 'confirmed',
       createdAt: new Date().toISOString(),
+      orderId: isOrder ? project.projectId : undefined,
     }
 
     showcaseBookings.push(showcaseBooking)
     await writeDataFile('labs-showcase-bookings.json', showcaseBookings)
 
-    // Update project
-    project.milestones.showcaseMeetingScheduled = {
-      date: new Date().toISOString(),
-      notes: `Showcase meeting scheduled for ${date} at ${time} (${meetingType})`,
+    // Update project or order
+    if (isOrder) {
+      // Update order
+      const orders = await readDataFile<any[]>('labs-web-services-orders.json', [])
+      const orderIndex = orders.findIndex(o => o.id === project.projectId)
+      if (orderIndex !== -1) {
+        const order = orders[orderIndex]
+        order.showcaseBookingId = bookingId
+        order.meetingLink = meetLink || order.meetingLink || ''
+        orders[orderIndex] = order
+        await writeDataFile('labs-web-services-orders.json', orders)
+      }
+    } else {
+      // Update build project
+      if (project.milestones) {
+        project.milestones.showcaseMeetingScheduled = {
+          date: new Date().toISOString(),
+          notes: `Showcase meeting scheduled for ${date} at ${time} (${meetingType})`,
+        }
+      }
+      project.showcaseBookingId = bookingId
+      project.updatedAt = new Date().toISOString()
+      projects[projectIndex] = project
+      await writeDataFile('labs-build-projects.json', projects)
     }
-    project.showcaseBookingId = bookingId
-    project.updatedAt = new Date().toISOString()
-    projects[projectIndex] = project
-    await writeDataFile('labs-build-projects.json', projects)
 
     // Add to Google Calendar
     // IMPORTANT: Use slotDateTime (proper ISO format) instead of time label to ensure correct time in calendar
+    // Pass skipEmail: true to prevent sending the salon booking email (we send our own Labs-specific email)
     try {
       const calendarResponse = await fetch(`${BASE_URL}/api/calendar/book`, {
         method: 'POST',
@@ -245,6 +291,7 @@ export async function POST(request: NextRequest) {
           timeSlot: slotDateTime.toISOString(), // Use actual ISO datetime (not label) to ensure correct time in Google Calendar
           location: meetingType === 'physical' ? 'LashDiary Studio, Nairobi, Kenya' : 'Online Meeting',
           bookingId,
+          skipEmail: true, // Skip salon booking email - we send our own Labs-specific email below
         }),
       })
     } catch (calendarError) {

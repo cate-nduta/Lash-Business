@@ -102,6 +102,18 @@ export async function POST(request: NextRequest) {
           await handleBookingBalancePayment(verifiedTransaction, metadata)
           break
 
+        case 'labs_web_services':
+          await handleLabsWebServicesPayment(verifiedTransaction, metadata)
+          break
+
+        case 'labs_tier':
+          await handleLabsTierPayment(verifiedTransaction, metadata)
+          break
+
+        case 'labs_yearly_subscription':
+          await handleLabsYearlySubscriptionPayment(verifiedTransaction, metadata)
+          break
+
         default:
           console.warn('Unknown payment type:', paymentType)
       }
@@ -757,6 +769,187 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
       stack: error.stack,
       bookingReference,
     })
+  }
+}
+
+/**
+ * Handle labs web services payment
+ */
+async function handleLabsWebServicesPayment(transaction: any, metadata: any) {
+  try {
+    const orderId = metadata.order_id
+    if (!orderId) {
+      console.warn('No order_id in labs web services payment metadata')
+      return
+    }
+
+    const orders = await readDataFile<any[]>('labs-web-services-orders.json', [])
+    const order = orders.find((o) => o.id === orderId)
+
+    if (!order) {
+      console.error('Labs web services order not found:', orderId)
+      return
+    }
+
+    // Update payment status
+    const amountPaid = transaction.amount / 100 // Paystack amounts are in subunits
+    const wasPartial = order.paymentStatus === 'partial'
+    
+    if (order.remainingPayment > 0 && amountPaid >= order.remainingPayment) {
+      // Final payment completed
+      order.paymentStatus = 'completed'
+      order.remainingPayment = 0
+      order.status = 'in_progress'
+    } else if (order.remainingPayment === 0 && !wasPartial) {
+      // Initial payment completed
+      order.paymentStatus = 'partial'
+      order.status = 'pending'
+    }
+
+    // Add payment record
+    if (!order.payments) {
+      order.payments = []
+    }
+    order.payments.push({
+      amount: amountPaid,
+      method: 'paystack',
+      date: transaction.paidAt || new Date().toISOString(),
+      transactionId: transaction.reference,
+    })
+
+    // Update order
+    const orderIndex = orders.findIndex((o) => o.id === orderId)
+    if (orderIndex !== -1) {
+      orders[orderIndex] = order
+      await writeDataFile('labs-web-services-orders.json', orders)
+    }
+
+    // Generate referral code if payment is fully completed
+    if (order.paymentStatus === 'completed' && order.remainingPayment === 0) {
+      try {
+        const generateResponse = await fetch(new URL('/api/labs/referrals/generate', process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.INTERNAL_API_KEY || 'internal-key'}`,
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            email: order.email,
+            orderTotal: order.total,
+            businessName: order.businessName || order.email.split('@')[0],
+          }),
+        })
+        if (generateResponse.ok) {
+          console.log('Referral code generated for order:', order.id)
+        }
+      } catch (error) {
+        console.error('Error generating referral code:', error)
+      }
+    }
+
+    // Send referral code used notification if applicable
+    if (order.appliedReferralCode && order.referrerEmail && order.paymentStatus === 'completed') {
+      try {
+        const { sendReferralCodeUsedNotification } = await import('@/app/api/labs/web-services/email-utils')
+        const webServicesData = await readDataFile<any>('labs-web-services.json', {
+          referrerRewardPercentage: 5,
+        })
+        const rewardPercentage = webServicesData.referrerRewardPercentage || 5
+        const rewardAmount = Math.round(order.total * (rewardPercentage / 100))
+        
+        await sendReferralCodeUsedNotification({
+          referrerEmail: order.referrerEmail,
+          referralCode: order.appliedReferralCode,
+          customerEmail: order.email,
+          orderTotal: order.total,
+          rewardPercentage: rewardPercentage,
+          rewardAmount: rewardAmount,
+        })
+        console.log('✅ Referral code used notification sent to:', order.referrerEmail)
+      } catch (emailError) {
+        console.error('Error sending referral code used notification:', emailError)
+      }
+    }
+
+    // Send order confirmation email with timeline (only on first payment)
+    if (!wasPartial && order.email) {
+      try {
+        const { sendLabsBuildNotificationEmail } = await import('@/app/api/labs/web-services/email-utils')
+        await sendLabsBuildNotificationEmail({
+          email: order.email,
+          name: order.name || order.email.split('@')[0],
+          orderId: order.id,
+          items: order.items,
+          total: order.total,
+          initialPayment: order.initialPayment,
+          remainingPayment: order.remainingPayment,
+          timeline: order.timeline,
+        })
+        console.log('✅ Labs build notification email sent:', orderId)
+      } catch (emailError) {
+        console.error('Error sending labs build notification email:', emailError)
+      }
+    }
+
+    console.log('Labs web services payment processed:', orderId)
+  } catch (error) {
+    console.error('Error handling labs web services payment:', error)
+  }
+}
+
+/**
+ * Handle Labs tier payment (placeholder for future implementation)
+ */
+async function handleLabsTierPayment(transaction: any, metadata: any) {
+  try {
+    console.log('Labs tier payment received:', transaction.reference)
+    // TODO: Implement Labs tier payment handling
+    // This is a placeholder for future implementation
+  } catch (error) {
+    console.error('Error handling Labs tier payment:', error)
+  }
+}
+
+/**
+ * Handle yearly subscription renewal payment
+ */
+async function handleLabsYearlySubscriptionPayment(transaction: any, metadata: any) {
+  try {
+    const subscriberId = metadata.subscriber_id || metadata.subscriberId
+    if (!subscriberId) {
+      console.warn('No subscriber_id in yearly subscription payment metadata')
+      return
+    }
+
+    const subscribers = await readDataFile<any[]>('labs-yearly-subscribers.json', [])
+    const subscriber = subscribers.find((s) => s.id === subscriberId)
+
+    if (!subscriber) {
+      console.error('Yearly subscriber not found:', subscriberId)
+      return
+    }
+
+    // Update subscriber's last renewal date
+    subscriber.lastRenewalDate = transaction.paidAt || new Date().toISOString()
+    
+    // Calculate next renewal date (1 year from now)
+    const nextRenewal = new Date(subscriber.lastRenewalDate)
+    nextRenewal.setFullYear(nextRenewal.getFullYear() + 1)
+    subscriber.nextRenewalDate = nextRenewal.toISOString()
+    
+    subscriber.paymentStatus = 'active'
+
+    // Update subscribers list
+    const subscriberIndex = subscribers.findIndex((s) => s.id === subscriberId)
+    if (subscriberIndex !== -1) {
+      subscribers[subscriberIndex] = subscriber
+      await writeDataFile('labs-yearly-subscribers.json', subscribers)
+    }
+
+    console.log('✅ Yearly subscription payment processed:', subscriberId)
+  } catch (error) {
+    console.error('Error handling yearly subscription payment:', error)
   }
 }
 

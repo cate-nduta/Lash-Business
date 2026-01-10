@@ -2,7 +2,7 @@ import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailViaZoho } from '@/lib/email/zoho-config'
 import { BUSINESS_NOTIFICATION_EMAIL } from '@/lib/email/zoho-config'
 import type { BuildProject } from '@/app/api/admin/labs/build-projects/route'
-import crypto from 'crypto'
+import { generateShowcaseToken } from '@/lib/showcase-token-utils'
 
 function normalizeBaseUrl(): string {
   const raw =
@@ -35,13 +35,14 @@ export async function sendShowcaseEmailForProject(projectId: string): Promise<vo
 
   const project = projects[projectIndex]
 
-  // Generate unique booking token if not exists
-  if (!project.showcaseBookingToken) {
-    project.showcaseBookingToken = crypto.randomBytes(32).toString('hex')
-    project.updatedAt = new Date().toISOString()
-    projects[projectIndex] = project
-    await writeDataFile('labs-build-projects.json', projects)
-  }
+  // Always regenerate showcase booking token to ensure it uses the new readable format
+  // This migrates old hex tokens to the new format: {name}{date}-showcase-meeting
+  const customerName = project.contactName || project.businessName || project.email.split('@')[0]
+  const projectDate = project.createdAt || project.updatedAt || new Date().toISOString()
+  project.showcaseBookingToken = generateShowcaseToken(customerName, projectDate)
+  project.updatedAt = new Date().toISOString()
+  projects[projectIndex] = project
+  await writeDataFile('labs-build-projects.json', projects)
 
   const bookingUrl = `${BASE_URL}/labs/showcase-booking/${project.showcaseBookingToken}`
 

@@ -319,6 +319,31 @@ export async function POST(request: NextRequest) {
             labsOrders[orderIndex] = order
             await writeDataFile('labs-orders.json', labsOrders)
 
+            // Send referral code used notification if applicable
+            if (order.appliedReferralCode && order.referrerEmail && order.status === 'completed') {
+              try {
+                const { sendReferralCodeUsedNotification } = await import('@/app/api/labs/web-services/email-utils')
+                const webServicesData = await readDataFile<any>('labs-web-services.json', {
+                  referrerRewardPercentage: 5,
+                })
+                const rewardPercentage = webServicesData.referrerRewardPercentage || 5
+                const orderTotal = order.originalAmountKES || order.amountKES
+                const rewardAmount = Math.round(orderTotal * (rewardPercentage / 100))
+                
+                await sendReferralCodeUsedNotification({
+                  referrerEmail: order.referrerEmail,
+                  referralCode: order.appliedReferralCode,
+                  customerEmail: order.email,
+                  orderTotal: orderTotal,
+                  rewardPercentage: rewardPercentage,
+                  rewardAmount: rewardAmount,
+                })
+                console.log('✅ Referral code used notification sent to:', order.referrerEmail)
+              } catch (emailError) {
+                console.error('Error sending referral code used notification:', emailError)
+              }
+            }
+
             // Load tier information to get tier name (used in multiple places)
             const labsSettings = await readDataFile<any>('labs-settings.json', { tiers: [] })
             const tier = labsSettings.tiers?.find((t: any) => t.id === order.tierId)

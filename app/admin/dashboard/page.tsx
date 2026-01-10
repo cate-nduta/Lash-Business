@@ -288,6 +288,20 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Labs Web Services',
+      description: 'Manage web services for "Custom Website Builds" page - products, prices, cart rules',
+      href: '/admin/labs-web-services',
+      icon: '🛠️',
+      ownerOnly: false,
+    },
+    {
+      title: 'Labs Web Services Orders',
+      description: 'View orders, send website details, and manage customer deliveries',
+      href: '/admin/labs-web-services/orders',
+      icon: '📦',
+      ownerOnly: false,
+    },
+    {
       title: 'Model Applications',
       description: 'View and manage model applications',
       href: '/admin/models',

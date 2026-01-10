@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
       salonReferral: rawSalonReferral,
       giftCardCode: rawGiftCardCode,
       desiredLook: rawDesiredLook,
+      skipEmail, // Flag to skip sending emails (for showcase bookings, etc.)
     } = body
     
     // Fetch location from contact settings if not provided
@@ -565,10 +566,11 @@ export async function POST(request: NextRequest) {
 
     // Send email notifications ONLY for free services (price = 0)
     // For paid services, emails will be sent after payment via the success page button
+    // Skip emails if skipEmail flag is set (e.g., for showcase bookings which send their own email)
     let emailSent = false
     let emailError = null
     let emailStatus = 'skipped'
-    if (isFree) {
+    if (isFree && !skipEmail) {
     try {
       const emailResult = await sendEmailNotification({
         name,

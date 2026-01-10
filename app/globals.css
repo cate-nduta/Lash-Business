@@ -1241,3 +1241,72 @@ nav.bg-white button.md\:hidden:focus {
   outline: none !important;
 }
 
+/* Override global button styles for recommended services button - force white text */
+button.recommended-services-button,
+button.recommended-services-button *,
+.recommended-services-text,
+.recommended-services-icon {
+  color: #ffffff !important;
+}
+
+/* Custom Website Builds Banner - white text always, positioned above navbar */
+.custom-website-builds-banner {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 100 !important; /* Above navbar (z-[70]) */
+}
+
+/* Ensure "Back to Services" link is plain text without button styling */
+/* Text should be black on white/light background and white on dark background */
+a.back-to-services-link {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: #000000 !important; /* Default: black on light backgrounds (bg-baby-pink-light) */
+  transition: opacity 0.2s ease;
+}
+
+/* White text on dark backgrounds */
+.bg-brown-dark a.back-to-services-link,
+.bg-brown a.back-to-services-link,
+.bg-black a.back-to-services-link,
+.bg-gray-900 a.back-to-services-link,
+.bg-gray-800 a.back-to-services-link,
+[class*="bg-brown-dark"] a.back-to-services-link,
+[class*="bg-brown"]:not([class*="bg-brown-light"]) a.back-to-services-link {
+  color: #ffffff !important;
+}
+
+/* Ensure it's black on light/white backgrounds */
+.bg-white a.back-to-services-link,
+.bg-baby-pink-light a.back-to-services-link,
+.bg-gray-50 a.back-to-services-link,
+.bg-gray-100 a.back-to-services-link,
+.bg-pink-light a.back-to-services-link,
+[class*="bg-white"] a.back-to-services-link,
+[class*="bg-baby-pink"] a.back-to-services-link,
+[class*="bg-pink-light"] a.back-to-services-link {
+  color: #000000 !important;
+}
+
+/* Hover state */
+a.back-to-services-link:hover {
+  opacity: 0.7;
+}
+
+/* Ensure it's black by default since pages use bg-baby-pink-light (light background) */
+a.back-to-services-link:not([style*="color"]) {
+  color: #000000 !important;
+}
+
+.custom-website-builds-banner,
+.custom-website-builds-banner *,
+.custom-website-builds-banner p,
+.custom-website-builds-banner span {
+  color: #ffffff !important;
+}
+

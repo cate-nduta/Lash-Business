@@ -58,6 +58,7 @@ export default function AdminLabs() {
     ],
     whatYouGetEnabled: true,
     courseSectionEnabled: true,
+    buildOnYourOwnEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -87,6 +88,7 @@ export default function AdminLabs() {
     ],
     whatYouGetEnabled: true,
     courseSectionEnabled: true,
+    buildOnYourOwnEnabled: true,
     whatYouGet: {
       title: 'What You Get',
       subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -105,6 +107,9 @@ export default function AdminLabs() {
     discountCodes: [],
     googleMeetRoom: '',
     googleMeetRoomLastChanged: new Date().toISOString(),
+    whatsappNumber: '',
+    whatsappMessage: 'Hello! I have a question about LashDiary Labs.',
+    whatsappEnabled: false,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -190,10 +195,14 @@ export default function AdminLabs() {
             ],
         whatYouGetEnabled: data.whatYouGetEnabled !== undefined ? data.whatYouGetEnabled : true,
         courseSectionEnabled: data.courseSectionEnabled !== undefined ? data.courseSectionEnabled : true,
+        buildOnYourOwnEnabled: data.buildOnYourOwnEnabled !== undefined ? data.buildOnYourOwnEnabled : true,
         waitlistPageEnabled: data.waitlistPageEnabled !== undefined ? data.waitlistPageEnabled : false,
         waitlistSectionEnabled: data.waitlistSectionEnabled !== undefined ? data.waitlistSectionEnabled : true,
         discountSectionEnabled: data.discountSectionEnabled !== undefined ? data.discountSectionEnabled : false,
         discountCodes: Array.isArray(data.discountCodes) ? data.discountCodes : [],
+        whatsappNumber: data.whatsappNumber || '',
+        whatsappMessage: data.whatsappMessage || 'Hello! I have a question about LashDiary Labs.',
+        whatsappEnabled: data.whatsappEnabled !== undefined ? data.whatsappEnabled : false,
         whatYouGet: data.whatYouGet || {
           title: 'What You Get',
           subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -510,6 +519,93 @@ export default function AdminLabs() {
                   This link will be used for consultations when unique meeting links can't be generated automatically.
                 </p>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* WhatsApp Chat Widget */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <h2 className="text-2xl font-display text-brown mb-4">WhatsApp Chat Widget</h2>
+          <p className="text-gray-600 mb-4 text-sm">
+            Configure the WhatsApp chat button that appears on Labs pages. Clients can click it to start a conversation with you.
+          </p>
+          
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="whatsappEnabled"
+                checked={settings.whatsappEnabled || false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    whatsappEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 rounded border-brown-light text-brown focus:ring-brown"
+              />
+              <label htmlFor="whatsappEnabled" className="font-semibold text-gray-700">
+                Enable WhatsApp Chat Widget
+              </label>
+            </div>
+
+            {settings.whatsappEnabled && (
+              <>
+                <div>
+                  <label htmlFor="whatsappNumber" className="block font-semibold text-gray-700 mb-2">
+                    WhatsApp Phone Number:
+                  </label>
+                  <input
+                    type="tel"
+                    id="whatsappNumber"
+                    value={settings.whatsappNumber || ''}
+                    onChange={(e) =>
+                      setSettings(prev => ({
+                        ...prev,
+                        whatsappNumber: e.target.value.trim(),
+                      }))
+                    }
+                    placeholder="e.g., 254712345678 or 0712345678"
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter your WhatsApp number with country code (e.g., 254712345678 for Kenya) or local format (0712345678). The system will automatically format it.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="whatsappMessage" className="block font-semibold text-gray-700 mb-2">
+                    Default Message:
+                  </label>
+                  <textarea
+                    id="whatsappMessage"
+                    value={settings.whatsappMessage || ''}
+                    onChange={(e) =>
+                      setSettings(prev => ({
+                        ...prev,
+                        whatsappMessage: e.target.value,
+                      }))
+                    }
+                    placeholder="Hello! I have a question about LashDiary Labs."
+                    rows={3}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown resize-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This message will be pre-filled when clients click the WhatsApp button. They can edit it before sending.
+                  </p>
+                </div>
+
+                {settings.whatsappNumber && (
+                  <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4">
+                    <p className="text-sm text-green-800 mb-2">
+                      <strong>Preview:</strong> The WhatsApp button will appear in the bottom-right corner of all Labs pages.
+                    </p>
+                    <p className="text-xs text-green-700">
+                      When clicked, it will open WhatsApp with your number ({settings.whatsappNumber}) and the message above.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1178,6 +1274,35 @@ export default function AdminLabs() {
                   setSettings(prev => ({
                     ...prev,
                     courseSectionEnabled: e.target.checked,
+                  }))
+                }
+                className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Website Builds Section on Labs Page */}
+        <div className="bg-white rounded-xl shadow-soft border-2 border-brown-light p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-display text-brown mb-2">Custom Website Builds Section on Labs Page</h2>
+              <p className="text-gray-600 text-sm">
+                Control the visibility of the "Custom Website Builds" section on the main Labs page. This section directs users to /labs/custom-website-builds.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label htmlFor="buildOnYourOwnEnabled" className="font-semibold text-gray-700 cursor-pointer">
+                Enable Custom Website Builds Section:
+              </label>
+              <input
+                type="checkbox"
+                id="buildOnYourOwnEnabled"
+                checked={settings.buildOnYourOwnEnabled !== false}
+                onChange={(e) =>
+                  setSettings(prev => ({
+                    ...prev,
+                    buildOnYourOwnEnabled: e.target.checked,
                   }))
                 }
                 className="w-5 h-5 text-brown border-2 border-brown-light rounded focus:ring-2 focus:ring-brown cursor-pointer"

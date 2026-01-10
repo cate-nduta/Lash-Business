@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
+import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 
 interface PricingTier {
   id: string
@@ -45,9 +46,24 @@ export default function LabsCheckout() {
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
   const [email, setEmail] = useState('')
   const [businessName, setBusinessName] = useState('')
+  const [referralCode, setReferralCode] = useState('')
+  const [validatingCode, setValidatingCode] = useState(false)
+  const [codeValid, setCodeValid] = useState<boolean | null>(null)
+  const [codeError, setCodeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [orderId, setOrderId] = useState<string | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<{
+    publicKey: string
+    email: string
+    amount: number
+    currency: string
+    reference: string
+    customerName: string
+    phone?: string
+    orderId: string
+  } | null>(null)
 
   useEffect(() => {
     if (!tierId) {
@@ -132,6 +148,7 @@ export default function LabsCheckout() {
           phone: fullPhone,
           paymentMethod: apiPaymentMethod,
           currency: currency || 'KES',
+          referralCode: referralCode.trim() || undefined,
         }),
       })
 
@@ -182,11 +199,26 @@ export default function LabsCheckout() {
         setOrderId(data.orderId)
         // Poll for payment status
         pollPaymentStatus(data.orderId, data.checkoutRequestID)
-      } else if (finalPaymentMethod === 'card') {
-        // For card payments, redirect to payment gateway or show success
-        // For now, we'll assume card payment is handled differently
-        setSuccess(true)
+      } else if (finalPaymentMethod === 'card' && data.paymentReference && data.publicKey) {
+        // For card payments, initialize Paystack
         setOrderId(data.orderId)
+        // Payment will be handled by PaystackInlinePayment component
+        // Store payment data for the payment modal
+        setPaymentData({
+          publicKey: data.publicKey,
+          email: email.trim(),
+          amount: data.amount,
+          currency: data.currency || 'KES',
+          reference: data.paymentReference,
+          customerName: businessName.trim(),
+          phone: phoneLocalNumber ? `${phoneCountryCode}${phoneLocalNumber}` : undefined,
+          orderId: data.orderId,
+        })
+        setShowPaymentModal(true)
+      } else if (finalPaymentMethod === 'card') {
+        // Fallback if payment initialization failed
+        setError('Failed to initialize payment. Please try again.')
+        setProcessing(false)
       }
     } catch (error: any) {
       console.error('Error processing checkout:', error)
@@ -360,11 +392,27 @@ export default function LabsCheckout() {
                   <p className="text-sm text-[var(--color-text)]/70 italic">{tier.description}</p>
                 )}
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--color-text)]">Total</span>
-                <span className="text-3xl font-bold text-[var(--color-primary)]">
-                  {formatPrice(tier.priceKES)}
-                </span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--color-text)]">Subtotal</span>
+                  <span className="text-lg font-semibold text-[var(--color-text)]">
+                    {formatPrice(tier.priceKES)}
+                  </span>
+                </div>
+                {codeValid && tier.priceKES > 0 && (
+                  <div className="flex justify-between items-center text-green-600">
+                    <span className="text-sm">Referral Discount</span>
+                    <span className="text-sm font-semibold">
+                      -{formatPrice(Math.round(tier.priceKES * 0.1))}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center border-t border-[var(--color-primary)]/20 pt-2">
+                  <span className="text-[var(--color-text)] font-semibold">Total</span>
+                  <span className="text-3xl font-bold text-[var(--color-primary)]">
+                    {formatPrice(codeValid && tier.priceKES > 0 ? Math.round(tier.priceKES * 0.9) : tier.priceKES)}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -384,6 +432,63 @@ export default function LabsCheckout() {
                     placeholder="Your Business Name"
                     required
                   />
+                </div>
+
+                {/* Discount Code Section */}
+                <div>
+                  <label className="block text-sm font-semibold text-[var(--color-text)] mb-2">
+                    Discount Code <span className="text-sm text-[var(--color-text)]/60">(Optional)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={referralCode}
+                      onChange={(e) => {
+                        setReferralCode(e.target.value.toUpperCase())
+                        setCodeValid(null)
+                        setCodeError(null)
+                      }}
+                      placeholder="Enter referral code (e.g., LABS-XXXX)"
+                      className="flex-1 px-4 py-3 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!referralCode.trim()) {
+                          setCodeError('Please enter a referral code')
+                          return
+                        }
+                        setValidatingCode(true)
+                        setCodeError(null)
+                        try {
+                          const response = await fetch(`/api/labs/referrals?code=${encodeURIComponent(referralCode.trim().toUpperCase())}`)
+                          const data = await response.json()
+                          if (data.valid) {
+                            setCodeValid(true)
+                            setCodeError(null)
+                          } else {
+                            setCodeValid(false)
+                            setCodeError(data.error || 'Invalid referral code')
+                          }
+                        } catch (error) {
+                          setCodeValid(false)
+                          setCodeError('Failed to validate code. Please try again.')
+                        } finally {
+                          setValidatingCode(false)
+                        }
+                      }}
+                      disabled={validatingCode || !referralCode.trim()}
+                      className="px-4 py-3 bg-[var(--color-primary)]/10 hover:bg-[var(--color-primary)]/20 text-[var(--color-primary)] font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {validatingCode ? 'Checking...' : 'Apply'}
+                    </button>
+                  </div>
+                  {codeValid === true && (
+                    <p className="text-sm text-green-600 mt-2">✓ Referral code applied successfully!</p>
+                  )}
+                  {codeError && (
+                    <p className="text-sm text-red-600 mt-2">{codeError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -536,6 +641,57 @@ export default function LabsCheckout() {
           </div>
         </div>
       </div>
+
+      {/* Paystack Inline Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <PaystackInlinePayment
+          publicKey={paymentData.publicKey}
+          email={paymentData.email}
+          amount={paymentData.amount}
+          currency={paymentData.currency}
+          reference={paymentData.reference}
+          customerName={paymentData.customerName}
+          phone={paymentData.phone}
+          metadata={{
+            payment_type: 'labs_tier',
+            order_id: paymentData.orderId,
+            tier_id: tierId || '',
+          }}
+          onSuccess={async (reference: string) => {
+            if (!paymentData) return
+            setShowPaymentModal(false)
+            setProcessing(true)
+            try {
+              const verifyResponse = await fetch('/api/paystack/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reference, orderId: paymentData.orderId, paymentType: 'labs_tier' }),
+              })
+              const verifyData = await verifyResponse.json()
+
+              if (verifyResponse.ok && verifyData.success) {
+                setSuccess(true)
+                // Redirect to login after a delay
+                setTimeout(() => {
+                  router.push(`/labs/login?orderId=${paymentData.orderId}`)
+                }, 2000)
+              } else {
+                setError(verifyData.error || 'Payment verification failed. Please contact support.')
+                setProcessing(false)
+              }
+            } catch (err: any) {
+              console.error('Payment verification error:', err)
+              setError('Payment verification failed. Please contact support.')
+              setProcessing(false)
+            }
+          }}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentData(null)
+            setProcessing(false)
+          }}
+        />
+      )}
     </div>
   )
 }

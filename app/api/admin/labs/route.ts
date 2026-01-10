@@ -68,12 +68,16 @@ export interface LabsSettings {
   whoThisIsFor?: WhoThisIsForContent
   whoThisIsForEnabled?: boolean // Enable/disable Who This is For section display
   courseSectionEnabled?: boolean // Enable/disable Course section display
+  buildOnYourOwnEnabled?: boolean // Enable/disable Custom Website Builds section display
   waitlistPageEnabled?: boolean // Enable/disable Waitlist page
   waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
   discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
+  whatsappNumber?: string // WhatsApp phone number for chat widget
+  whatsappMessage?: string // Default message for WhatsApp chat
+  whatsappEnabled?: boolean // Enable/disable WhatsApp chat widget
 }
 
 const DEFAULT_TIERS: PricingTier[] = [
@@ -213,6 +217,7 @@ const DEFAULT_SETTINGS: LabsSettings = {
   whoThisIsFor: DEFAULT_WHO_THIS_IS_FOR,
   whoThisIsForEnabled: true, // Who This is For section enabled by default
   courseSectionEnabled: true, // Course section enabled by default
+    buildOnYourOwnEnabled: true, // Custom Website Builds section enabled by default
   waitlistSectionEnabled: true, // Waitlist section enabled by default
   discountSectionEnabled: false, // Discount section disabled by default
   discountCodes: [], // No discount codes by default
@@ -240,12 +245,16 @@ export async function GET(request: NextRequest) {
       whoThisIsFor: settings.whoThisIsFor || DEFAULT_SETTINGS.whoThisIsFor,
       whoThisIsForEnabled: settings.whoThisIsForEnabled !== undefined ? settings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled,
       courseSectionEnabled: settings.courseSectionEnabled !== undefined ? settings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled,
+      buildOnYourOwnEnabled: settings.buildOnYourOwnEnabled !== undefined ? settings.buildOnYourOwnEnabled : DEFAULT_SETTINGS.buildOnYourOwnEnabled,
       waitlistSectionEnabled: settings.waitlistSectionEnabled !== undefined ? settings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled,
       waitlistPageEnabled: settings.waitlistPageEnabled !== undefined ? settings.waitlistPageEnabled : false,
       discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
+      whatsappNumber: settings.whatsappNumber || '',
+      whatsappMessage: settings.whatsappMessage || 'Hello! I have a question about LashDiary Labs.',
+      whatsappEnabled: settings.whatsappEnabled !== undefined ? settings.whatsappEnabled : false,
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults and save
@@ -377,6 +386,7 @@ export async function POST(request: NextRequest) {
       whoThisIsFor: body.whoThisIsFor || currentSettings.whoThisIsFor || DEFAULT_WHO_THIS_IS_FOR,
       whoThisIsForEnabled: body.whoThisIsForEnabled !== undefined ? body.whoThisIsForEnabled : (currentSettings.whoThisIsForEnabled !== undefined ? currentSettings.whoThisIsForEnabled : DEFAULT_SETTINGS.whoThisIsForEnabled),
       courseSectionEnabled: body.courseSectionEnabled !== undefined ? body.courseSectionEnabled : (currentSettings.courseSectionEnabled !== undefined ? currentSettings.courseSectionEnabled : DEFAULT_SETTINGS.courseSectionEnabled),
+      buildOnYourOwnEnabled: body.buildOnYourOwnEnabled !== undefined ? body.buildOnYourOwnEnabled : (currentSettings.buildOnYourOwnEnabled !== undefined ? currentSettings.buildOnYourOwnEnabled : DEFAULT_SETTINGS.buildOnYourOwnEnabled),
       waitlistSectionEnabled: body.waitlistSectionEnabled !== undefined ? body.waitlistSectionEnabled : (currentSettings.waitlistSectionEnabled !== undefined ? currentSettings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled),
       waitlistPageEnabled: body.waitlistPageEnabled !== undefined ? body.waitlistPageEnabled : (currentSettings.waitlistPageEnabled !== undefined ? currentSettings.waitlistPageEnabled : false),
       discountSectionEnabled: body.discountSectionEnabled !== undefined ? body.discountSectionEnabled : (currentSettings.discountSectionEnabled !== undefined ? currentSettings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled),
@@ -386,6 +396,9 @@ export async function POST(request: NextRequest) {
       googleMeetRoomLastChanged: meetRoomChanged 
         ? new Date().toISOString()
         : (body.googleMeetRoomLastChanged || currentSettings.googleMeetRoomLastChanged || new Date().toISOString()),
+      whatsappNumber: body.whatsappNumber !== undefined ? body.whatsappNumber : (currentSettings.whatsappNumber || ''),
+      whatsappMessage: body.whatsappMessage !== undefined ? body.whatsappMessage : (currentSettings.whatsappMessage || 'Hello! I have a question about LashDiary Labs.'),
+      whatsappEnabled: body.whatsappEnabled !== undefined ? body.whatsappEnabled : (currentSettings.whatsappEnabled !== undefined ? currentSettings.whatsappEnabled : false),
     }
 
     // Ensure tiers are saved correctly

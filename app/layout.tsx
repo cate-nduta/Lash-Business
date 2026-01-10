@@ -7,7 +7,9 @@ import Footer from '@/components/Footer'
 import PromoBanner from '@/components/PromoBanner'
 import WebsiteProtection from '@/components/WebsiteProtection'
 import ClientAuthMonitor from '@/components/ClientAuthMonitor'
+import WhatsAppWidget from '@/components/WhatsAppWidget'
 import ThemeProvider from './theme-provider'
+import GlobalThemeLoader from '@/components/GlobalThemeLoader'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { CartProvider } from '@/contexts/CartContext'
 import { ServiceCartProvider } from '@/contexts/ServiceCartContext'
@@ -248,12 +250,13 @@ export default async function RootLayout({
           </>
         )}
         <ThemeProvider colors={colors}>
+          <GlobalThemeLoader />
           <CurrencyProvider>
             <CartProvider>
               <ServiceCartProvider>
                 <WebsiteProtection />
                 <ClientAuthMonitor />
-                <div className="sticky top-0 z-[70]">
+                <div className="sticky top-0 z-[70]" id="navbar-container">
                   <PromoBanner />
                   <Navbar />
                 </div>
@@ -261,6 +264,7 @@ export default async function RootLayout({
                   {children}
                 </main>
                 <Footer />
+                <WhatsAppWidget />
               </ServiceCartProvider>
             </CartProvider>
           </CurrencyProvider>
@@ -289,12 +293,15 @@ export default async function RootLayout({
               // Suppress errors from browser extensions that try to access undefined properties
               const originalError = window.onerror;
               window.onerror = function(message, source, lineno, colno, error) {
-                // Ignore errors from browser extensions (common patterns)
+                // Silently handle timeout errors - they're expected and handled by our code
                 if (message && (
-                  message.includes('profile') && message.includes('undefined') ||
+                  message.includes('TimeoutError') ||
+                  message.includes('signal timed out') ||
+                  message.includes('AbortError') ||
+                  (message.includes('profile') && message.includes('undefined')) ||
                   message.includes('twoseven') ||
                   message.includes('onUpdate-profile') ||
-                  source && source.includes('extension://')
+                  (source && source.includes('extension://'))
                 )) {
                   return true; // Suppress the error
                 }
@@ -305,17 +312,30 @@ export default async function RootLayout({
                 return false;
               };
 
-              // Also catch unhandled promise rejections from extensions
-              const originalUnhandledRejection = window.onunhandledrejection;
+              // Also catch unhandled promise rejections and timeout errors
               window.addEventListener('unhandledrejection', function(event) {
                 const reason = event.reason;
-                if (reason && typeof reason === 'object' && reason.message) {
-                  const message = reason.message.toString();
-                  if (message.includes('profile') && message.includes('undefined') ||
-                      message.includes('twoseven') ||
-                      message.includes('onUpdate-profile')) {
+                if (reason) {
+                  // Handle timeout errors silently
+                  if (reason.name === 'TimeoutError' || 
+                      reason.name === 'AbortError' ||
+                      (reason.message && (
+                        reason.message.toString().includes('signal timed out') ||
+                        reason.message.toString().includes('TimeoutError') ||
+                        reason.message.toString().includes('timed out')
+                      ))) {
                     event.preventDefault();
                     return;
+                  }
+                  // Handle extension errors
+                  if (reason.message && typeof reason.message === 'string') {
+                    const message = reason.message.toString();
+                    if (message.includes('profile') && message.includes('undefined') ||
+                        message.includes('twoseven') ||
+                        message.includes('onUpdate-profile')) {
+                      event.preventDefault();
+                      return;
+                    }
                   }
                 }
               });
