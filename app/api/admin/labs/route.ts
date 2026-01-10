@@ -75,9 +75,6 @@ export interface LabsSettings {
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
-  whatsappNumber?: string // WhatsApp phone number for chat widget
-  whatsappMessage?: string // Default message for WhatsApp chat
-  whatsappEnabled?: boolean // Enable/disable WhatsApp chat widget
 }
 
 const DEFAULT_TIERS: PricingTier[] = [
@@ -252,9 +249,6 @@ export async function GET(request: NextRequest) {
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
-      whatsappNumber: settings.whatsappNumber || '',
-      whatsappMessage: settings.whatsappMessage || 'Hello! I have a question about LashDiary Labs.',
-      whatsappEnabled: settings.whatsappEnabled !== undefined ? settings.whatsappEnabled : false,
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults and save
@@ -396,9 +390,6 @@ export async function POST(request: NextRequest) {
       googleMeetRoomLastChanged: meetRoomChanged 
         ? new Date().toISOString()
         : (body.googleMeetRoomLastChanged || currentSettings.googleMeetRoomLastChanged || new Date().toISOString()),
-      whatsappNumber: body.whatsappNumber !== undefined ? body.whatsappNumber : (currentSettings.whatsappNumber || ''),
-      whatsappMessage: body.whatsappMessage !== undefined ? body.whatsappMessage : (currentSettings.whatsappMessage || 'Hello! I have a question about LashDiary Labs.'),
-      whatsappEnabled: body.whatsappEnabled !== undefined ? body.whatsappEnabled : (currentSettings.whatsappEnabled !== undefined ? currentSettings.whatsappEnabled : false),
     }
 
     // Ensure tiers are saved correctly

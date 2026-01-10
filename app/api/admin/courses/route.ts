@@ -40,18 +40,45 @@ export async function GET() {
       }
     }
     
+    // Normalize courses to ensure titles are always strings (not arrays)
+    const normalizedCourses: Course[] = Array.isArray(catalog.courses)
+      ? catalog.courses.map((course, index) => {
+          try {
+            // Normalize each course to ensure all fields are properly formatted
+            const normalized = normalizeCourse(course)
+            return normalized
+          } catch (courseError) {
+            console.error(`[Admin Courses API] Failed to normalize course at index ${index} during GET:`, courseError)
+            // Return the course as-is if normalization fails (shouldn't happen, but safety)
+            return course as Course
+          }
+        })
+      : []
+
+    // Normalize discounts
+    const normalizedDiscounts: CourseDiscount[] = Array.isArray(catalog.discounts)
+      ? catalog.discounts.map((discount, index) => {
+          try {
+            return normalizeDiscount(discount)
+          } catch (discountError) {
+            console.error(`[Admin Courses API] Failed to normalize discount at index ${index} during GET:`, discountError)
+            return discount as CourseDiscount
+          }
+        })
+      : []
+
     // Ensure structure exists and preserve banner settings
     const finalCatalog: CourseCatalog = {
-      courses: Array.isArray(catalog.courses) ? catalog.courses : [],
-      discounts: Array.isArray(catalog.discounts) ? catalog.discounts : [],
+      courses: normalizedCourses,
+      discounts: normalizedDiscounts,
       coursesDiscountBannerEnabled: catalog.coursesDiscountBannerEnabled !== undefined ? catalog.coursesDiscountBannerEnabled : undefined,
       coursesDiscountBannerCourseId: catalog.coursesDiscountBannerCourseId || undefined,
     }
 
     // Debug log
-    console.log(`[Admin Courses API] Returning ${finalCatalog.courses.length} courses`)
+    console.log(`[Admin Courses API] Returning ${finalCatalog.courses.length} normalized courses`)
     finalCatalog.courses.forEach((c: Course) => {
-      console.log(`[Admin Courses API] Course: "${c.title}" (ID: ${c.id}, Active: ${c.isActive})`)
+      console.log(`[Admin Courses API] Course: "${c.title}" (ID: ${c.id}, Active: ${c.isActive}, Title Type: ${typeof c.title})`)
     })
 
     return NextResponse.json(finalCatalog, {

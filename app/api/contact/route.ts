@@ -22,6 +22,7 @@ type ContactSettings = {
   bookingTitle?: string | null
   bookingDescription?: string | null
   bookingButtonText?: string | null
+  whatsappMessage?: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
       bookingTitle: contact?.bookingTitle ?? '',
       bookingDescription: contact?.bookingDescription ?? '',
       bookingButtonText: contact?.bookingButtonText ?? '',
+      whatsappMessage: contact?.whatsappMessage ?? 'Hello! I would like to chat with you.',
     }
 
     return NextResponse.json(responseBody, {

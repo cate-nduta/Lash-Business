@@ -7,9 +7,9 @@ import Footer from '@/components/Footer'
 import PromoBanner from '@/components/PromoBanner'
 import WebsiteProtection from '@/components/WebsiteProtection'
 import ClientAuthMonitor from '@/components/ClientAuthMonitor'
-import WhatsAppWidget from '@/components/WhatsAppWidget'
 import ThemeProvider from './theme-provider'
 import GlobalThemeLoader from '@/components/GlobalThemeLoader'
+import WhatsAppButton from '@/components/WhatsAppButton'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { CartProvider } from '@/contexts/CartContext'
 import { ServiceCartProvider } from '@/contexts/ServiceCartContext'
@@ -64,7 +64,7 @@ export async function generateMetadata(): Promise<Metadata> {
       : undefined
     
     return {
-      title: settings?.business?.name ? `${settings.business.name} - Lash Extensions Service` : 'LashDiary - Lash Extensions Service',
+      title: 'LashDiary Labs – Custom Websites & Business Systems',
       description: settings?.business?.description || 'Premium lash extensions and beauty services',
       icons: absoluteFaviconUrl
         ? {
@@ -96,7 +96,7 @@ export async function generateMetadata(): Promise<Metadata> {
   } catch {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'https://lashdiary.co.ke'
     return {
-      title: 'LashDiary - Lash Extensions Service',
+      title: 'LashDiary Labs – Custom Websites & Business Systems',
       description: 'Premium lash extensions and beauty services',
       icons: undefined,
       verification: {
@@ -256,7 +256,7 @@ export default async function RootLayout({
               <ServiceCartProvider>
                 <WebsiteProtection />
                 <ClientAuthMonitor />
-                <div className="sticky top-0 z-[70]" id="navbar-container">
+                <div className="sticky z-[70]" id="navbar-container" style={{ top: 0, marginTop: 0, paddingTop: 0 }}>
                   <PromoBanner />
                   <Navbar />
                 </div>
@@ -264,7 +264,7 @@ export default async function RootLayout({
                   {children}
                 </main>
                 <Footer />
-                <WhatsAppWidget />
+                <WhatsAppButton />
               </ServiceCartProvider>
             </CartProvider>
           </CurrencyProvider>

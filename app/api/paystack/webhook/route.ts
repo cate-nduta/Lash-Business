@@ -872,6 +872,224 @@ async function handleLabsWebServicesPayment(transaction: any, metadata: any) {
       }
     }
 
+    // Create showcase booking if consultation date/time is provided (only on first payment to avoid duplicates)
+    if (!wasPartial && order.consultationDate && order.consultationTimeSlot) {
+      try {
+        // Check if booking already exists for this order
+        const showcaseBookings = await readDataFile<any[]>('labs-showcase-bookings.json', [])
+        const existingBooking = showcaseBookings.find(b => b.orderId === order.id)
+        
+        if (!existingBooking) {
+          // Parse the consultation time slot (ISO string) to extract time label and create date
+          const parseTimeFromISO = (isoString: string): { timeLabel: string; hours: number; minutes: number } => {
+            try {
+              const date = new Date(isoString)
+              if (isNaN(date.getTime())) {
+                // Fallback: try to extract from string
+                const timeParts = isoString.match(/T(\d{2}):(\d{2}):/)
+                if (timeParts) {
+                  const hours = parseInt(timeParts[1], 10)
+                  const minutes = parseInt(timeParts[2], 10)
+                  const ampm = hours >= 12 ? 'PM' : 'AM'
+                  const displayHours = hours % 12 || 12
+                  const displayMinutes = String(minutes).padStart(2, '0')
+                  return { timeLabel: `${displayHours}:${displayMinutes} ${ampm}`, hours, minutes }
+                }
+                throw new Error('Invalid time format')
+              }
+              const hours = date.getHours()
+              const minutes = date.getMinutes()
+              const ampm = hours >= 12 ? 'PM' : 'AM'
+              const displayHours = hours % 12 || 12
+              const displayMinutes = String(minutes).padStart(2, '0')
+              return { timeLabel: `${displayHours}:${displayMinutes} ${ampm}`, hours, minutes }
+            } catch {
+              // Fallback: return default values
+              return { timeLabel: order.consultationTimeSlot, hours: 9, minutes: 30 }
+            }
+          }
+          
+          const { timeLabel, hours, minutes } = parseTimeFromISO(order.consultationTimeSlot)
+          const consultationDate = order.consultationDate.split('T')[0] || order.consultationDate
+          
+          // Create date object with proper timezone (Nairobi UTC+3)
+          const dateParts = consultationDate.split('-')
+          if (dateParts.length === 3) {
+            const [year, month, day] = dateParts.map(Number)
+            const slotDateTime = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+03:00`)
+            
+            // Check if slot is still available (double-check before creating)
+            const normalizeTimeForComparison = (timeStr: string): string => {
+              if (!timeStr) return ''
+              // Extract time from ISO string or normalize label format
+              try {
+                // Try parsing as ISO string first
+                if (timeStr.includes('T')) {
+                  const date = new Date(timeStr)
+                  if (!isNaN(date.getTime())) {
+                    const h = date.getHours()
+                    const m = date.getMinutes()
+                    const ampm = h >= 12 ? 'pm' : 'am'
+                    const displayHours = h % 12 || 12
+                    const displayMinutes = String(m).padStart(2, '0')
+                    return `${displayHours}:${displayMinutes} ${ampm}`
+                  }
+                }
+                // Try parsing label format (e.g., "9:30 AM", "09:30 AM", "9:30AM")
+                const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+                if (match) {
+                  let hour = parseInt(match[1], 10)
+                  const minute = match[2]
+                  const ampm = match[3]?.toLowerCase() || 'am'
+                  return `${hour}:${minute} ${ampm}`
+                }
+                // Fallback: just lowercase and trim
+                return timeStr.toLowerCase().trim().replace(/\s+/g, ' ')
+              } catch {
+                return timeStr.toLowerCase().trim().replace(/\s+/g, ' ')
+              }
+            }
+            
+            const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+            const selectedTimeNormalized = normalizeTimeForComparison(order.consultationTimeSlot)
+            
+            const hasConflict = consultationsData.consultations.some((c: any) => {
+              if (!c.preferredDate || !c.preferredTime) return false
+              if (c.status?.toLowerCase() === 'cancelled') return false
+              const cDate = c.preferredDate.split('T')[0] || c.preferredDate
+              const cTime = normalizeTimeForComparison(c.preferredTime)
+              return cDate === consultationDate && cTime === selectedTimeNormalized
+            }) || showcaseBookings.some((b: any) => {
+              if (!b.appointmentDate || !b.appointmentTime) return false
+              if (b.status?.toLowerCase() === 'cancelled') return false
+              if (b.orderId === order.id) return false // Don't conflict with current order's booking
+              let bDate: string
+              if (typeof b.appointmentDate === 'string') {
+                bDate = b.appointmentDate.includes('T') ? b.appointmentDate.split('T')[0] : b.appointmentDate
+              } else {
+                bDate = new Date(b.appointmentDate).toISOString().split('T')[0]
+              }
+              const bTime = normalizeTimeForComparison(b.appointmentTime)
+              return bDate === consultationDate && bTime === selectedTimeNormalized
+            })
+            
+            if (!hasConflict) {
+              // Get Meet room from admin settings
+              const labsSettings = await readDataFile<{ googleMeetRoom?: string }>('labs-settings.json', {})
+              const meetLink = labsSettings.googleMeetRoom || process.env.STATIC_GOOGLE_MEET_ROOM || process.env.GOOGLE_MEET_ROOM || null
+              
+              // Create showcase booking
+              const bookingId = `showcase-${Date.now()}-${randomBytes(4).toString('hex')}`
+              const showcaseBooking = {
+                bookingId,
+                projectId: order.id,
+                consultationId: '',
+                clientName: order.name,
+                clientEmail: order.email,
+                clientPhone: order.phoneNumber || '',
+                meetingType: order.consultationMeetingType === 'phone' ? 'physical' : 'online', // 'online' for Google Meet, 'physical' for Phone/WhatsApp (stored as 'physical' for compatibility)
+                appointmentDate: slotDateTime.toISOString(),
+                appointmentTime: timeLabel,
+                meetLink: order.consultationMeetingType === 'phone' ? null : (meetLink || null), // No Meet link for phone calls
+                status: 'confirmed',
+                createdAt: new Date().toISOString(),
+                orderId: order.id,
+              }
+              
+              showcaseBookings.push(showcaseBooking)
+              await writeDataFile('labs-showcase-bookings.json', showcaseBookings)
+              
+              // Update order with booking ID
+              const orderIndex = orders.findIndex((o) => o.id === orderId)
+              if (orderIndex !== -1) {
+                orders[orderIndex].showcaseBookingId = bookingId
+                orders[orderIndex].meetingLink = meetLink || orders[orderIndex].meetingLink || ''
+                await writeDataFile('labs-web-services-orders.json', orders)
+              }
+              
+              // Format date and time for email
+              const meetingDate = new Date(slotDateTime)
+              const formattedDate = meetingDate.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: 'Africa/Nairobi',
+              })
+              const formattedTime = meetingDate.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                timeZone: 'Africa/Nairobi',
+              })
+              
+              // Send admin notification email
+              try {
+                const adminEmailHtml = `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta charset="utf-8">
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    </head>
+                    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #FDF9F4;">
+                      <div style="background: #FFFFFF; border-radius: 8px; padding: 32px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <h1 style="color: #7C4B31; margin-top: 0;">New Consultation Call Booked (Checkout)</h1>
+                        
+                        <p><strong>Client:</strong> ${order.name}</p>
+                        <p><strong>Business:</strong> ${order.businessName || order.email.split('@')[0]}</p>
+                        <p><strong>Email:</strong> ${order.email}</p>
+                        <p><strong>Phone:</strong> ${order.phoneNumber || 'N/A'}</p>
+                        <p><strong>Order ID:</strong> ${order.id}</p>
+                        
+                        <div style="background: #F3E6DC; border-radius: 6px; padding: 20px; margin: 24px 0;">
+                          <h2 style="color: #7C4B31; margin-top: 0;">Meeting Details</h2>
+                          <p><strong>Date:</strong> ${formattedDate}</p>
+                          <p><strong>Time:</strong> ${formattedTime}</p>
+                          <p><strong>Type:</strong> ${order.consultationMeetingType === 'phone' ? 'Phone/WhatsApp Call' : 'Google Meet (Online)'}</p>
+                          ${order.consultationMeetingType === 'online' && meetLink ? `<p><strong>Meeting Link:</strong> <a href="${meetLink}" style="color: #7C4B31;">${meetLink}</a></p>` : order.consultationMeetingType === 'phone' ? '<p><strong>Note:</strong> This is a phone/WhatsApp call. We will contact the client directly.</p>' : ''}
+                        </div>
+                        
+                        <div style="background: #F9F9F9; border-radius: 6px; padding: 16px; margin: 24px 0;">
+                          <h3 style="color: #7C4B31; margin-top: 0;">Order Summary</h3>
+                          <p><strong>Total:</strong> KES ${order.total.toLocaleString()}</p>
+                          <p><strong>Payment Status:</strong> ${order.paymentStatus === 'completed' ? 'Completed' : order.paymentStatus === 'partial' ? 'Partial Payment' : 'Pending'}</p>
+                          ${order.timeline ? `<p><strong>Timeline:</strong> ${order.timeline === '10' ? '10 Days (Fast Track)' : order.timeline === '21' ? '21 Days (Standard)' : 'Urgent'}</p>` : ''}
+                        </div>
+                        
+                        <p style="margin-top: 16px; font-size: 14px; color: #666;">
+                          — LashDiary System
+                        </p>
+                      </div>
+                    </body>
+                  </html>
+                `
+                
+                await sendEmailViaZoho({
+                  to: BUSINESS_NOTIFICATION_EMAIL,
+                  subject: `New Consultation Call Booked (Checkout): ${order.name} - ${order.businessName || order.email.split('@')[0]}`,
+                  html: adminEmailHtml,
+                })
+                
+                console.log('✅ Admin notification email sent for showcase booking:', bookingId)
+              } catch (emailError) {
+                console.error('Error sending admin notification email for showcase booking:', bookingId, emailError)
+                // Don't block booking creation if email fails
+              }
+              
+              console.log('✅ Showcase booking created for order:', orderId, 'Booking ID:', bookingId)
+            } else {
+              console.warn('⚠️ Time slot already booked, skipping booking creation for order:', orderId)
+            }
+          }
+        } else {
+          console.log('✅ Showcase booking already exists for order:', orderId)
+        }
+      } catch (bookingError) {
+        console.error('Error creating showcase booking for order:', orderId, bookingError)
+        // Don't block payment processing if booking creation fails
+      }
+    }
+
     // Send order confirmation email with timeline (only on first payment)
     if (!wasPartial && order.email) {
       try {

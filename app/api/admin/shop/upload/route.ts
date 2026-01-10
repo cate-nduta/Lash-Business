@@ -9,7 +9,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 const useSupabaseStorage = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
 const SUPABASE_BUCKET = process.env.SUPABASE_SHOP_BUCKET || 'shop-products'
 
-async function ensureBucket(supabase: ReturnType<typeof getSupabaseAdminClient>) {
+async function ensureBucket(supabase: NonNullable<ReturnType<typeof getSupabaseAdminClient>>) {
   try {
     const { data, error } = await supabase.storage.getBucket(SUPABASE_BUCKET)
     if (!data && error?.message?.toLowerCase().includes('not found')) {
@@ -82,6 +82,10 @@ export async function POST(request: NextRequest) {
 
     if (useSupabaseStorage) {
       const supabase = getSupabaseAdminClient()
+      if (!supabase) {
+        throw new Error('Supabase client is not available. Please configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.')
+      }
+      
       await ensureBucket(supabase)
 
       const bytes = await file.arrayBuffer()

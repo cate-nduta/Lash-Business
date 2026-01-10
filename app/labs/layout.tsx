@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import LabsFAQButtonWrapper from './faq-button-wrapper'
 
 export const metadata: Metadata = {
   title: 'Website Labs',
@@ -10,6 +11,11 @@ export default function LabsLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <LabsFAQButtonWrapper />
+    </>
+  )
 }
 

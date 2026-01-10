@@ -71,9 +71,6 @@ export interface LabsSettings {
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
-  whatsappNumber?: string // WhatsApp phone number for chat widget
-  whatsappMessage?: string // Default message for WhatsApp chat
-  whatsappEnabled?: boolean // Enable/disable WhatsApp chat widget
 }
 
 export const dynamic = 'force-dynamic'
@@ -217,9 +214,6 @@ const DEFAULT_SETTINGS: LabsSettings = {
   },
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
-  whatsappNumber: '',
-  whatsappMessage: 'Hello! I have a question about LashDiary Labs.',
-  whatsappEnabled: false, // Disabled by default - admin must enable it
 }
 
 // Public GET endpoint - no authentication required
@@ -257,9 +251,6 @@ export async function GET(request: NextRequest) {
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
-      whatsappNumber: settings.whatsappNumber || '',
-      whatsappMessage: settings.whatsappMessage || DEFAULT_SETTINGS.whatsappMessage,
-      whatsappEnabled: settings.whatsappEnabled !== undefined ? settings.whatsappEnabled : DEFAULT_SETTINGS.whatsappEnabled,
     }
     
     // Always ensure tiers are present - if missing or empty, use defaults

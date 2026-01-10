@@ -1257,6 +1257,25 @@ button.recommended-services-button *,
   right: 0 !important;
   width: 100% !important;
   z-index: 100 !important; /* Above navbar (z-[70]) */
+  margin: 0 !important;
+  border: none !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure NO gap between banner and navbar container */
+/* Note: margin-top and top are controlled by JavaScript when banner is visible */
+#navbar-container {
+  transition: margin-top 0.2s ease, top 0.2s ease;
+  /* Default: no margin/top - will be set by JavaScript when banner is visible */
+  padding-top: 0 !important; /* Ensure no padding */
+  border-top: none !important; /* Ensure no border */
+  box-sizing: border-box !important;
+}
+
+/* Ensure banner has no margin-bottom that could cause gap */
+.custom-website-builds-banner {
+  margin-bottom: 0 !important;
+  padding-bottom: 8px !important; /* Reduced from 12px for thinner banner */
 }
 
 /* Ensure "Back to Services" link is plain text without button styling */
@@ -1308,5 +1327,17 @@ a.back-to-services-link:not([style*="color"]) {
 .custom-website-builds-banner p,
 .custom-website-builds-banner span {
   color: #ffffff !important;
+}
+
+/* Removed WhatsApp ping animation - button now matches FAQ button style */
+
+/* Ensure WhatsApp button is always visible on every page */
+a[aria-label="Chat with us on WhatsApp"] {
+  position: fixed !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 9998 !important;
+  pointer-events: auto !important;
 }
 

@@ -10,6 +10,10 @@ const SUPABASE_GALLERY_BUCKET = process.env.SUPABASE_GALLERY_BUCKET || 'gallery'
 
 async function uploadToSupabaseStorage(file: File, filename: string) {
   const supabase = getSupabaseAdminClient()
+  
+  if (!supabase) {
+    throw new Error('Supabase client is not available. Please configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.')
+  }
 
   // Ensure bucket exists (idempotent)
   try {

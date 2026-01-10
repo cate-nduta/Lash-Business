@@ -143,19 +143,48 @@ export async function POST(request: NextRequest) {
       },
     }
 
-    await writeDataFile('settings.json', settings)
+    try {
+      await writeDataFile('settings.json', settings)
+    } catch (writeError: any) {
+      console.error('[Settings API] Error saving settings:', writeError)
+      
+      // Provide helpful error message for production deployments
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || process.env.NETLIFY === 'true'
+      
+      if (isProduction && writeError?.message?.includes('Supabase')) {
+        return NextResponse.json(
+          { 
+            error: 'Failed to save settings in production',
+            details: writeError.message,
+            hint: 'Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in your deployment environment variables.'
+          },
+          { status: 500 }
+        )
+      }
+      
+      throw writeError // Re-throw to be caught by outer catch
+    }
 
     return NextResponse.json({
       success: true,
       settings,
     })
   } catch (error: any) {
-    if (error.status === 401) {
+    if (error.status === 401 || error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('Error saving settings:', error)
+    console.error('[Settings API] Error saving settings:', error)
+    
+    // Return detailed error in development, generic in production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? (error.message || 'Failed to save settings')
+      : 'Failed to save settings. Please check your configuration and try again.'
+    
     return NextResponse.json(
-      { error: 'Failed to save settings' },
+      { 
+        error: errorMessage,
+        ...(process.env.NODE_ENV === 'development' && { details: error.stack })
+      },
       { status: 500 }
     )
   }

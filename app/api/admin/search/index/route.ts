@@ -915,6 +915,78 @@ const searchIndex: SearchItem[] = [
     location: 'Activity page - Activity log list',
     keywords: ['activity', 'activity log', 'admin actions', 'changes', 'history'],
     category: 'feature'
+  },
+
+  // WhatsApp Chatbot
+  {
+    id: 'whatsapp-chatbot-enable',
+    title: 'Enable WhatsApp Chatbot',
+    description: 'Turn on automatic responses to WhatsApp messages',
+    panel: 'WhatsApp Chatbot',
+    panelHref: '/admin/whatsapp-chatbot',
+    location: 'WhatsApp Chatbot page - Enable Chatbot checkbox',
+    keywords: ['whatsapp', 'chatbot', 'enable chatbot', 'automatic responses', 'auto reply'],
+    category: 'setting'
+  },
+  {
+    id: 'whatsapp-chatbot-welcome',
+    title: 'Welcome Message',
+    description: 'Set the automatic welcome message for new conversations',
+    panel: 'WhatsApp Chatbot',
+    panelHref: '/admin/whatsapp-chatbot',
+    location: 'WhatsApp Chatbot page - Welcome Message section',
+    keywords: ['welcome message', 'greeting', 'first message', 'new conversation'],
+    category: 'setting'
+  },
+  {
+    id: 'whatsapp-chatbot-faq',
+    title: 'FAQ Responses',
+    description: 'Configure automatic responses based on keywords',
+    panel: 'WhatsApp Chatbot',
+    panelHref: '/admin/whatsapp-chatbot',
+    location: 'WhatsApp Chatbot page - FAQ Responses section',
+    keywords: ['faq', 'keywords', 'automatic responses', 'keyword matching', 'responses'],
+    category: 'setting'
+  },
+  {
+    id: 'whatsapp-chatbot-fallback',
+    title: 'Fallback Message',
+    description: 'Set message for when no FAQ keywords match',
+    panel: 'WhatsApp Chatbot',
+    panelHref: '/admin/whatsapp-chatbot',
+    location: 'WhatsApp Chatbot page - Fallback Message section',
+    keywords: ['fallback', 'default message', 'no match', 'default response'],
+    category: 'setting'
+  },
+  {
+    id: 'whatsapp-conversations-view',
+    title: 'View Conversations',
+    description: 'See all WhatsApp conversations and messages',
+    panel: 'WhatsApp Conversations',
+    panelHref: '/admin/whatsapp-conversations',
+    location: 'WhatsApp Conversations page - Conversations list',
+    keywords: ['conversations', 'messages', 'whatsapp messages', 'chat history'],
+    category: 'feature'
+  },
+  {
+    id: 'whatsapp-conversations-reply',
+    title: 'Send Manual Reply',
+    description: 'Send manual messages to WhatsApp conversations',
+    panel: 'WhatsApp Conversations',
+    panelHref: '/admin/whatsapp-conversations',
+    location: 'WhatsApp Conversations page - Message input',
+    keywords: ['send message', 'manual reply', 'reply', 'send whatsapp message'],
+    category: 'workflow'
+  },
+  {
+    id: 'whatsapp-conversations-unread',
+    title: 'Unread Messages',
+    description: 'View unread message count per conversation',
+    panel: 'WhatsApp Conversations',
+    panelHref: '/admin/whatsapp-conversations',
+    location: 'WhatsApp Conversations page - Unread badge',
+    keywords: ['unread', 'unread messages', 'new messages', 'message count'],
+    category: 'feature'
   }
 ]
 

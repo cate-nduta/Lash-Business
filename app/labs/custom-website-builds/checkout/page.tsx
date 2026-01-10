@@ -1,12 +1,20 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, lazy } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useLabsCart } from '../cart-context'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import Link from 'next/link'
 import PaystackInlinePayment from '@/components/PaystackInlinePayment'
+
+// Lazy load CalendarPicker for faster initial page load
+const CalendarPicker = lazy(() => import('@/components/CalendarPicker'))
+
+interface TimeSlot {
+  value: string // ISO string like "2025-01-15T09:30:00+03:00"
+  label: string // Display label like "9:30 AM"
+}
 
 interface CheckoutData {
   orderId: string
@@ -128,6 +136,22 @@ function LabsCheckoutContentInner() {
   // Timeline/deadline
   const [timeline, setTimeline] = useState<'10' | '21' | 'urgent' | ''>('')
   const [priorityFee, setPriorityFee] = useState<number>(2000) // Default priority fee
+  
+  // Calendar/Time slot selection for consultation call
+  const [consultationDate, setConsultationDate] = useState<string>('')
+  const [consultationTimeSlot, setConsultationTimeSlot] = useState<string>('')
+  const [consultationMeetingType, setConsultationMeetingType] = useState<'online' | 'phone' | ''>('')
+  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
+  const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([])
+  const [loadingDates, setLoadingDates] = useState(false)
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [availabilityData, setAvailabilityData] = useState<any>(null)
+  const [minimumBookingDate, setMinimumBookingDate] = useState<string | null>(null)
+  const [consultationAvailability, setConsultationAvailability] = useState<{
+    bookedSlots: Array<{ date?: string; time?: string }>
+    timeSlots: Array<{ hour: number; minute: number; label: string }>
+  } | null>(null)
 
   // Discount amount is now calculated by the API during validation
   // No need to recalculate here - it's set in the validation handler
@@ -136,6 +160,304 @@ function LabsCheckoutContentInner() {
       setCalculatedDiscount(0)
     }
   }, [codeValid, getTotalPrice, timeline, priorityFee, domainType, domainPricing])
+
+  // Load availability data and calendar dates for consultation call scheduling
+  useEffect(() => {
+    let isMounted = true
+    let controller: AbortController | null = null
+    let availabilityTimeout: ReturnType<typeof setTimeout> | null = null
+    let calendarTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const loadAvailability = async () => {
+      setLoadingDates(true)
+      
+      try {
+        // Fetch availability settings and calendar dates in parallel
+        controller = new AbortController()
+        
+        // Safe abort with reason to prevent "aborted without reason" error
+        availabilityTimeout = setTimeout(() => {
+          if (controller && !controller.signal.aborted) {
+            try {
+              controller.abort('Request timeout after 8 seconds')
+            } catch (e: any) {
+              // Silently handle abort errors - they're expected
+              const isAbortError = 
+                e?.name === 'AbortError' || 
+                e?.name === 'TimeoutError' ||
+                e?.message?.toLowerCase().includes('abort')
+              if (!isAbortError && process.env.NODE_ENV === 'development') {
+                console.warn('Unexpected error during abort:', e)
+              }
+            }
+          }
+        }, 8000)
+        
+        const availabilityOptions = {
+          cache: 'no-store' as RequestCache,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+          signal: controller.signal,
+        }
+
+        const timestamp = Date.now()
+        
+        const [availabilityRes, calendarRes] = await Promise.allSettled([
+          fetch(`/api/availability?t=${timestamp}`, availabilityOptions).then((res) => {
+            if (availabilityTimeout) clearTimeout(availabilityTimeout)
+            if (!res.ok) return null
+            return res.json()
+          }).catch((error: any) => {
+            if (availabilityTimeout) clearTimeout(availabilityTimeout)
+            if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+              return null
+            }
+            throw error
+          }),
+          fetch(`/api/labs/consultation/availability?t=${timestamp}`, availabilityOptions).then((res) => {
+            if (calendarTimeout) clearTimeout(calendarTimeout)
+            if (!res.ok) return null
+            return res.json()
+          }).catch((error: any) => {
+            if (calendarTimeout) clearTimeout(calendarTimeout)
+            if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+              return null
+            }
+            throw error
+          }),
+        ])
+
+        if (!isMounted) return
+
+        // Process availability data
+        if (availabilityRes.status === 'fulfilled' && availabilityRes.value) {
+          const availability = availabilityRes.value
+          setAvailabilityData({
+            businessHours: availability?.businessHours || {},
+            timeSlots: availability?.timeSlots || {},
+            bookingWindow: availability?.bookingWindow || {},
+          })
+          if (availability?.minimumBookingDate) {
+            setMinimumBookingDate(availability.minimumBookingDate)
+          }
+        } else {
+          setAvailabilityData({
+            businessHours: {},
+            timeSlots: {},
+            bookingWindow: {},
+          })
+        }
+
+        // Process calendar dates from consultation availability API
+        if (calendarRes.status === 'fulfilled' && calendarRes.value) {
+          const calendarData = calendarRes.value
+          // Consultation availability API returns availableDates as array of strings
+          const dates: string[] = Array.isArray(calendarData?.availableDates) 
+            ? calendarData.availableDates
+            : []
+          setAvailableDates(dates)
+          
+          // Also set blocked dates if available
+          if (Array.isArray(calendarData?.blockedDates)) {
+            setFullyBookedDates(calendarData.blockedDates)
+          }
+          
+          // Set minimum booking date if available
+          if (calendarData?.minimumBookingDate) {
+            setMinimumBookingDate(calendarData.minimumBookingDate)
+          }
+          
+          // Store consultation availability data for time slot filtering
+          setConsultationAvailability({
+            bookedSlots: Array.isArray(calendarData?.bookedSlots) ? calendarData.bookedSlots : [],
+            timeSlots: Array.isArray(calendarData?.timeSlots) ? calendarData.timeSlots : [],
+          })
+        }
+
+        setLoadingDates(false)
+      } catch (error: any) {
+        if (availabilityTimeout) clearTimeout(availabilityTimeout)
+        if (calendarTimeout) clearTimeout(calendarTimeout)
+        
+        if (!isMounted) return
+        
+        if (error?.name !== 'AbortError' && error?.name !== 'TimeoutError') {
+          console.error('Error loading availability:', error)
+        }
+        setLoadingDates(false)
+      }
+    }
+
+    loadAvailability()
+
+    return () => {
+      isMounted = false
+      if (controller && !controller.signal.aborted) {
+        try {
+          controller.abort('Component unmounted')
+        } catch (e: any) {
+          // Silently handle abort errors during cleanup
+          const isAbortError = 
+            e?.name === 'AbortError' || 
+            e?.name === 'TimeoutError' ||
+            e?.message?.toLowerCase().includes('abort')
+          if (!isAbortError && process.env.NODE_ENV === 'development') {
+            console.warn('Unexpected error during abort cleanup:', e)
+          }
+        }
+      }
+      if (availabilityTimeout) clearTimeout(availabilityTimeout)
+      if (calendarTimeout) clearTimeout(calendarTimeout)
+    }
+  }, [])
+
+  // Filter and format time slots when consultation date is selected
+  useEffect(() => {
+    if (!consultationDate || !consultationAvailability) {
+      setTimeSlots([])
+      if (!consultationDate) {
+        setConsultationTimeSlot('')
+      }
+      return
+    }
+
+    setLoadingSlots(true)
+    setConsultationTimeSlot('') // Clear selected time slot when date changes
+    setConsultationMeetingType('') // Clear meeting type when date changes
+    
+    try {
+      // Get booked slots for the selected date
+      const bookedForDate = consultationAvailability.bookedSlots
+        .filter((slot: { date?: string; time?: string }) => {
+          if (!slot.date || !slot.time) return false
+          // Normalize date comparison (YYYY-MM-DD)
+          const slotDate = slot.date.split('T')[0] || slot.date
+          const selectedDate = consultationDate.split('T')[0] || consultationDate
+          return slotDate === selectedDate
+        })
+        .map((slot: { time?: string }) => {
+          // Normalize time for comparison - booked time is normalized to lowercase (e.g., "9:30 am")
+          const time = slot.time?.toLowerCase().trim() || ''
+          // Extract hour, minute, and AM/PM if possible - handle various formats
+          const match = time.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/)
+          if (match) {
+            let hour = parseInt(match[1], 10)
+            const minute = parseInt(match[2], 10)
+            const ampm = match[3]?.toLowerCase() || ''
+            
+            // Convert 12-hour to 24-hour format for comparison
+            if (ampm === 'pm' && hour !== 12) {
+              hour += 12
+            } else if (ampm === 'am' && hour === 12) {
+              hour = 0
+            }
+            // If no AM/PM, check if hour > 12 to determine format
+            // If hour > 12, assume 24-hour format; otherwise, assume 12-hour format (AM)
+            if (!ampm && hour <= 12) {
+              // Could be either format, but since it's normalized from a label, it's likely 12-hour
+              // We'll compare both possibilities in the filter below
+            }
+            
+            return { hour, minute, label: time, originalTime: time }
+          }
+          return null
+        })
+        .filter((slot): slot is { hour: number; minute: number; label: string; originalTime: string } => slot !== null)
+      
+      // Filter out booked slots and convert to TimeSlot format
+      const formattedSlots: TimeSlot[] = consultationAvailability.timeSlots
+        .filter((slot: { hour: number; minute: number; label: string }) => {
+          // Check if this slot is booked using multiple matching strategies
+          return !bookedForDate.some((booked) => {
+            // Strategy 1: Direct hour and minute comparison (most accurate)
+            if (booked.hour === slot.hour && booked.minute === slot.minute) {
+              return true
+            }
+            
+            // Strategy 2: Compare hour:minute format (handles edge cases)
+            const slotTimeStr = `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`
+            const bookedTimeStr = `${String(booked.hour).padStart(2, '0')}:${String(booked.minute).padStart(2, '0')}`
+            if (slotTimeStr === bookedTimeStr) {
+              return true
+            }
+            
+            // Strategy 3: Label comparison (case-insensitive, handles variations)
+            const slotLabel = slot.label.toLowerCase().trim()
+            const bookedLabel = booked.originalTime || booked.label || ''
+            if (slotLabel === bookedLabel || slotLabel.includes(bookedLabel) || bookedLabel.includes(slotLabel)) {
+              return true
+            }
+            
+            // Strategy 4: Extract hour:minute from labels and compare
+            const slotLabelMatch = slotLabel.match(/(\d{1,2}):(\d{2})/)
+            const bookedLabelMatch = bookedLabel.match(/(\d{1,2}):(\d{2})/)
+            if (slotLabelMatch && bookedLabelMatch) {
+              const slotH = parseInt(slotLabelMatch[1], 10)
+              const slotM = parseInt(slotLabelMatch[2], 10)
+              const bookedH = parseInt(bookedLabelMatch[1], 10)
+              const bookedM = parseInt(bookedLabelMatch[2], 10)
+              
+              // Handle AM/PM in labels
+              let slotHour24 = slotH
+              let bookedHour24 = bookedH
+              if (slotLabel.includes('pm') && slotH !== 12) slotHour24 = slotH + 12
+              if (slotLabel.includes('am') && slotH === 12) slotHour24 = 0
+              if (bookedLabel.includes('pm') && bookedH !== 12) bookedHour24 = bookedH + 12
+              if (bookedLabel.includes('am') && bookedH === 12) bookedHour24 = 0
+              
+              if (slotHour24 === bookedHour24 && slotM === bookedM) {
+                return true
+              }
+            }
+            
+            return false
+          })
+        })
+        .map((slot: { hour: number; minute: number; label: string }) => {
+          // Create ISO string for the time slot in Nairobi timezone (UTC+3)
+          const slotDateTime = `${consultationDate}T${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}:00+03:00`
+          return {
+            value: slotDateTime,
+            label: slot.label,
+          }
+        })
+      
+      setTimeSlots(formattedSlots)
+      
+      if (formattedSlots.length === 0) {
+        setFullyBookedDates((prev) =>
+          prev.includes(consultationDate) ? prev : [...prev, consultationDate]
+        )
+      } else {
+        setFullyBookedDates((prev) =>
+          prev.filter((d) => d !== consultationDate)
+        )
+      }
+    } catch (error) {
+      console.error('Error processing time slots:', error)
+      setTimeSlots([])
+    } finally {
+      setLoadingSlots(false)
+    }
+  }, [consultationDate, consultationAvailability])
+
+  // Clear time slot and meeting type if date becomes unavailable
+  useEffect(() => {
+    if (consultationDate && availableDates.length > 0 && !availableDates.includes(consultationDate)) {
+      setConsultationDate('')
+      setConsultationTimeSlot('')
+      setConsultationMeetingType('')
+    }
+  }, [availableDates, consultationDate])
+
+  // Clear meeting type when time slot changes
+  useEffect(() => {
+    if (!consultationTimeSlot) {
+      setConsultationMeetingType('')
+    }
+  }, [consultationTimeSlot])
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -226,6 +548,9 @@ function LabsCheckoutContentInner() {
               if (order.servicesProducts) setServicesProducts(order.servicesProducts)
               if (order.socialMediaLinks) setSocialMediaLinks(order.socialMediaLinks)
               if (order.timeline) setTimeline(order.timeline)
+              if (order.consultationDate) setConsultationDate(order.consultationDate)
+              if (order.consultationTimeSlot) setConsultationTimeSlot(order.consultationTimeSlot)
+              if (order.consultationMeetingType) setConsultationMeetingType(order.consultationMeetingType)
               
               setOrderRestored(true)
             }
@@ -487,6 +812,22 @@ function LabsCheckoutContentInner() {
       }
     }
 
+    // Consultation date and time slot are required
+    if (!consultationDate) {
+      setError('Please select a date for your consultation call')
+      return
+    }
+
+    if (!consultationTimeSlot) {
+      setError('Please select a time for your consultation call')
+      return
+    }
+
+    if (!consultationMeetingType) {
+      setError('Please select a meeting type (Google Meet or Phone/WhatsApp Call)')
+      return
+    }
+
     setProcessing(true)
     setError(null)
 
@@ -537,6 +878,9 @@ function LabsCheckoutContentInner() {
           timeline: timeline || undefined,
           priorityFee: timeline === 'urgent' ? priorityFee : 0,
           referralCode: referralCode.trim() || undefined,
+          consultationDate: consultationDate || undefined,
+          consultationTimeSlot: consultationTimeSlot || undefined,
+          consultationMeetingType: consultationMeetingType || undefined,
         }),
       })
 
@@ -648,6 +992,19 @@ function LabsCheckoutContentInner() {
   return (
     <div className="min-h-screen bg-baby-pink-light py-12 px-4">
       <div className="max-w-7xl mx-auto">
+        <Link
+          href="/labs/custom-website-builds"
+          className="inline-flex items-center mb-6 no-underline back-to-services-link"
+          style={{ 
+            backgroundColor: 'transparent', 
+            padding: 0,
+            border: 'none',
+            boxShadow: 'none',
+            color: 'var(--color-text)',
+          }}
+        >
+          ← Back to Services
+        </Link>
         <h1 className="text-4xl font-display text-brown-dark mb-8">Checkout</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -1850,13 +2207,144 @@ function LabsCheckoutContentInner() {
                       )}
                     </div>
                   </div>
+
+                  {/* Consultation Call Scheduling */}
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Consultation Call <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-brown-dark/70 mb-4">
+                      Select a convenient day and time for us to discuss your website requirements and go through everything that may not have been mentioned in the checkout. The meeting can be a scheduled Google Meet call or a normal phone call/WhatsApp call.
+                    </p>
+                    
+                    {/* Calendar Picker */}
+                    <div className="mb-4">
+                      <Suspense fallback={
+                        <div className="w-full bg-white rounded-lg border-2 border-brown-light p-6 text-center">
+                          <div className="text-brown-dark">Loading calendar...</div>
+                        </div>
+                      }>
+                        <CalendarPicker
+                          selectedDate={consultationDate}
+                          onDateSelect={(date) => {
+                            setConsultationDate(date)
+                            setConsultationTimeSlot('') // Clear time when date changes
+                            setConsultationMeetingType('') // Clear meeting type when date changes
+                          }}
+                          availableDates={availableDates}
+                          fullyBookedDates={fullyBookedDates}
+                          loading={loadingDates}
+                          minimumBookingDate={minimumBookingDate || undefined}
+                          availabilityData={availabilityData}
+                        />
+                      </Suspense>
+                    </div>
+
+                    {/* Time Slot Selection */}
+                    {consultationDate && (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-brown-dark mb-2">
+                          Select Time <span className="text-red-500">*</span>
+                        </label>
+                        {loadingSlots ? (
+                          <div className="w-full bg-white rounded-lg border-2 border-brown-light p-4 text-center">
+                            <div className="text-brown-dark text-sm">Loading available times...</div>
+                          </div>
+                        ) : timeSlots.length === 0 ? (
+                          <div className="w-full bg-red-50 rounded-lg border-2 border-red-200 p-4">
+                            <p className="text-red-800 text-sm font-medium">
+                              ⚠️ No time slots available for this date. Please select another date.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                            {timeSlots.map((slot) => {
+                              const isSelected = consultationTimeSlot === slot.value
+                              return (
+                                <button
+                                  key={slot.value}
+                                  type="button"
+                                  onClick={() => setConsultationTimeSlot(slot.value)}
+                                  className={`px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all ${
+                                    isSelected
+                                      ? 'border-brown-dark bg-brown-dark/90 ring-2 ring-brown-dark ring-offset-2'
+                                      : 'border-brown-light hover:border-brown-dark hover:bg-brown-light/20 bg-white'
+                                  }`}
+                                  style={{
+                                    backgroundColor: isSelected ? '#733D26' : '#ffffff',
+                                    color: isSelected ? '#ffffff' : '#733D26',
+                                  }}
+                                >
+                                  {slot.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {consultationDate && timeSlots.length > 0 && consultationTimeSlot && (
+                          <p className="text-xs text-green-600 mt-2 font-medium">
+                            ✓ Selected: {new Date(consultationDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at {timeSlots.find(s => s.value === consultationTimeSlot)?.label || consultationTimeSlot}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Meeting Type Selection */}
+                    {consultationDate && consultationTimeSlot && (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-brown-dark mb-2">
+                          Meeting Type <span className="text-red-500">*</span>
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setConsultationMeetingType('online')}
+                            className={`p-4 rounded-lg border-2 font-medium text-sm transition-all text-left ${
+                              consultationMeetingType === 'online'
+                                ? 'border-brown-dark bg-brown-dark/90 ring-2 ring-brown-dark ring-offset-2 text-white'
+                                : 'border-brown-light hover:border-brown-dark hover:bg-brown-light/20 bg-white text-brown-dark'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              <span className="font-semibold">Google Meet</span>
+                            </div>
+                            <p className="text-xs opacity-80">
+                              Video call via Google Meet
+                            </p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConsultationMeetingType('phone')}
+                            className={`p-4 rounded-lg border-2 font-medium text-sm transition-all text-left ${
+                              consultationMeetingType === 'phone'
+                                ? 'border-brown-dark bg-brown-dark/90 ring-2 ring-brown-dark ring-offset-2 text-white'
+                                : 'border-brown-light hover:border-brown-dark hover:bg-brown-light/20 bg-white text-brown-dark'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                              <span className="font-semibold">Phone/WhatsApp Call</span>
+                            </div>
+                            <p className="text-xs opacity-80">
+                              Audio call via phone or WhatsApp
+                            </p>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               )}
 
               <button
                 onClick={handleCheckout}
-                disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || checkMissingRequiredServices().length > 0}
+                disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || checkMissingRequiredServices().length > 0 || !timeline || !consultationDate || !consultationTimeSlot || !consultationMeetingType}
                 className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? 'Processing...' : checkoutData ? 'Proceed to Payment' : 'Calculate Payment'}

@@ -63,6 +63,9 @@ interface Order {
   }
   timeline?: '10' | '21' | 'urgent'
   priorityFee?: number
+  consultationDate?: string // Consultation call date (YYYY-MM-DD format)
+  consultationTimeSlot?: string // Consultation call time slot (ISO string)
+  consultationMeetingType?: 'online' | 'phone' // Meeting type: 'online' for Google Meet, 'phone' for Phone/WhatsApp Call
   createdAt: string
   websiteName?: string
   websiteUrl?: string
@@ -454,9 +457,9 @@ export default function LabsWebServicesOrders() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               {order.businessName && (
-                                <p className="text-sm text-brown-dark/70 mb-1">
+                              <p className="text-sm text-brown-dark/70 mb-1">
                                   <strong>{order.websiteType === 'personal' ? 'Personal Name' : 'Business Name'}:</strong> {order.businessName}
-                                </p>
+                              </p>
                               )}
                               {order.domainType === 'new' && order.domainName && (
                                 <p className="text-sm text-brown-dark/70">
@@ -673,6 +676,48 @@ export default function LabsWebServicesOrders() {
                                 </div>
                               </div>
                             )}
+
+                            {/* Consultation Call Scheduling */}
+                            {(order.consultationDate || order.consultationTimeSlot) && (
+                              <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                <p className="text-sm font-semibold text-brown-dark mb-2">
+                                  Consultation Call Scheduled:
+                                </p>
+                                {order.consultationDate && (
+                                  <p className="text-sm text-brown-dark/70 mb-1">
+                                    <strong>Date:</strong>{' '}
+                                    {new Date(order.consultationDate).toLocaleDateString('en-US', {
+                                      weekday: 'long',
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                    })}
+                                  </p>
+                                )}
+                                {order.consultationTimeSlot && (
+                                  <p className="text-sm text-brown-dark/70 mb-1">
+                                    <strong>Time:</strong>{' '}
+                                    {(() => {
+                                      try {
+                                        const date = new Date(order.consultationTimeSlot)
+                                        return date.toLocaleTimeString('en-US', {
+                                          hour: 'numeric',
+                                          minute: '2-digit',
+                                          hour12: true,
+                                        })
+                                      } catch {
+                                        return order.consultationTimeSlot
+                                      }
+                                    })()}
+                                  </p>
+                                )}
+                                {order.consultationMeetingType && (
+                                  <p className="text-sm text-brown-dark/70">
+                                    <strong>Type:</strong> {order.consultationMeetingType === 'phone' ? 'Phone/WhatsApp Call' : 'Google Meet (Online)'}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -688,9 +733,9 @@ export default function LabsWebServicesOrders() {
                           <p className="text-sm text-brown-dark/70 mb-1">
                             <strong>Email:</strong> {order.email}
                           </p>
-                          <p className="text-sm text-brown-dark/70">
-                            <strong>Phone:</strong> {order.phoneNumber}
-                          </p>
+                            <p className="text-sm text-brown-dark/70">
+                              <strong>Phone:</strong> {order.phoneNumber}
+                            </p>
                         </div>
 
                         <div className="bg-brown-light/20 rounded-lg p-4">

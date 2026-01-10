@@ -108,19 +108,49 @@ export default function AdminCourses() {
       
       // Debug: Log received courses
       console.log('[Admin Courses Page] Received courses:', data.courses?.length || 0)
-      console.log('[Admin Courses Page] Course titles:', data.courses?.map(c => c.title) || [])
+      console.log('[Admin Courses Page] Course titles:', data.courses?.map(c => {
+        const titleType = typeof c.title
+        const titleValue = Array.isArray(c.title) ? `Array(${c.title.length})` : String(c.title)
+        return `${titleValue} (${titleType})`
+      }) || [])
+      
+      // Normalize courses to ensure titles are strings (handle legacy data with array titles)
+      const normalizedCourses: Course[] = (data.courses || []).map(course => {
+        let title = course.title
+        if (Array.isArray(title)) {
+          console.warn('[Admin Courses Page] Found course with array title, normalizing:', course.id, title)
+          title = title.find((item: any) => typeof item === 'string' && item.trim().length > 0)?.trim() || 'Untitled Course'
+        } else if (typeof title !== 'string' || !title.trim()) {
+          title = 'Untitled Course'
+        }
+        
+        const normalizedTitle = typeof title === 'string' ? title.trim() : 'Untitled Course'
+        const normalizedSlug = normalizedTitle && normalizedTitle !== 'Untitled Course' 
+          ? generateCourseSlug(normalizedTitle) 
+          : undefined
+        
+        return {
+          ...course,
+          title: normalizedTitle,
+          slug: normalizedSlug,
+        } as Course
+      })
       
       // Check if the main booking website course exists, if not, add it
-      const bookingCourseExists = data.courses.some(c => 
-        c.title.toLowerCase().includes('build a client-booking website') ||
-        c.title.toLowerCase().includes('booking website')
+      const bookingCourseExists = normalizedCourses.some(c => 
+        typeof c.title === 'string' && (
+          c.title.toLowerCase().includes('build a client-booking website') ||
+          c.title.toLowerCase().includes('booking website')
+        )
       )
       
       if (!bookingCourseExists && data.courses.length === 0) {
-        // Add the default booking website course
+        // Add the default booking website course (normalized to match other courses)
+        const defaultCourseTitle = 'How to Build a Client-Booking Website That Accepts Payments (Without a Developer)'
         const defaultCourse: Course = {
           id: generateCourseId('course'),
-          title: 'How to Build a Client-Booking Website That Accepts Payments (Without a Developer)',
+          title: defaultCourseTitle,
+          slug: generateCourseSlug(defaultCourseTitle) || undefined,
           description: 'A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required!',
           priceUSD: 0, // 0 = free, set to desired USD amount for paid courses
           originalPriceUSD: undefined,
@@ -133,21 +163,17 @@ export default function AdminCourses() {
           updatedAt: new Date().toISOString(),
         }
         
-        data.courses.push(defaultCourse)
-        // Save it immediately
-        try {
-          await authorizedFetch('/api/admin/courses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-          })
-        } catch (error) {
-          console.error('Error saving default course:', error)
-        }
+        normalizedCourses.push(defaultCourse)
       }
       
-      setCatalog(data)
-      setOriginalCatalog(data)
+      // Set normalized catalog
+      const normalizedCatalog: CourseCatalog = {
+        ...data,
+        courses: normalizedCourses,
+      }
+      
+      setCatalog(normalizedCatalog)
+      setOriginalCatalog(normalizedCatalog)
     } catch (error) {
       if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
         return
@@ -168,10 +194,31 @@ export default function AdminCourses() {
     setMessage(null)
 
     try {
+      // Normalize courses before sending to ensure titles are strings, not arrays
+      const normalizedCatalog: CourseCatalog = {
+        ...catalog,
+        courses: catalog.courses.map(course => {
+          // Ensure title is a string, not an array
+          let title = course.title
+          if (Array.isArray(title)) {
+            console.warn('[Admin Courses Page] Found array title, normalizing:', title)
+            title = title.find((item: any) => typeof item === 'string' && item.trim().length > 0)?.trim() || 'Untitled Course'
+          } else if (typeof title !== 'string' || !title.trim()) {
+            title = 'Untitled Course'
+          }
+          
+          return {
+            ...course,
+            title: typeof title === 'string' ? title.trim() : 'Untitled Course',
+            slug: typeof title === 'string' && title.trim() ? generateCourseSlug(title.trim()) : undefined,
+          }
+        }),
+      }
+
       const response = await authorizedFetch('/api/admin/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(catalog),
+        body: JSON.stringify(normalizedCatalog),
       })
 
       if (!response.ok) {

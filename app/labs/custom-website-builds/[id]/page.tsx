@@ -282,21 +282,21 @@ export default function ServiceDetailPage() {
               ) : (
                 <>
                   {/* Show regular price for one-time services */}
-                  {hasDiscount && (
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg text-brown-dark/60 line-through">
-                        {getDisplayPrice(service.price)}
-                      </span>
-                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm font-semibold">
-                        {service.discountAmount
-                          ? `Save ${getDisplayPrice(service.discountAmount)}`
-                          : `${service.discount}% OFF`}
-                      </span>
-                    </div>
-                  )}
-                  <div className="text-4xl font-bold text-brown-dark">
-                    {getDisplayPrice(finalPrice)}
-                  </div>
+              {hasDiscount && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg text-brown-dark/60 line-through">
+                    {getDisplayPrice(service.price)}
+                  </span>
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded text-sm font-semibold">
+                    {service.discountAmount
+                      ? `Save ${getDisplayPrice(service.discountAmount)}`
+                      : `${service.discount}% OFF`}
+                  </span>
+                </div>
+              )}
+              <div className="text-4xl font-bold text-brown-dark">
+                {getDisplayPrice(finalPrice)}
+              </div>
                 </>
               )}
             </div>
@@ -365,8 +365,8 @@ export default function ServiceDetailPage() {
                               </>
                             ) : (
                               <>
-                                {getDisplayPrice(finalPrice)}
-                                {requiredService.billingPeriod === 'yearly' && ' per year'}
+                            {getDisplayPrice(finalPrice)}
+                            {requiredService.billingPeriod === 'yearly' && ' per year'}
                               </>
                             )}
                           </p>

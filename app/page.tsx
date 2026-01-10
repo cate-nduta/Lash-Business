@@ -210,7 +210,7 @@ export default function Home() {
         setLoading(false)
         setFridaySlotsActivated(false)
       })
-      
+    
       // Cleanup on unmount
       return () => {
         isMounted = false

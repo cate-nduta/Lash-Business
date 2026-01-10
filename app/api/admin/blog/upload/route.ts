@@ -10,6 +10,10 @@ const SUPABASE_BLOG_BUCKET = process.env.SUPABASE_BLOG_BUCKET || 'blog-images'
 
 async function uploadToSupabaseStorage(file: File, filename: string) {
   const supabase = getSupabaseAdminClient()
+  
+  if (!supabase) {
+    throw new Error('Supabase client is not available. Please configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.')
+  }
 
   try {
     const { data, error } = await supabase.storage.getBucket(SUPABASE_BLOG_BUCKET)

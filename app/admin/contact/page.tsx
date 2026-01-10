@@ -28,6 +28,7 @@ export default function AdminContact() {
     bookingTitle: 'Ready to Book?',
     bookingDescription: 'Reserve your studio appointment today and let us pamper you with a luxury lash experience.',
     bookingButtonText: 'Book Appointment',
+    whatsappMessage: 'Hello! I would like to chat with you.',
   }
   type ContactState = typeof defaultContactState
 
@@ -155,6 +156,26 @@ export default function AdminContact() {
       if (response.ok) {
         const responseData = await response.json()
         console.log('Save response:', responseData)
+        
+        // Update localStorage for WhatsApp button if phone or message changed
+        if (typeof window !== 'undefined') {
+          if (contact.phone) {
+            let cleaned = contact.phone.replace(/\s|-|\(|\)/g, '')
+            if (!cleaned.startsWith('+')) {
+              if (cleaned.startsWith('0')) {
+                cleaned = cleaned.substring(1)
+              }
+              cleaned = '+254' + cleaned
+            }
+            localStorage.setItem('whatsapp-phone', cleaned)
+          }
+          if (contact.whatsappMessage) {
+            localStorage.setItem('whatsapp-message', contact.whatsappMessage)
+          }
+          // Dispatch event to update WhatsApp button across all tabs
+          window.dispatchEvent(new Event('contact-settings-updated'))
+        }
+        
         setMessage({ type: 'success', text: 'Contact information updated successfully! The contact page will refresh automatically.' })
         setOriginalContact({ ...contact })
         setShowDialog(false)
@@ -420,7 +441,7 @@ export default function AdminContact() {
             </div>
 
             {/* Booking Section */}
-            <div>
+            <div className="pb-8 border-b-2 border-brown-light">
               <h2 className="text-2xl font-semibold text-brown-dark mb-4">Booking Section</h2>
               <div className="space-y-4">
                 <div>
@@ -458,6 +479,39 @@ export default function AdminContact() {
                     placeholder="Book Appointment"
                     className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* WhatsApp Button Section */}
+            <div>
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">WhatsApp Button</h2>
+              <p className="text-sm text-brown-dark/70 mb-4">
+                Customize the WhatsApp button that appears on every page. The button will use your theme colors and display the message below when clicked.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    Default Message
+                  </label>
+                  <textarea
+                    value={contact.whatsappMessage}
+                    onChange={(e) => setContact({ ...contact, whatsappMessage: e.target.value })}
+                    placeholder="Hello! I would like to chat with you."
+                    rows={2}
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This message will be pre-filled when users click the WhatsApp button.
+                  </p>
+                </div>
+                <div className="bg-brown-light/20 border-2 border-brown-light rounded-lg p-4">
+                  <p className="text-sm text-brown-dark font-medium mb-2">Note:</p>
+                  <ul className="text-xs text-brown-dark/70 space-y-1 list-disc list-inside">
+                    <li>The phone number used is from the "Phone Number" field above</li>
+                    <li>The button color will automatically match your theme</li>
+                    <li>The button appears in the bottom-right corner of every page</li>
+                  </ul>
                 </div>
               </div>
             </div>

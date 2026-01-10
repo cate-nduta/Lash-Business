@@ -103,6 +103,9 @@ interface Order {
   } // Social media links
   timeline?: '10' | '21' | 'urgent' // Timeline/deadline selection
   priorityFee?: number // Priority fee if urgent timeline selected
+  consultationDate?: string // Selected consultation date (YYYY-MM-DD format)
+  consultationTimeSlot?: string // Selected consultation time slot (ISO string)
+  consultationMeetingType?: 'online' | 'phone' // Meeting type: 'online' for Google Meet, 'phone' for Phone/WhatsApp Call
   domainPricing?: {
     setupFee: number
     annualPrice: number
@@ -226,6 +229,9 @@ export async function POST(request: NextRequest) {
       timeline,
       priorityFee,
       referralCode, // Optional referral/discount code
+      consultationDate, // Consultation call date (YYYY-MM-DD format)
+      consultationTimeSlot, // Consultation call time slot (ISO string)
+      consultationMeetingType, // Meeting type: 'online' for Google Meet, 'phone' for Phone/WhatsApp Call
     } = body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -242,6 +248,97 @@ export async function POST(request: NextRequest) {
 
     if (!phoneNumber || !phoneNumber.trim()) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
+    }
+
+    // Validate consultation date, time slot, and meeting type if provided
+    if (consultationDate && consultationTimeSlot && !consultationMeetingType) {
+      return NextResponse.json({ error: 'Consultation meeting type is required when date and time are provided' }, { status: 400 })
+    }
+    
+    if (consultationDate && consultationTimeSlot && consultationMeetingType) {
+      // Check if this time slot is already booked
+      const consultationsData = await readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+      const showcaseBookings = await readDataFile<any[]>('labs-showcase-bookings.json', [])
+      
+      // Normalize time for comparison - handles various formats consistently
+      const normalizeTimeForComparison = (timeStr: string): string => {
+        if (!timeStr) return ''
+        // Extract time from ISO string (e.g., "2024-01-15T09:30:00+03:00" -> "9:30 am")
+        // Or normalize label format (e.g., "9:30 AM" -> "9:30 am")
+        try {
+          // Try parsing as ISO string first
+          if (timeStr.includes('T')) {
+            const date = new Date(timeStr)
+            if (!isNaN(date.getTime())) {
+              const hours = date.getHours()
+              const minutes = date.getMinutes()
+              const ampm = hours >= 12 ? 'pm' : 'am'
+              const displayHours = hours % 12 || 12
+              const displayMinutes = String(minutes).padStart(2, '0')
+              return `${displayHours}:${displayMinutes} ${ampm}`
+            }
+          }
+          // Try parsing label format (e.g., "9:30 AM", "09:30 AM", "9:30AM")
+          const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+          if (match) {
+            let hour = parseInt(match[1], 10)
+            const minute = match[2]
+            const ampm = match[3]?.toLowerCase() || 'am'
+            return `${hour}:${minute} ${ampm}`
+          }
+          // Fallback: just lowercase and trim
+          return timeStr.toLowerCase().trim().replace(/\s+/g, ' ')
+        } catch {
+          return timeStr.toLowerCase().trim().replace(/\s+/g, ' ')
+        }
+      }
+      
+      const selectedDateStr = consultationDate // Already in YYYY-MM-DD format
+      const selectedTimeLabel = normalizeTimeForComparison(consultationTimeSlot)
+      
+      // Check consultations for conflicts
+      const hasConsultationConflict = consultationsData.consultations.some((consultation: any) => {
+        if (!consultation.preferredDate || !consultation.preferredTime) return false
+        const status = consultation.status?.toLowerCase()
+        // Block ALL non-cancelled consultations to prevent double booking
+        if (status === 'cancelled') return false
+        
+        const consultationDate = consultation.preferredDate.split('T')[0] || consultation.preferredDate
+        const consultationTime = normalizeTimeForComparison(consultation.preferredTime)
+        
+        return consultationDate === selectedDateStr && consultationTime === selectedTimeLabel
+      })
+      
+      // Check showcase bookings for conflicts
+      const hasShowcaseConflict = showcaseBookings.some((booking: any) => {
+        if (!booking.appointmentDate || !booking.appointmentTime) return false
+        const status = booking.status?.toLowerCase()
+        // Block ALL non-cancelled bookings to prevent double booking
+        if (status === 'cancelled') return false
+        
+        // Parse appointment date to YYYY-MM-DD format
+        let appointmentDateStr: string
+        if (typeof booking.appointmentDate === 'string') {
+          if (booking.appointmentDate.includes('T')) {
+            appointmentDateStr = booking.appointmentDate.split('T')[0]
+          } else {
+            appointmentDateStr = booking.appointmentDate
+          }
+        } else {
+          appointmentDateStr = new Date(booking.appointmentDate).toISOString().split('T')[0]
+        }
+        
+        const bookingTime = normalizeTimeForComparison(booking.appointmentTime)
+        
+        return appointmentDateStr === selectedDateStr && bookingTime === selectedTimeLabel
+      })
+      
+      if (hasConsultationConflict || hasShowcaseConflict) {
+        return NextResponse.json(
+          { error: 'This time slot is already booked. Please select another date or time.' },
+          { status: 409 }
+        )
+      }
     }
 
     // Load web services data
@@ -506,6 +603,9 @@ export async function POST(request: NextRequest) {
       socialMediaLinks: socialMediaLinks || undefined,
       timeline: timeline || undefined,
       priorityFee: urgentPriorityFee > 0 ? urgentPriorityFee : undefined,
+      consultationDate: consultationDate || undefined,
+      consultationTimeSlot: consultationTimeSlot || undefined,
+      consultationMeetingType: consultationMeetingType || undefined,
       createdAt: new Date().toISOString(),
       status: 'pending',
     }

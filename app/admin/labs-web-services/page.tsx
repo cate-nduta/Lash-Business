@@ -271,17 +271,30 @@ export default function AdminLabsWebServices() {
 
       // Save banner settings separately
       try {
+        const bannerSettings = {
+          enabled: bannerEnabled || false,
+          text: bannerText || '',
+        }
+        
         const bannerResponse = await fetch('/api/labs/web-services/banner', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            enabled: bannerEnabled || false,
-            text: bannerText || '',
-          }),
+          body: JSON.stringify(bannerSettings),
         })
         
-        if (!bannerResponse.ok) {
+        if (bannerResponse.ok) {
+          // Update localStorage immediately so banner updates on Custom Website Builds pages
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('custom-website-builds-banner', JSON.stringify(bannerSettings))
+              // Dispatch custom event for same-tab updates (storage event only works cross-tab)
+              window.dispatchEvent(new CustomEvent('banner-settings-updated', { detail: bannerSettings }))
+            } catch (e) {
+              // Ignore localStorage errors
+            }
+          }
+        } else {
           console.error('Failed to save banner settings')
         }
       } catch (bannerError) {

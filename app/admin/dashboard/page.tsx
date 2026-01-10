@@ -302,6 +302,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Labs FAQ',
+      description: 'Manage frequently asked questions for LashDiary Labs',
+      href: '/admin/labs-faq',
+      icon: '❓',
+      ownerOnly: false,
+    },
+    {
       title: 'Model Applications',
       description: 'View and manage model applications',
       href: '/admin/models',

@@ -6,15 +6,15 @@
       "slug": "how-to-build-a-client-booking-website-that-accepts-payments",
       "subtitle": "Become a Full-Stack Web Developer with just ONE course. HTML, CSS, Javascript, Node, React, PostgreSQL, Web3 and DApps",
       "description": "A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required! Build fully-fledged websites and web apps for your startup or business.\n\n**🎓 Certificate of Completion**\n\nUpon completing this course, you will receive an official Certificate of Completion issued by LashDiary Labs. The certificate will be personalized with your name and can be downloaded or printed for your portfolio.",
-      "priceUSD": 0,
+      "priceUSD": 30,
       "originalPriceUSD": 0,
       "imageUrl": "https://xvrfpvdgzekdkmplcbwq.supabase.co/storage/v1/object/public/gallery/gallery/1766428090946-Desk_Inspo.jpg",
       "duration": "25-35 hours",
       "level": "intermediate",
       "category": "Web Development",
-      "isActive": false,
+      "isActive": true,
       "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2025-12-24T22:29:09.065Z",
+      "updatedAt": "2026-01-10T10:59:46.520Z",
       "instructor": {
         "name": "Catherine Kuria",
         "title": "Developer and Lead Instructor"
@@ -59,7 +59,7 @@
       "category": "Web Development",
       "isActive": true,
       "createdAt": "2025-01-20T00:00:00.000Z",
-      "updatedAt": "2025-12-24T22:29:09.066Z",
+      "updatedAt": "2026-01-10T10:59:46.522Z",
       "instructor": {
         "name": "Catherine Kuria",
         "title": "Founder & Lead Instructor"

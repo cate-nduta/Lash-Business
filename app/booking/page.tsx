@@ -800,11 +800,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     
     Promise.allSettled([
       fetch(`/api/services?t=${timestamp}`, { 
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-        },
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
         signal: servicesController.signal 
       }).then((res) => {
         clearTimeout(servicesTimeout)
