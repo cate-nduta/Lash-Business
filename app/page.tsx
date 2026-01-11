@@ -109,9 +109,33 @@ export default function Home() {
     const homepageController = new AbortController()
     const testimonialsController = new AbortController()
     const availabilityController = new AbortController()
-    let homepageTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => homepageController.abort(), 8000)
-    let testimonialsTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => testimonialsController.abort(), 8000)
-    let availabilityTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => availabilityController.abort(), 8000)
+    let homepageTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (!homepageController.signal.aborted) {
+        try {
+          homepageController.abort('Request timeout after 8 seconds')
+        } catch (e) {
+          // Silently handle abort errors
+        }
+      }
+    }, 8000)
+    let testimonialsTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (!testimonialsController.signal.aborted) {
+        try {
+          testimonialsController.abort('Request timeout after 8 seconds')
+        } catch (e) {
+          // Silently handle abort errors
+        }
+      }
+    }, 8000)
+    let availabilityTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (!availabilityController.signal.aborted) {
+        try {
+          availabilityController.abort('Request timeout after 8 seconds')
+        } catch (e) {
+          // Silently handle abort errors
+        }
+      }
+    }, 8000)
 
     // Helper to safely clear timeout
     const clearTimeoutSafely = (timeout: ReturnType<typeof setTimeout> | null) => {
@@ -217,9 +241,26 @@ export default function Home() {
         homepageTimeout = clearTimeoutSafely(homepageTimeout)
         testimonialsTimeout = clearTimeoutSafely(testimonialsTimeout)
         availabilityTimeout = clearTimeoutSafely(availabilityTimeout)
-        homepageController.abort()
-        testimonialsController.abort()
-        availabilityController.abort()
+        try {
+          if (!homepageController.signal.aborted) {
+            homepageController.abort('Component unmounted')
+          }
+          if (!testimonialsController.signal.aborted) {
+            testimonialsController.abort('Component unmounted')
+          }
+          if (!availabilityController.signal.aborted) {
+            availabilityController.abort('Component unmounted')
+          }
+        } catch (e: any) {
+          // Silently handle abort errors - they're expected during cleanup
+          const isAbortError = 
+            e?.name === 'AbortError' || 
+            e?.name === 'TimeoutError' ||
+            e?.message?.toLowerCase().includes('abort')
+          if (!isAbortError && process.env.NODE_ENV === 'development') {
+            console.warn('Unexpected error during abort cleanup:', e)
+          }
+        }
       }
     
     return () => {

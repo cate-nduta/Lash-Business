@@ -167,7 +167,7 @@ export default function Navbar() {
   const navLinks = mainNavLinks
 
   return (
-    <nav className="bg-white shadow-soft w-full relative z-40">
+    <nav className="bg-white shadow-soft w-full relative z-[70]" style={{ visibility: 'visible', opacity: 1 }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link href="/" className="flex items-center space-x-2 hover:scale-105 transition-transform group relative">

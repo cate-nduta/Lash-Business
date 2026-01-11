@@ -13,8 +13,8 @@ export default function CoursesDiscountBanner() {
   const [activeDiscountCourse, setActiveDiscountCourse] = useState<Course | null>(null)
   const [bannerEnabled, setBannerEnabled] = useState(false) // Start as false, only enable if API says so
 
-  // Only show on Labs and Courses pages
-  const allowedPaths = ['/courses', '/labs']
+  // Only show on Labs pages
+  const allowedPaths = ['/labs']
   const shouldShow = allowedPaths.some(path => pathname?.startsWith(path))
 
   useEffect(() => {

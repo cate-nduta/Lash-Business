@@ -12,6 +12,8 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 
   body {
@@ -21,6 +23,8 @@
     width: 100%;
     max-width: 100vw;
     position: relative;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 
   /* Ensure all containers respect viewport width */
@@ -1355,11 +1359,38 @@ button.recommended-services-button *,
 /* Ensure NO gap between banner and navbar container */
 /* Note: margin-top and top are controlled by JavaScript when banner is visible */
 #navbar-container {
-  transition: margin-top 0.2s ease, top 0.2s ease;
+  transition: top 0.2s ease, margin-top 0.2s ease;
   /* Default: no margin/top - will be set by JavaScript when banner is visible */
   padding-top: 0 !important; /* Ensure no padding */
+  margin-top: 0; /* Will be overridden by JavaScript - NO !important so JS can override */
+  top: 0; /* Will be overridden by JavaScript when banner is visible - NO !important so JS can override */
   border-top: none !important; /* Ensure no border */
   box-sizing: border-box !important;
+  position: sticky !important;
+  z-index: 70 !important;
+  /* Ensure navbar is always visible */
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Ensure banners sit above navbar without overlap */
+[class*="Banner"] {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 60 !important;
+  width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  /* Ensure banner takes up space in document flow */
+  display: block !important;
+}
+
+/* Force navbar to sit below any banner */
+#navbar-container {
+  z-index: 70 !important;
+  position: sticky !important;
+  /* Will be set by JavaScript to banner height */
 }
 
 /* Ensure banner has no margin-bottom that could cause gap */

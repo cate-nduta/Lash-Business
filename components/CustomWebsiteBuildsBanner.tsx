@@ -82,13 +82,19 @@ export default function CustomWebsiteBuildsBanner() {
 
         if (response.ok && isMounted) {
           const data = await response.json()
-          // Only update if we got valid data
-          if (data && typeof data === 'object') {
+          // Only update if we got valid data - don't overwrite with disabled if data is invalid
+          if (data && typeof data === 'object' && typeof data.enabled === 'boolean') {
             const newSettings: BannerSettings = {
               enabled: data.enabled === true,
               text: typeof data.text === 'string' ? data.text : '',
             }
-            setBannerSettings(newSettings)
+            // Only update if settings actually changed to prevent unnecessary re-renders
+            setBannerSettings((prev) => {
+              if (prev?.enabled === newSettings.enabled && prev?.text === newSettings.text) {
+                return prev // No change, keep existing
+              }
+              return newSettings
+            })
             // Cache to localStorage for instant display on refresh
             if (typeof window !== 'undefined') {
               try {
@@ -99,16 +105,8 @@ export default function CustomWebsiteBuildsBanner() {
             }
             setIsLoading(false)
           } else if (isMounted) {
-            const disabledSettings: BannerSettings = { enabled: false, text: '' }
-            setBannerSettings(disabledSettings)
-            // Update cache
-            if (typeof window !== 'undefined') {
-              try {
-                localStorage.setItem('custom-website-builds-banner', JSON.stringify(disabledSettings))
-              } catch (e) {
-                // Ignore localStorage errors
-              }
-            }
+            // If API returns invalid data, DON'T overwrite existing settings - keep cached settings
+            // This prevents banner from disappearing when API has issues
             setIsLoading(false)
           }
         } else if (response.status === 500 && retryAttempt < maxRetries && isMounted) {
@@ -139,24 +137,11 @@ export default function CustomWebsiteBuildsBanner() {
       }
     }
 
-    // Fetch immediately
+    // Fetch immediately only once - don't do periodic checks that might overwrite state
     fetchBanner()
-
-    // Also set up a periodic check to ensure banner stays visible (every 2 seconds for first 10 seconds)
-    const intervalId = setInterval(() => {
-      if (isMounted && shouldShow) {
-        fetchBanner()
-      }
-    }, 2000)
-
-    const cleanupInterval = setTimeout(() => {
-      clearInterval(intervalId)
-    }, 10000) // Stop checking after 10 seconds
 
     return () => {
       isMounted = false
-      clearInterval(intervalId)
-      clearTimeout(cleanupInterval)
     }
   }, [shouldShow, mounted, pathname])
 
@@ -265,11 +250,15 @@ export default function CustomWebsiteBuildsBanner() {
       if (e.key === 'custom-website-builds-banner' && e.newValue) {
         try {
           const newSettings = JSON.parse(e.newValue)
-          if (newSettings && typeof newSettings === 'object') {
-            setBannerSettings(newSettings)
+          if (newSettings && typeof newSettings === 'object' && typeof newSettings.enabled === 'boolean') {
+            const validatedSettings: BannerSettings = {
+              enabled: newSettings.enabled === true,
+              text: typeof newSettings.text === 'string' ? newSettings.text : '',
+            }
+            setBannerSettings(validatedSettings)
           }
         } catch (e) {
-          // Ignore parse errors
+          // Ignore parse errors - keep existing settings
         }
       }
     }
@@ -277,8 +266,20 @@ export default function CustomWebsiteBuildsBanner() {
     
     // Listen for custom event (when banner is updated in same tab by admin)
     const handleBannerUpdate = (e: CustomEvent) => {
-      if (e.detail && typeof e.detail === 'object') {
-        setBannerSettings(e.detail)
+      if (e.detail && typeof e.detail === 'object' && typeof e.detail.enabled === 'boolean') {
+        const newSettings: BannerSettings = {
+          enabled: e.detail.enabled === true,
+          text: typeof e.detail.text === 'string' ? e.detail.text : '',
+        }
+        setBannerSettings(newSettings)
+        // Update localStorage immediately
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('custom-website-builds-banner', JSON.stringify(newSettings))
+          } catch (e) {
+            // Ignore localStorage errors
+          }
+        }
       }
     }
     window.addEventListener('banner-settings-updated', handleBannerUpdate as EventListener)
@@ -310,18 +311,20 @@ export default function CustomWebsiteBuildsBanner() {
     return null
   }
 
-    // Only show if we have settings, enabled, and has text
-    if (!bannerSettings || !bannerSettings.enabled || !bannerSettings.text?.trim()) {
-      // Ensure navbar margin and top are removed when banner is disabled
-      if (typeof window !== 'undefined') {
-        const navbarContainer = document.getElementById('navbar-container')
-        if (navbarContainer) {
-          navbarContainer.style.marginTop = '0'
-          navbarContainer.style.top = '0'
-        }
+  // Only show if we have settings, enabled, and has text
+  // IMPORTANT: Banner can ONLY be disabled by admin - this component never disables it
+  // If bannerSettings is null or disabled, it means admin explicitly disabled it
+  if (!bannerSettings || !bannerSettings.enabled || !bannerSettings.text?.trim()) {
+    // Ensure navbar margin and top are removed when banner is disabled
+    if (typeof window !== 'undefined') {
+      const navbarContainer = document.getElementById('navbar-container')
+      if (navbarContainer) {
+        navbarContainer.style.marginTop = '0'
+        navbarContainer.style.top = '0'
       }
-      return null
     }
+    return null
+  }
 
   return (
     <div 

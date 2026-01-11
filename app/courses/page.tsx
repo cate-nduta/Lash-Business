@@ -6,7 +6,6 @@ import { type Course } from '@/types/course'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 import { getCourseSlug } from '@/lib/courses-utils'
-import CoursesDiscountBanner from '@/components/CoursesDiscountBanner'
 
 export default function CoursesPage() {
   const { currency, formatCurrency } = useCurrency()
@@ -119,9 +118,6 @@ export default function CoursesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Discount Banner */}
-      <CoursesDiscountBanner />
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-4xl font-bold">Our Courses</h1>

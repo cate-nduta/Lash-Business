@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 
 type BannerState = {
   bannerEnabled: boolean
@@ -27,10 +28,26 @@ const formatMessage = (template: string, percentage: number | null) => {
 }
 
 export default function PromoBanner() {
+  const pathname = usePathname()
   const [bannerState, setBannerState] = useState<BannerState>(DEFAULT_STATE)
   const [ready, setReady] = useState(false)
+  const bannerRef = useRef<HTMLDivElement | null>(null)
+
+  // Hide banner on /labs pages
+  const shouldShow = !pathname.startsWith('/labs')
 
   useEffect(() => {
+    if (!shouldShow) {
+      setReady(true)
+      // Reset navbar position when not showing
+      const navbarContainer = document.getElementById('navbar-container')
+      if (navbarContainer) {
+        navbarContainer.style.setProperty('top', '0', 'important')
+        navbarContainer.style.setProperty('margin-top', '0', 'important')
+      }
+      return
+    }
+
     fetch('/api/discounts')
       .then((res) => res.json())
       .then((data) => {
@@ -62,16 +79,93 @@ export default function PromoBanner() {
       .finally(() => {
         setReady(true)
       })
-  }, [])
+  }, [shouldShow])
 
-  if (!ready || !bannerState.bannerEnabled) {
+  // FORCE position navbar below banner - runs BEFORE banner renders
+  useEffect(() => {
+    const navbarContainer = document.getElementById('navbar-container')
+    if (!navbarContainer) return
+
+    if (!shouldShow || !ready || !bannerState.bannerEnabled) {
+      // Reset when banner not showing
+      navbarContainer.style.setProperty('top', '0', 'important')
+      navbarContainer.style.setProperty('margin-top', '0', 'important')
+      navbarContainer.style.setProperty('padding-top', '0', 'important')
+      return
+    }
+
+    const bannerElement = bannerRef.current
+    if (!bannerElement) {
+      // Banner not rendered yet - set a default and retry
+      setTimeout(() => {
+        const el = bannerRef.current
+        if (el && navbarContainer) {
+          const height = el.getBoundingClientRect().height || 40
+          navbarContainer.style.setProperty('top', `${height}px`, 'important')
+          navbarContainer.style.setProperty('margin-top', `${height}px`, 'important')
+        }
+      }, 0)
+      return
+    }
+
+    const updatePosition = () => {
+      // Force reflow
+      const height = bannerElement.offsetHeight || bannerElement.getBoundingClientRect().height || 40
+      
+      if (height > 0) {
+        // Set BOTH top and margin-top to push navbar below banner using setProperty with !important
+        navbarContainer.style.setProperty('top', `${height}px`, 'important')
+        navbarContainer.style.setProperty('margin-top', `${height}px`, 'important')
+        navbarContainer.style.setProperty('padding-top', '0', 'important')
+        navbarContainer.style.transition = 'margin-top 0.2s ease, top 0.2s ease'
+        navbarContainer.style.setProperty('border-top', 'none', 'important')
+        navbarContainer.style.setProperty('margin-bottom', '0', 'important')
+      }
+    }
+
+    // Use MutationObserver to watch for banner size changes
+    const observer = new MutationObserver(updatePosition)
+    observer.observe(bannerElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+    })
+
+    // Update immediately and continuously
+    updatePosition()
+    const intervalId = setInterval(updatePosition, 100)
+    
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition)
+
+    // Multiple immediate updates to catch any timing issues
+    const timeouts = [
+      setTimeout(updatePosition, 0),
+      setTimeout(updatePosition, 10),
+      setTimeout(updatePosition, 50),
+      setTimeout(updatePosition, 100),
+      setTimeout(updatePosition, 200),
+      setTimeout(updatePosition, 500),
+    ]
+
+    return () => {
+      observer.disconnect()
+      clearInterval(intervalId)
+      timeouts.forEach(clearTimeout)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition)
+    }
+  }, [shouldShow, ready, bannerState.bannerEnabled])
+
+  if (!shouldShow || !ready || !bannerState.bannerEnabled) {
     return null
   }
 
   const defaultMessage =
     bannerState.percentage !== null
       ? `🎉 Special Offer: ${bannerState.percentage}% OFF for First-Time Clients! Book today and save! 🎉`
-      : ''
+      : 'January Offer: Use code NLR9Q7YA for checkout to get 10% off your first order.'
 
   const rawMessage =
     bannerState.bannerMessage && bannerState.bannerMessage.trim().length > 0
@@ -86,8 +180,22 @@ export default function PromoBanner() {
 
   return (
     <div
-      className="py-1.5 overflow-hidden relative w-full z-50 bg-[var(--color-primary)] text-white border-b border-[var(--color-primary-dark)]/25 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
-      style={{ color: '#fff' }}
+      ref={bannerRef}
+      className="overflow-hidden w-full bg-[var(--color-primary)] text-white border-b border-[var(--color-primary-dark)]/25 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+      style={{
+        position: 'sticky',
+        top: 0,
+        width: '100%',
+        display: 'block',
+        margin: 0,
+        padding: '6px 0',
+        zIndex: 60,
+        boxSizing: 'border-box',
+        minHeight: '40px',
+        // Ensure banner takes up space and doesn't collapse
+        flexShrink: 0,
+        height: 'auto',
+      }}
     >
       <div className="flex animate-scroll whitespace-nowrap">
         {[...Array(2)].map((_, groupIndex) => (
@@ -106,4 +214,3 @@ export default function PromoBanner() {
     </div>
   )
 }
-

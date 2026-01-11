@@ -48,6 +48,7 @@ interface WebServicesData {
     partialPaymentPercentage: number // Default 80
   }
   taxPercentage?: number // VAT/Tax percentage (e.g., 16 for 16% VAT)
+  highValueOrderLimit?: number // Order amount threshold above which customers should contact directly (default 400000)
   keyFeatures?: {
     timelineText?: string // Timeline text: "Your website will be designed and built within 21 days"
     deliveryText?: string // Delivery text: "You'll receive your live domain, admin login details, and a scheduled online walkthrough"
@@ -80,6 +81,7 @@ const DEFAULT_DATA: WebServicesData = {
     partialPaymentPercentage: 80,
   },
   taxPercentage: 0, // Default 0% (no tax), can be set to 16 for 16% VAT, etc.
+  highValueOrderLimit: 400000, // Default 400,000 KSH - orders above this require direct contact
   keyFeatures: {
     timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
     deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",

@@ -1103,6 +1103,9 @@ async function handleLabsWebServicesPayment(transaction: any, metadata: any) {
           initialPayment: order.initialPayment,
           remainingPayment: order.remainingPayment,
           timeline: order.timeline,
+          consultationDate: order.consultationDate,
+          consultationTimeSlot: order.consultationTimeSlot,
+          consultationMeetingType: order.consultationMeetingType,
         })
         console.log('✅ Labs build notification email sent:', orderId)
       } catch (emailError) {

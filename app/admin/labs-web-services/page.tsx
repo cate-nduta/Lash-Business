@@ -50,6 +50,7 @@ interface WebServicesData {
     partialPaymentPercentage: number
   }
   taxPercentage?: number // Tax/VAT percentage (e.g., 16 for 16% VAT)
+  highValueOrderLimit?: number // Order amount threshold above which customers should contact directly (default 400000)
   keyFeatures?: {
     timelineText?: string
     deliveryText?: string
@@ -184,6 +185,7 @@ export default function AdminLabsWebServices() {
             partialPaymentPercentage: loadedData.checkoutRules?.partialPaymentPercentage || 80,
           },
           taxPercentage: typeof loadedData.taxPercentage === 'number' ? loadedData.taxPercentage : 0,
+          highValueOrderLimit: typeof loadedData.highValueOrderLimit === 'number' ? loadedData.highValueOrderLimit : 400000,
           keyFeatures: loadedData.keyFeatures || {
             timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
             deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
@@ -496,6 +498,12 @@ export default function AdminLabsWebServices() {
               >
                 📖 Guide Scenarios
               </Link>
+              <Link
+                href="/admin/labs-web-services/high-value-tickets"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors font-medium"
+              >
+                💼 High Value Tickets
+              </Link>
             </div>
           </div>
 
@@ -577,7 +585,7 @@ export default function AdminLabsWebServices() {
               {newService.billingPeriod === 'yearly' && (
                 <div>
                   <label className="block text-sm font-medium text-brown-dark mb-2">
-                    Setup Fee (KES) *
+                    Setup and Build Cost (KES) *
                   </label>
                   <input
                     type="number"
@@ -593,7 +601,7 @@ export default function AdminLabsWebServices() {
                   {(newService.setupFee || 0) > 0 && (newService.price || 0) > 0 && (
                     <div className="mt-2 p-3 bg-brown-light/20 rounded-lg border border-brown-light">
                       <p className="text-xs font-semibold text-brown-dark mb-1">Payment Breakdown:</p>
-                      <p className="text-xs text-brown-dark/80">Setup Fee: KES {(newService.setupFee || 0).toLocaleString()}</p>
+                      <p className="text-xs text-brown-dark/80">Setup and Build Cost: KES {(newService.setupFee || 0).toLocaleString()}</p>
                       <p className="text-xs text-brown-dark/80">1 Year Subscription: KES {(newService.price || 0).toLocaleString()}</p>
                       <p className="text-xs text-brown-dark/80 mt-1">Total First Payment: KES {((newService.setupFee || 0) + (newService.price || 0)).toLocaleString()}</p>
                       <p className="text-xs text-brown-dark/80">Monthly: KES {Math.round((newService.price || 0) / 12).toLocaleString()}/month</p>
@@ -1370,6 +1378,32 @@ export default function AdminLabsWebServices() {
             </div>
           </section>
 
+          {/* High-Value Order Settings */}
+          <section className="border border-brown-light/50 rounded-2xl shadow-soft bg-white/70 p-6 space-y-6">
+            <h2 className="text-2xl font-semibold text-brown-dark">High-Value Order Settings</h2>
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                High-Value Order Limit (KES)
+              </label>
+              <p className="text-xs text-brown-dark/60 mb-2">
+                Orders above this amount will be advised to contact LashDiary Labs directly via email. Customers will see a contact form instead of the checkout button.
+              </p>
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                value={data.highValueOrderLimit || 400000}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    highValueOrderLimit: Math.max(0, parseFloat(e.target.value) || 400000),
+                  }))
+                }
+                className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+              />
+            </div>
+          </section>
+
           {/* Discount Code Management */}
           <section className="border border-brown-light/50 rounded-2xl shadow-soft bg-white/70 p-6 space-y-6">
             <h2 className="text-2xl font-semibold text-brown-dark">Discount Code Management</h2>
@@ -1913,7 +1947,7 @@ export default function AdminLabsWebServices() {
                           {service.billingPeriod === 'yearly' && (
                             <div>
                               <label className="block text-xs font-semibold text-brown-dark/60 mb-1">
-                                Setup Fee (KES)
+                                Setup and Build Cost (KES)
                               </label>
                               <input
                                 type="number"
@@ -2094,7 +2128,7 @@ export default function AdminLabsWebServices() {
                 {editServiceData.billingPeriod === 'yearly' && (
                   <div>
                     <label className="block text-sm font-medium text-brown-dark mb-2">
-                      Setup Fee (KES) *
+                      Setup and Build Cost (KES) *
                     </label>
                     <input
                       type="number"
@@ -2444,7 +2478,7 @@ export default function AdminLabsWebServices() {
                 {editServiceData.billingPeriod === 'yearly' && (
                   <div>
                     <label className="block text-sm font-medium text-brown-dark mb-2">
-                      Setup Fee (KES) *
+                      Setup and Build Cost (KES) *
                     </label>
                     <input
                       type="number"

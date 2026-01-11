@@ -43,6 +43,14 @@ interface LabsStatistics {
   businessesTransformed?: number
 }
 
+interface CustomBuildsCTA {
+  title: string
+  description: string
+  buttonText: string
+  buttonUrl: string
+  enabled?: boolean
+}
+
 interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
@@ -55,6 +63,7 @@ interface LabsSettings {
   courseSectionEnabled?: boolean
   buildOnYourOwnEnabled?: boolean
   waitlistSectionEnabled?: boolean
+  customBuildsCTA?: CustomBuildsCTA
 }
 
 interface WaitlistStatus {
@@ -312,30 +321,131 @@ export default function LabsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           {/* Hero Section */}
           <div className="text-center mb-12 sm:mb-16 md:mb-20">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display text-[var(--color-primary)] mb-4 sm:mb-6 relative inline-block">
-              LashDiary Labs
-              <span className="absolute -top-2 -right-8 text-2xl opacity-50 hidden lg:inline-block">✨</span>
-            </h1>
-            <p className="text-xl sm:text-2xl md:text-3xl text-[var(--color-text)] mb-6 max-w-3xl mx-auto font-medium">
-              For service providers who want order and less chaos
-            </p>
-            <div className="max-w-4xl mx-auto mt-8">
-              <div className="bg-[var(--color-surface)] rounded-2xl p-6 sm:p-8 md:p-10 shadow-soft border border-[var(--color-primary)]/10">
-                <p className="text-base sm:text-lg text-[var(--color-text)] leading-relaxed mb-4">
-                  We understand that running a service-based business means juggling appointments, payments, client communication, and endless administrative tasks. 
-                  <span className="font-semibold text-[var(--color-primary)]"> LashDiary Labs</span> exists to eliminate that chaos.
+            <div className="mb-6 sm:mb-8">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display text-[var(--color-primary)] mb-4 sm:mb-6 relative inline-block">
+                LashDiary Labs
+                <span className="absolute -top-2 -right-8 text-2xl opacity-50 hidden lg:inline-block">✨</span>
+              </h1>
+              <p className="text-2xl sm:text-3xl md:text-4xl text-[var(--color-text)] mb-4 max-w-4xl mx-auto font-bold leading-tight">
+                Professional Websites & Systems for Any Business
+              </p>
+              <p className="text-lg sm:text-xl md:text-2xl text-[var(--color-text)]/80 max-w-3xl mx-auto font-medium">
+                From e-commerce to service platforms, we build websites that work. Stop juggling chaos. Start running a business that thrives.
+              </p>
+              <div className="mt-4 sm:mt-6 inline-block bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30 rounded-full px-6 py-2">
+                <p className="text-sm sm:text-base text-[var(--color-text)] font-medium">
+                  ✨ We work with <span className="font-bold text-[var(--color-primary)]">any type of website</span> - e-commerce, services, portfolios, blogs, and more
                 </p>
-                <p className="text-base sm:text-lg text-[var(--color-text)]/90 leading-relaxed">
-                  We provide <span className="font-semibold">professional systems with perfectly implemented checkouts</span> that transform how you manage your business. 
-                  No more lost bookings, payment confusion, or client communication breakdowns. Just clean, organized operations that let you focus on what you do best.
-                </p>
-                <p className="text-base sm:text-lg text-[var(--color-text)]/90 leading-relaxed mt-4">
-                  Your tier determines the features and support you receive based on the system you choose. 
-                  We'll set up your system according to your selected tier and provide you with login credentials to access your account.
-                </p>
-                <p className="text-base sm:text-lg text-[var(--color-text)]/90 leading-relaxed mt-4">
-                  <span className="italic text-[var(--color-text)]/80">Please note:</span> A consultation is required before purchasing any tier. 
-                  This ensures we understand your specific needs and recommend the perfect system for your business.
+              </div>
+            </div>
+
+            {/* What We Do Section */}
+            <div className="max-w-6xl mx-auto mb-8 sm:mb-12">
+              <div className="bg-gradient-to-br from-[var(--color-primary)]/5 via-[var(--color-surface)] to-[var(--color-accent)]/5 rounded-3xl p-8 sm:p-10 md:p-12 shadow-xl border-2 border-[var(--color-primary)]/20">
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-display text-[var(--color-primary)] mb-8 sm:mb-10">
+                  What We Do
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 text-left">
+                  <div className="bg-[var(--color-surface)] rounded-xl p-6 shadow-md border border-[var(--color-primary)]/10 hover:border-[var(--color-primary)]/30 transition-all duration-300 hover:shadow-lg">
+                    <div className="flex items-start mb-3">
+                      <div className="text-3xl mr-4">🎨</div>
+                      <div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[var(--color-primary)] mb-2">
+                          Custom Website Design & Development
+                        </h3>
+                        <p className="text-[var(--color-text)]/80 text-sm sm:text-base">
+                          Beautiful, professional websites for any business - e-commerce, services, portfolios, blogs, and more
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--color-surface)] rounded-xl p-6 shadow-md border border-[var(--color-primary)]/10 hover:border-[var(--color-primary)]/30 transition-all duration-300 hover:shadow-lg">
+                    <div className="flex items-start mb-3">
+                      <div className="text-3xl mr-4">💼</div>
+                      <div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[var(--color-primary)] mb-2">
+                          Intelligent E-commerce & Service Platforms
+                        </h3>
+                        <p className="text-[var(--color-text)]/80 text-sm sm:text-base">
+                          Smart platforms for any business type - e-commerce stores, service providers, portfolios, and more
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--color-surface)] rounded-xl p-6 shadow-md border border-[var(--color-primary)]/10 hover:border-[var(--color-primary)]/30 transition-all duration-300 hover:shadow-lg">
+                    <div className="flex items-start mb-3">
+                      <div className="text-3xl mr-4">📅</div>
+                      <div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[var(--color-primary)] mb-2">
+                          Booking, Payment & Client Management
+                        </h3>
+                        <p className="text-[var(--color-text)]/80 text-sm sm:text-base">
+                          All-in-one systems that eliminate booking confusion and payment headaches
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--color-surface)] rounded-xl p-6 shadow-md border border-[var(--color-primary)]/10 hover:border-[var(--color-primary)]/30 transition-all duration-300 hover:shadow-lg">
+                    <div className="flex items-start mb-3">
+                      <div className="text-3xl mr-4">🤖</div>
+                      <div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[var(--color-primary)] mb-2">
+                          AI-Powered Customer Experiences
+                        </h3>
+                        <p className="text-[var(--color-text)]/80 text-sm sm:text-base">
+                          Intelligent features that create smarter, more personalized customer interactions
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 sm:mt-10 bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-xl p-6 border-2 border-[var(--color-primary)]/20">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="text-3xl mr-4">⚙️</div>
+                    <h3 className="text-xl sm:text-2xl font-bold text-[var(--color-primary)]">
+                      Clean, Scalable Back-End Systems
+                    </h3>
+                  </div>
+                  <p className="text-[var(--color-text)]/80 text-center text-sm sm:text-base max-w-2xl mx-auto">
+                    Robust infrastructure that grows with your business, ensuring reliability and performance at every stage
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Website Builds CTA */}
+            {settings?.customBuildsCTA?.enabled !== false && settings?.customBuildsCTA && (
+              <div className="max-w-4xl mx-auto mb-8">
+                <div className="bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-primary)]/90 to-[var(--color-accent)] rounded-2xl p-8 sm:p-10 shadow-2xl border-2 border-[var(--color-primary)]/30 transform hover:scale-[1.02] transition-all duration-300">
+                  <h3 className="text-2xl sm:text-3xl md:text-4xl font-display text-white mb-4 font-bold">
+                    {settings.customBuildsCTA.title || 'Build Your Perfect System'}
+                  </h3>
+                  <p className="text-lg sm:text-xl text-white/90 mb-6 max-w-2xl mx-auto">
+                    {settings.customBuildsCTA.description || 'Need specific features? Choose exactly what you need from our Custom Website Builds menu. Select only the services that matter to your business.'}
+                  </p>
+                  <Link
+                    href={settings.customBuildsCTA.buttonUrl || '/labs/custom-website-builds'}
+                    className="inline-block bg-white text-[var(--color-primary)] px-8 py-4 rounded-lg font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    {settings.customBuildsCTA.buttonText || 'Explore Custom Builds'} →
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Consultation Note */}
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-[var(--color-surface)] rounded-2xl p-6 sm:p-8 shadow-soft border border-[var(--color-primary)]/10">
+                <p className="text-base sm:text-lg text-[var(--color-text)] leading-relaxed">
+                  <span className="font-semibold text-[var(--color-primary)]">📋 Important:</span> A consultation is required before purchasing any tier. 
+                  This ensures we understand your specific needs and recommend the perfect system for your business. 
+                  <Link href="/labs/book-appointment" className="text-[var(--color-primary)] font-semibold hover:underline ml-1">
+                    Book your consultation →
+                  </Link>
                 </p>
               </div>
             </div>
@@ -702,27 +812,6 @@ export default function LabsPage() {
                 </div>
               </div>
             )}
-
-          {/* Custom Website Builds Section */}
-          {settings?.buildOnYourOwnEnabled !== false && (
-            <div className="bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-2xl p-8 sm:p-10 md:p-12 shadow-soft border border-[var(--color-primary)]/20 mb-12">
-              <h2 className="text-3xl sm:text-4xl font-display text-[var(--color-primary)] text-center mb-4">
-                Custom Website Builds
-              </h2>
-              <p className="text-lg text-[var(--color-text)] mb-6 text-center max-w-3xl mx-auto">
-                Need specific services for your website? Choose exactly what you need from our à la carte menu. 
-                Build your perfect booking system by selecting only the features and services that matter to you.
-              </p>
-              <div className="text-center">
-                <Link
-                  href="/labs/custom-website-builds"
-                  className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-8 py-4 rounded-lg font-semibold text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-                >
-                  Browse Services
-                </Link>
-              </div>
-            </div>
-          )}
 
           {/* Course Section */}
           {settings?.courseSectionEnabled !== false && (

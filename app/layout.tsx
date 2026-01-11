@@ -256,8 +256,19 @@ export default async function RootLayout({
               <ServiceCartProvider>
                 <WebsiteProtection />
                 <ClientAuthMonitor />
-                <div className="sticky z-[70]" id="navbar-container" style={{ top: 0, marginTop: 0, paddingTop: 0 }}>
-                  <PromoBanner />
+                <PromoBanner />
+                <div 
+                  className="sticky z-[70]" 
+                  id="navbar-container" 
+                  style={{ 
+                    top: 0, 
+                    marginTop: 0, 
+                    paddingTop: 0,
+                    visibility: 'visible',
+                    opacity: 1,
+                    display: 'block'
+                  }}
+                >
                   <Navbar />
                 </div>
                 <main className="min-h-screen">

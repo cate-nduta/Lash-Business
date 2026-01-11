@@ -14,6 +14,9 @@ interface BuildNotificationEmailData {
   initialPayment: number
   remainingPayment: number
   timeline?: '10' | '21' | 'urgent' // Timeline selection from order
+  consultationDate?: string // Consultation date (ISO string)
+  consultationTimeSlot?: string // Consultation time slot (ISO string)
+  consultationMeetingType?: 'google-meet' | 'phone-whatsapp' // Meeting type
 }
 
 const EMAIL_STYLES = {
@@ -26,7 +29,7 @@ const EMAIL_STYLES = {
 }
 
 export async function sendLabsBuildNotificationEmail(data: BuildNotificationEmailData) {
-  const { email, name, orderId, items, total, initialPayment, remainingPayment, timeline } = data
+  const { email, name, orderId, items, total, initialPayment, remainingPayment, timeline, consultationDate, consultationTimeSlot, consultationMeetingType } = data
   
   // Determine timeline message based on selection
   let timelineMessage = '10-21 days'
@@ -45,6 +48,19 @@ export async function sendLabsBuildNotificationEmail(data: BuildNotificationEmai
   const itemsList = items
     .map((item) => `• ${item.productName} (${item.quantity}x) - KES ${item.price.toLocaleString()}`)
     .join('<br>')
+
+  // Format consultation time slot
+  const formatConsultationTime = (timeSlot: string | undefined): string => {
+    if (!timeSlot) return ''
+    try {
+      const timeDate = new Date(timeSlot)
+      return timeDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    } catch {
+      return timeSlot
+    }
+  }
+
+  const consultationTimeLabel = formatConsultationTime(consultationTimeSlot)
 
   const html = `
 <!DOCTYPE html>
@@ -73,7 +89,7 @@ export async function sendLabsBuildNotificationEmail(data: BuildNotificationEmai
                 Hi ${name},
               </p>
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:${EMAIL_STYLES.textPrimary};">
-                Thank you for your order! We've received your payment and your website build is now in our queue.
+                Thank you for your order! We've received your payment and your order is now being worked on. Your website build has been queued and we're starting on it right away.
               </p>
 
               <div style="border:1px solid ${EMAIL_STYLES.accent}; border-radius:14px; padding:20px 24px; background:${EMAIL_STYLES.background}; margin-bottom:24px;">
@@ -125,6 +141,30 @@ export async function sendLabsBuildNotificationEmail(data: BuildNotificationEmai
                   where we'll walk you through everything once it's ready.
                 </p>
               </div>
+              
+              ${consultationDate && consultationTimeSlot ? `
+              <div style="border-radius:14px; padding:20px 24px; background:${EMAIL_STYLES.accent}; margin-bottom:24px; border:2px solid ${EMAIL_STYLES.brand};">
+                <h2 style="margin:0 0 12px 0; font-size:18px; color:${EMAIL_STYLES.brand}; font-weight:600;">
+                  📞 Consultation Call Scheduled
+                </h2>
+                <p style="margin:0 0 8px 0; color:${EMAIL_STYLES.textPrimary}; font-size:15px; line-height:1.7;">
+                  We'll be calling you on <strong>${new Date(consultationDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong> at the time you selected during checkout.
+                </p>
+                ${consultationTimeLabel ? `<p style="margin:0 0 8px 0; color:${EMAIL_STYLES.textPrimary}; font-size:15px; line-height:1.7;"><strong>Time:</strong> ${consultationTimeLabel}</p>` : ''}
+                ${consultationMeetingType === 'google-meet' ? `
+                <p style="margin:8px 0 0 0; color:${EMAIL_STYLES.textPrimary}; font-size:14px; line-height:1.7;">
+                  This will be a <strong>Google Meet</strong> call. You'll receive a meeting link closer to the date.
+                </p>
+                ` : consultationMeetingType === 'phone-whatsapp' ? `
+                <p style="margin:8px 0 0 0; color:${EMAIL_STYLES.textPrimary}; font-size:14px; line-height:1.7;">
+                  This will be a <strong>phone or WhatsApp</strong> call. We'll call you directly at the number you provided.
+                </p>
+                ` : ''}
+                <p style="margin:12px 0 0 0; color:${EMAIL_STYLES.textPrimary}; font-size:14px; line-height:1.7;">
+                  During this call, we'll discuss your website requirements and answer any questions you may have.
+                </p>
+              </div>
+              ` : ''}
 
               ${remainingPayment > 0 ? `
               <div style="border-radius:14px; padding:18px 20px; background:#FFF3CD; border:2px solid #FFC107; margin-bottom:24px;">

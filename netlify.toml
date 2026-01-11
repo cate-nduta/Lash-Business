@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = ".next"
+  # Next.js plugin handles publishing automatically - don't set publish directory
 
 [functions]
   node_bundler = "esbuild"
@@ -10,7 +10,7 @@
   package = "@netlify/plugin-nextjs"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
   # Optimize build performance
   NPM_FLAGS = "--prefer-offline --no-audit"
 

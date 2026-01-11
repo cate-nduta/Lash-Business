@@ -59,6 +59,8 @@ function LabsCheckoutContentInner() {
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null)
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   const [paymentData, setPaymentData] = useState<{
     publicKey: string
     email: string
@@ -74,6 +76,7 @@ function LabsCheckoutContentInner() {
   const [enableBusinessInfo, setEnableBusinessInfo] = useState<boolean>(true)
   const [allServices, setAllServices] = useState<any[]>([])
   const [referralDiscountPercentage, setReferralDiscountPercentage] = useState<number>(10) // Default 10%
+  const [highValueOrderLimit, setHighValueOrderLimit] = useState<number>(400000) // Default 400,000 KSH
   // Initialize tax percentage from localStorage for instant display, then update from API
   const [taxPercentage, setTaxPercentage] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -101,6 +104,7 @@ function LabsCheckoutContentInner() {
   const [codeValid, setCodeValid] = useState<boolean | null>(null)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [calculatedDiscount, setCalculatedDiscount] = useState<number>(0) // Calculated discount amount
+  const [contactFormSubmitting, setContactFormSubmitting] = useState(false) // For high-value order contact form
   
   // Website type: 'personal' or 'business'
   const [websiteType, setWebsiteType] = useState<'personal' | 'business'>('business')
@@ -539,6 +543,7 @@ function LabsCheckoutContentInner() {
           setEnableBusinessInfo(data.enableBusinessInfo !== false)
           setPriorityFee(data.priorityFee || 2000)
           setReferralDiscountPercentage(data.referralDiscountPercentage || 10)
+          setHighValueOrderLimit(data.highValueOrderLimit || 400000)
           const newTaxPercentage = data.taxPercentage || 0
           setTaxPercentage(newTaxPercentage)
           // Cache tax percentage for instant display on next load
@@ -685,6 +690,81 @@ function LabsCheckoutContentInner() {
       setShowLogoDesignSuggestion(false)
     }
   }, [logoType, items, allServices, addToCart, removeFromCart])
+
+  // Calculate total amount for high-value order check
+  const getTotalAmount = () => {
+    const subtotalBeforeDiscount = getTotalPrice() + 
+      (timeline === 'urgent' && priorityFee > 0 ? priorityFee : 0) +
+      (domainType === 'new' && domainPricing ? domainPricing.totalFirstPayment : 0)
+    const subtotalAfterDiscount = subtotalBeforeDiscount - (calculatedDiscount || 0)
+    const taxAmount = taxPercentage > 0 ? Math.round(subtotalAfterDiscount * (taxPercentage / 100)) : 0
+    return subtotalAfterDiscount + taxAmount
+  }
+
+  const isHighValueOrder = () => {
+    return getTotalAmount() > highValueOrderLimit
+  }
+
+  // Handle high-value order contact form submission
+  const handleHighValueContact = async () => {
+    if (!name.trim() || !email.trim() || !phoneNumber.trim()) {
+      setError('Please fill in all required fields (Name, Email, Phone Number)')
+      return
+    }
+
+    if (!email.includes('@')) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    setContactFormSubmitting(true)
+    setError(null)
+
+    try {
+      const orderDetails = {
+        items: items.map(item => ({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          setupFee: item.setupFee,
+          billingPeriod: item.billingPeriod,
+        })),
+      }
+
+      const response = await fetch('/api/labs/web-services/high-value-contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phoneNumber: phoneNumber.trim(),
+          orderDetails,
+          totalAmount: getTotalAmount(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send contact request')
+      }
+
+      // Show success message in modal
+      setError(null)
+      setSuccessMessage('Thank you! Your request has been sent successfully. We will contact you shortly at ' + email.trim() + ' to discuss your order.')
+      setShowSuccessModal(true)
+      
+      // Optionally clear the cart
+      // clearCart()
+    } catch (error: any) {
+      console.error('Error sending contact request:', error)
+      setError(error.message || 'Failed to send contact request. Please try again or contact us directly at hello@lashdiary.co.ke')
+    } finally {
+      setContactFormSubmitting(false)
+    }
+  }
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
@@ -1612,6 +1692,21 @@ function LabsCheckoutContentInner() {
                 </div>
               )}
 
+              {/* High-Value Order Notice */}
+              {isHighValueOrder() && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-blue-900 font-medium mb-2">
+                    💼 High-Value Order Detected
+                  </p>
+                  <p className="text-sm text-blue-800 mb-3">
+                    Your order total is above {getDisplayPrice(highValueOrderLimit)}. For orders of this size, we'd like to provide you with personalized service. Please fill in your details below and we'll contact you directly to discuss your requirements and provide a customized quote.
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    We'll review your order and get back to you within 24 hours via email or phone call.
+                  </p>
+                </div>
+              )}
+
               {/* Personal Information Section */}
               <div className="space-y-3 mb-6">
                 <div>
@@ -1762,7 +1857,8 @@ function LabsCheckoutContentInner() {
                 )}
               </div>
 
-              {/* Website Type Selection */}
+              {/* Website Type Selection - Hidden for high-value orders */}
+              {!isHighValueOrder() && (
               <div className="mb-6">
                 <label className="block text-sm font-medium text-brown-dark mb-3">
                   Website Type <span className="text-red-500">*</span>
@@ -1802,9 +1898,10 @@ function LabsCheckoutContentInner() {
                   </label>
                 </div>
               </div>
+              )}
 
-              {/* Business Details Section */}
-              {enableBusinessInfo && (
+              {/* Business Details Section - Hidden for high-value orders */}
+              {!isHighValueOrder() && enableBusinessInfo && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-brown-dark mb-4">
                   {websiteType === 'business' ? 'Business Information' : 'Website Information'}
@@ -2542,17 +2639,30 @@ function LabsCheckoutContentInner() {
               </div>
               )}
 
-              <button
-                onClick={handleCheckout}
-                disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || (!fromGuide && checkMissingRequiredServices().length > 0) || !timeline || !consultationDate || !consultationTimeSlot || !consultationMeetingType}
-                className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processing ? 'Processing...' : checkoutData ? 'Proceed to Payment' : 'Calculate Payment'}
-              </button>
-              {!fromGuide && checkMissingRequiredServices().length > 0 && (
-                <p className="text-xs text-red-600 mt-2 text-center">
-                  Please add all required services to your cart before proceeding.
-                </p>
+              {/* Submit Button */}
+              {isHighValueOrder() ? (
+                <button
+                  onClick={handleHighValueContact}
+                  disabled={contactFormSubmitting || !name.trim() || !email.trim() || !phoneNumber.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {contactFormSubmitting ? 'Sending...' : 'Send Mail'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCheckout}
+                    disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || (!fromGuide && checkMissingRequiredServices().length > 0) || !timeline || !consultationDate || !consultationTimeSlot || !consultationMeetingType}
+                    className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing ? 'Processing...' : checkoutData ? 'Proceed to Payment' : 'Calculate Payment'}
+                  </button>
+                  {!fromGuide && checkMissingRequiredServices().length > 0 && (
+                    <p className="text-xs text-red-600 mt-2 text-center">
+                      Please add all required services to your cart before proceeding.
+                    </p>
+                  )}
+                </>
               )}
 
               <Link
@@ -2565,6 +2675,48 @@ function LabsCheckoutContentInner() {
           </div>
         </div>
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[999] bg-black/60 flex items-center justify-center px-4 py-4 animate-fade-in backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 relative">
+            <button
+              onClick={() => {
+                setShowSuccessModal(false)
+                clearCart()
+                router.push('/labs/custom-website-builds')
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Request Sent Successfully</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                {successMessage}
+              </p>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false)
+                  clearCart()
+                  router.push('/labs/custom-website-builds')
+                }}
+                className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+              >
+                Continue Shopping
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Paystack Inline Payment Modal */}
       {showPaymentModal && paymentData && (

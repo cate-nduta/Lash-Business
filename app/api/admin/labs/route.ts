@@ -57,6 +57,14 @@ export interface DiscountCode {
   usedCount?: number // Track how many times this code has been used
 }
 
+export interface CustomBuildsCTA {
+  title: string
+  description: string
+  buttonText: string
+  buttonUrl: string
+  enabled?: boolean
+}
+
 export interface LabsSettings {
   consultationFeeKES: number
   tiers: PricingTier[]
@@ -73,6 +81,7 @@ export interface LabsSettings {
   waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
   discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
+  customBuildsCTA?: CustomBuildsCTA // Custom Website Builds CTA section
   googleMeetRoom?: string // Google Meet room link (can be changed weekly)
   googleMeetRoomLastChanged?: string // ISO date string of when it was last changed
 }
@@ -218,6 +227,13 @@ const DEFAULT_SETTINGS: LabsSettings = {
   waitlistSectionEnabled: true, // Waitlist section enabled by default
   discountSectionEnabled: false, // Discount section disabled by default
   discountCodes: [], // No discount codes by default
+  customBuildsCTA: {
+    title: 'Build Your Perfect System',
+    description: 'Need specific features? Choose exactly what you need from our Custom Website Builds menu. Select only the services that matter to your business.',
+    buttonText: 'Explore Custom Builds',
+    buttonUrl: '/labs/custom-website-builds',
+    enabled: true,
+  },
   googleMeetRoom: '',
   googleMeetRoomLastChanged: new Date().toISOString(),
 }
@@ -247,6 +263,7 @@ export async function GET(request: NextRequest) {
       waitlistPageEnabled: settings.waitlistPageEnabled !== undefined ? settings.waitlistPageEnabled : false,
       discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
+      customBuildsCTA: settings.customBuildsCTA || DEFAULT_SETTINGS.customBuildsCTA,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }
@@ -385,6 +402,7 @@ export async function POST(request: NextRequest) {
       waitlistPageEnabled: body.waitlistPageEnabled !== undefined ? body.waitlistPageEnabled : (currentSettings.waitlistPageEnabled !== undefined ? currentSettings.waitlistPageEnabled : false),
       discountSectionEnabled: body.discountSectionEnabled !== undefined ? body.discountSectionEnabled : (currentSettings.discountSectionEnabled !== undefined ? currentSettings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled),
       discountCodes: Array.isArray(body.discountCodes) ? body.discountCodes : (Array.isArray(currentSettings.discountCodes) ? currentSettings.discountCodes : DEFAULT_SETTINGS.discountCodes),
+      customBuildsCTA: body.customBuildsCTA || currentSettings.customBuildsCTA || DEFAULT_SETTINGS.customBuildsCTA,
       googleMeetRoom: newMeetRoom,
       // Update last changed date if Meet room link was changed
       googleMeetRoomLastChanged: meetRoomChanged 

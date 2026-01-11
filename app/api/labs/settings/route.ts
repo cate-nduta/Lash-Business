@@ -38,6 +38,14 @@ export interface WhoThisIsForContent {
   items: string[]
 }
 
+export interface CustomBuildsCTA {
+  title: string
+  description: string
+  buttonText: string
+  buttonUrl: string
+  enabled?: boolean
+}
+
 export interface BudgetRange {
   id: string
   label: string
@@ -69,6 +77,7 @@ export interface LabsSettings {
   waitlistSectionEnabled?: boolean // Enable/disable Waitlist section on Labs page
   discountSectionEnabled?: boolean // Enable/disable Discount section on book-appointment page
   discountCodes?: DiscountCode[] // Discount codes for consultation bookings
+  customBuildsCTA?: CustomBuildsCTA // Custom Website Builds CTA section
   googleMeetRoom?: string
   googleMeetRoomLastChanged?: string
 }
@@ -176,6 +185,13 @@ const DEFAULT_SETTINGS: LabsSettings = {
   waitlistSectionEnabled: true, // Waitlist section enabled by default
   discountSectionEnabled: false, // Discount section disabled by default
   discountCodes: [], // No discount codes by default
+  customBuildsCTA: {
+    title: 'Build Your Perfect System',
+    description: 'Need specific features? Choose exactly what you need from our Custom Website Builds menu. Select only the services that matter to your business.',
+    buttonText: 'Explore Custom Builds',
+    buttonUrl: '/labs/custom-website-builds',
+    enabled: true,
+  },
   whatYouGet: {
     title: 'What You Get',
     subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -249,6 +265,7 @@ export async function GET(request: NextRequest) {
       waitlistSectionEnabled: settings.waitlistSectionEnabled !== undefined ? settings.waitlistSectionEnabled : DEFAULT_SETTINGS.waitlistSectionEnabled,
       discountSectionEnabled: settings.discountSectionEnabled !== undefined ? settings.discountSectionEnabled : DEFAULT_SETTINGS.discountSectionEnabled,
       discountCodes: Array.isArray(settings.discountCodes) ? settings.discountCodes : DEFAULT_SETTINGS.discountCodes,
+      customBuildsCTA: settings.customBuildsCTA || DEFAULT_SETTINGS.customBuildsCTA,
       googleMeetRoom: settings.googleMeetRoom || '',
       googleMeetRoomLastChanged: settings.googleMeetRoomLastChanged || new Date().toISOString(),
     }

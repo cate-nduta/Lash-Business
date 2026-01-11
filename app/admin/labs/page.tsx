@@ -197,6 +197,13 @@ export default function AdminLabs() {
         waitlistSectionEnabled: data.waitlistSectionEnabled !== undefined ? data.waitlistSectionEnabled : true,
         discountSectionEnabled: data.discountSectionEnabled !== undefined ? data.discountSectionEnabled : false,
         discountCodes: Array.isArray(data.discountCodes) ? data.discountCodes : [],
+        customBuildsCTA: data.customBuildsCTA || {
+          title: 'Build Your Perfect System',
+          description: 'Need specific features? Choose exactly what you need from our Custom Website Builds menu. Select only the services that matter to your business.',
+          buttonText: 'Explore Custom Builds',
+          buttonUrl: '/labs/custom-website-builds',
+          enabled: true,
+        },
         whatYouGet: data.whatYouGet || {
           title: 'What You Get',
           subtitle: 'Your tier determines the features and support you receive. Choose the system that matches your business needs.',
@@ -1406,6 +1413,130 @@ export default function AdminLabs() {
                 placeholder="Struggle to keep track of client bookings and constantly worry about scheduling mistakes.&#10;Get frustrated trying to chase deposits or payments from clients.&#10;..."
               />
               <p className="text-xs text-gray-500 mt-1">Enter each item on a new line</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Website Builds CTA Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-brown-dark">Custom Website Builds CTA Section</h3>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-sm font-semibold text-gray-700">
+                Enable Custom Builds CTA Section:
+              </span>
+              <input
+                type="checkbox"
+                id="customBuildsCTAEnabled"
+                checked={settings.customBuildsCTA?.enabled !== false}
+                onChange={(e) => setSettings((prev) => ({
+                  ...prev,
+                  customBuildsCTA: {
+                    title: prev.customBuildsCTA?.title || 'Build Your Perfect System',
+                    description: prev.customBuildsCTA?.description || '',
+                    buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
+                    buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    enabled: e.target.checked,
+                  },
+                }))}
+                className="w-5 h-5 text-brown-dark border-brown-light rounded focus:ring-brown"
+              />
+            </label>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="customBuildsCTATitle" className="block text-sm font-semibold text-gray-700 mb-2">
+                Title:
+              </label>
+              <input
+                type="text"
+                id="customBuildsCTATitle"
+                value={settings.customBuildsCTA?.title || ''}
+                onChange={(e) => setSettings((prev) => ({
+                  ...prev,
+                  customBuildsCTA: {
+                    title: e.target.value,
+                    description: prev.customBuildsCTA?.description || '',
+                    buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
+                    buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    enabled: prev.customBuildsCTA?.enabled !== false,
+                  },
+                }))}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                placeholder="Build Your Perfect System"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="customBuildsCTADescription" className="block text-sm font-semibold text-gray-700 mb-2">
+                Description:
+              </label>
+              <textarea
+                id="customBuildsCTADescription"
+                value={settings.customBuildsCTA?.description || ''}
+                onChange={(e) => setSettings((prev) => ({
+                  ...prev,
+                  customBuildsCTA: {
+                    title: prev.customBuildsCTA?.title || 'Build Your Perfect System',
+                    description: e.target.value,
+                    buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
+                    buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    enabled: prev.customBuildsCTA?.enabled !== false,
+                  },
+                }))}
+                rows={3}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                placeholder="Need specific features? Choose exactly what you need from our Custom Website Builds menu. Select only the services that matter to your business."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="customBuildsCTAButtonText" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Button Text:
+                </label>
+                <input
+                  type="text"
+                  id="customBuildsCTAButtonText"
+                  value={settings.customBuildsCTA?.buttonText || ''}
+                  onChange={(e) => setSettings((prev) => ({
+                    ...prev,
+                    customBuildsCTA: {
+                      title: prev.customBuildsCTA?.title || 'Build Your Perfect System',
+                      description: prev.customBuildsCTA?.description || '',
+                      buttonText: e.target.value,
+                      buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                      enabled: prev.customBuildsCTA?.enabled !== false,
+                    },
+                  }))}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                  placeholder="Explore Custom Builds"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="customBuildsCTAButtonUrl" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Button URL:
+                </label>
+                <input
+                  type="text"
+                  id="customBuildsCTAButtonUrl"
+                  value={settings.customBuildsCTA?.buttonUrl || ''}
+                  onChange={(e) => setSettings((prev) => ({
+                    ...prev,
+                    customBuildsCTA: {
+                      title: prev.customBuildsCTA?.title || 'Build Your Perfect System',
+                      description: prev.customBuildsCTA?.description || '',
+                      buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
+                      buttonUrl: e.target.value,
+                      enabled: prev.customBuildsCTA?.enabled !== false,
+                    },
+                  }))}
+                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                  placeholder="/labs/custom-website-builds"
+                />
+              </div>
             </div>
           </div>
         </div>
