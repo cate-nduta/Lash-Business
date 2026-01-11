@@ -29,7 +29,7 @@ interface Order {
     productName: string
     quantity: number
     price: number
-    billingPeriod?: 'one-time' | 'yearly'
+    billingPeriod?: 'one-time' | 'yearly' | 'monthly'
     setupFee?: number
   }>
   paymentStatus: 'pending' | 'partial' | 'completed'

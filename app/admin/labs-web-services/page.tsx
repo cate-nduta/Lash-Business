@@ -15,10 +15,10 @@ interface WebService {
   name: string
   description: string
   price: number
-  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'other'
+  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'marketing' | 'other'
   imageUrl?: string
   isRequired?: boolean
-  billingPeriod?: 'one-time' | 'yearly'
+  billingPeriod?: 'one-time' | 'yearly' | 'monthly'
   setupFee?: number // One-time setup fee for annually billed services
   discount?: number
   discountAmount?: number
@@ -49,6 +49,7 @@ interface WebServicesData {
     partialPaymentThreshold: number
     partialPaymentPercentage: number
   }
+  taxPercentage?: number // Tax/VAT percentage (e.g., 16 for 16% VAT)
   keyFeatures?: {
     timelineText?: string
     deliveryText?: string
@@ -83,6 +84,7 @@ export default function AdminLabsWebServices() {
       partialPaymentThreshold: 50000,
       partialPaymentPercentage: 80,
     },
+    taxPercentage: 0,
     keyFeatures: {
       timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
       deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
@@ -181,6 +183,7 @@ export default function AdminLabsWebServices() {
             partialPaymentThreshold: loadedData.checkoutRules?.partialPaymentThreshold || 50000,
             partialPaymentPercentage: loadedData.checkoutRules?.partialPaymentPercentage || 80,
           },
+          taxPercentage: typeof loadedData.taxPercentage === 'number' ? loadedData.taxPercentage : 0,
           keyFeatures: loadedData.keyFeatures || {
             timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
             deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
@@ -342,7 +345,7 @@ export default function AdminLabsWebServices() {
       imageUrl: newService.imageUrl,
       isRequired: newService.isRequired || false,
       billingPeriod: newService.billingPeriod || 'one-time',
-      setupFee: newService.billingPeriod === 'yearly' ? (newService.setupFee || 0) : undefined,
+      setupFee: newService.billingPeriod === 'yearly' ? (newService.setupFee || 0) : undefined, // Only yearly has setup fee
       discount: newService.discount,
       discountAmount: newService.discountAmount,
       requiredServices: newService.requiredServices || [],
@@ -481,6 +484,18 @@ export default function AdminLabsWebServices() {
               >
                 👥 Yearly Subscribers
               </Link>
+              <Link
+                href="/admin/labs-web-services/monthly-subscribers"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium"
+              >
+                📅 Monthly Subscribers
+              </Link>
+              <Link
+                href="/admin/labs-web-services/guide"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium"
+              >
+                📖 Guide Scenarios
+              </Link>
             </div>
           </div>
 
@@ -515,6 +530,7 @@ export default function AdminLabsWebServices() {
                   <option value="feature">Feature</option>
                   <option value="email">Email</option>
                   <option value="design">Design</option>
+                  <option value="marketing">Marketing</option>
                   <option value="other">Other</option>
                 </select>
               </div>
@@ -524,19 +540,20 @@ export default function AdminLabsWebServices() {
                 </label>
                 <select
                   value={newService.billingPeriod || 'one-time'}
-                  onChange={(e) => setNewService({ ...newService, billingPeriod: e.target.value as 'one-time' | 'yearly' })}
+                  onChange={(e) => setNewService({ ...newService, billingPeriod: e.target.value as 'one-time' | 'yearly' | 'monthly' })}
                   className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
                 >
                   <option value="one-time">One-Time Payment</option>
                   <option value="yearly">Yearly (Annual Subscription)</option>
+                  <option value="monthly">Monthly (Monthly Maintenance)</option>
                 </select>
                 <p className="text-xs text-brown-dark/60 mt-1">
-                  Choose whether this service is a one-time payment or recurring yearly subscription
+                  Choose whether this service is a one-time payment, recurring yearly subscription, or monthly maintenance
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-brown-dark mb-2">
-                  {newService.billingPeriod === 'yearly' ? 'Annual Subscription Price (KES) *' : 'Price (KES) *'}
+                  {newService.billingPeriod === 'yearly' ? 'Annual Subscription Price (KES) *' : newService.billingPeriod === 'monthly' ? 'Monthly Subscription Price (KES) *' : 'Price (KES) *'}
                 </label>
                 <input
                   type="number"
@@ -549,6 +566,11 @@ export default function AdminLabsWebServices() {
                 {newService.billingPeriod === 'yearly' && (newService.price || 0) > 0 && (
                   <p className="text-xs text-brown-dark/60 mt-1">
                     Monthly equivalent: KES {Math.round((newService.price || 0) / 12).toLocaleString()}/month
+                  </p>
+                )}
+                {newService.billingPeriod === 'monthly' && (newService.price || 0) > 0 && (
+                  <p className="text-xs text-brown-dark/60 mt-1">
+                    Recurring monthly charge: KES {(newService.price || 0).toLocaleString()}/month
                   </p>
                 )}
               </div>
@@ -1321,6 +1343,33 @@ export default function AdminLabsWebServices() {
             </div>
           </section>
 
+          {/* Tax/VAT Settings */}
+          <section className="border border-brown-light/50 rounded-2xl shadow-soft bg-white/70 p-6 space-y-6">
+            <h2 className="text-2xl font-semibold text-brown-dark">Tax/VAT Settings</h2>
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                Tax/VAT Percentage (%)
+              </label>
+              <p className="text-xs text-brown-dark/60 mb-2">
+                Tax percentage to apply to the subtotal (e.g., 16 for 16% VAT). Set to 0 to disable tax.
+              </p>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={data.taxPercentage || 0}
+                onChange={(e) =>
+                  setData((prev) => ({
+                    ...prev,
+                    taxPercentage: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)),
+                  }))
+                }
+                className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
+              />
+            </div>
+          </section>
+
           {/* Discount Code Management */}
           <section className="border border-brown-light/50 rounded-2xl shadow-soft bg-white/70 p-6 space-y-6">
             <h2 className="text-2xl font-semibold text-brown-dark">Discount Code Management</h2>
@@ -1839,17 +1888,18 @@ export default function AdminLabsWebServices() {
                               </label>
                               <select
                                 value={service.billingPeriod || 'one-time'}
-                                onChange={(e) => handleServiceChange(service.id, 'billingPeriod', e.target.value)}
+                                onChange={(e) => handleServiceChange(service.id, 'billingPeriod', e.target.value as 'one-time' | 'yearly' | 'monthly')}
                                 className="w-full rounded-lg border-2 border-brown-light px-2 py-1 text-xs text-brown-dark focus:border-brown-dark focus:outline-none"
                               >
                                 <option value="one-time">One-time</option>
                                 <option value="yearly">Yearly</option>
+                                <option value="monthly">Monthly</option>
                               </select>
                             </div>
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-brown-dark/60 mb-1">
-                              {service.billingPeriod === 'yearly' ? 'Annual Price (KES)' : 'Price (KES)'}
+                              {service.billingPeriod === 'yearly' ? 'Annual Price (KES)' : service.billingPeriod === 'monthly' ? 'Monthly Price (KES)' : 'Price (KES)'}
                             </label>
                             <input
                               type="number"
@@ -2015,11 +2065,12 @@ export default function AdminLabsWebServices() {
                   </label>
                   <select
                     value={editServiceData.billingPeriod || 'one-time'}
-                    onChange={(e) => setEditServiceData({ ...editServiceData, billingPeriod: e.target.value as any })}
+                    onChange={(e) => setEditServiceData({ ...editServiceData, billingPeriod: e.target.value as 'one-time' | 'yearly' | 'monthly' })}
                     className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
                   >
                     <option value="one-time">One-Time Payment</option>
                     <option value="yearly">Yearly (Annual Subscription)</option>
+                    <option value="monthly">Monthly (Monthly Maintenance)</option>
                   </select>
                 </div>
                 <div>
@@ -2364,11 +2415,12 @@ export default function AdminLabsWebServices() {
                   </label>
                   <select
                     value={editServiceData.billingPeriod || 'one-time'}
-                    onChange={(e) => setEditServiceData({ ...editServiceData, billingPeriod: e.target.value as any })}
+                    onChange={(e) => setEditServiceData({ ...editServiceData, billingPeriod: e.target.value as 'one-time' | 'yearly' | 'monthly' })}
                     className="w-full rounded-xl border-2 border-brown-light bg-white px-4 py-3 text-sm text-brown-dark focus:border-brown-dark focus:outline-none"
                   >
                     <option value="one-time">One-Time Payment</option>
                     <option value="yearly">Yearly (Annual Subscription)</option>
+                    <option value="monthly">Monthly (Monthly Maintenance)</option>
                   </select>
                 </div>
                 <div>

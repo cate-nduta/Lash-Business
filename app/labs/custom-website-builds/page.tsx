@@ -21,10 +21,10 @@ interface WebService {
   name: string
   description: string
   price: number
-  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'other'
+  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'marketing' | 'other'
   imageUrl?: string
   isRequired?: boolean
-  billingPeriod?: 'one-time' | 'yearly'
+  billingPeriod?: 'one-time' | 'yearly' | 'monthly'
   setupFee?: number // One-time setup fee for annually billed services
   discount?: number
   discountAmount?: number
@@ -212,6 +212,7 @@ function BuildOnYourOwnContent() {
   }
 
   const isInCart = (serviceId: string) => {
+    if (!mounted) return false
     return items.some((item) => item.productId === serviceId)
   }
 
@@ -280,10 +281,17 @@ function BuildOnYourOwnContent() {
                       <svg className="w-5 h-5 text-brown-dark mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <p 
-                        className="text-brown-dark/80 text-sm md:text-base"
-                        dangerouslySetInnerHTML={{ __html: webServicesData?.keyFeatures?.learningText || '' }}
-                      />
+                      <div className="text-brown-dark/80 text-sm md:text-base">
+                        <span dangerouslySetInnerHTML={{ __html: webServicesData?.keyFeatures?.learningText || '' }} />
+                        {' '}
+                        <Link 
+                          href="/labs/custom-website-builds/guide"
+                          className="text-brown-dark underline font-semibold hover:text-brown"
+                        >
+                          View our guide
+                        </Link>
+                        {' '}to help you choose the right services.
+                      </div>
                     </div>
                   )}
                 </div>
@@ -468,6 +476,10 @@ function BuildOnYourOwnContent() {
                         <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
                           Billed Annually
                         </span>
+                      ) : service.billingPeriod === 'monthly' ? (
+                        <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                          Monthly Maintenance
+                        </span>
                       ) : (
                         <span className="inline-block px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
                           One-Time Payment
@@ -528,6 +540,11 @@ function BuildOnYourOwnContent() {
                               per year ({getDisplayPrice(Math.round(finalPrice / 12))}/month)
                             </div>
                           )}
+                          {service.billingPeriod === 'monthly' && (
+                            <div className="text-xs text-brown-dark/70 mt-1 font-medium">
+                              per month (recurring)
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -538,8 +555,10 @@ function BuildOnYourOwnContent() {
                   {service.requiredServices && service.requiredServices.length > 0 && (
                     <div className="px-6 pb-3">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation()
+                          e.preventDefault()
                           setExpandedRecommendedServices(prev => {
                             const newSet = new Set(prev)
                             if (newSet.has(service.id)) {
@@ -585,8 +604,41 @@ function BuildOnYourOwnContent() {
                       </button>
                       
                       {expandedRecommendedServices.has(service.id) && (
-                        <div className="mt-2 bg-brown-light/20 border border-brown-light/40 rounded-lg p-3 space-y-2">
-                          <p className="text-xs text-brown-dark mb-2">
+                        <div className="mt-2 bg-brown-light/20 border border-brown-light/40 rounded-lg p-3 space-y-2 relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                              e.nativeEvent.stopImmediatePropagation()
+                              setExpandedRecommendedServices(prev => {
+                                const newSet = new Set(prev)
+                                newSet.delete(service.id)
+                                return newSet
+                              })
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                            }}
+                            className="absolute top-2 right-2 text-brown-dark/70 hover:text-brown-dark transition-colors p-1 hover:bg-brown-light/30 rounded z-10"
+                            aria-label="Close"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                          <p className="text-xs text-brown-dark mb-2 pr-6">
                             <strong>{service.name}</strong> cannot stand alone. Checkout requires all recommended services.
                           </p>
                           {service.requiredServices.map((requiredServiceId) => {
@@ -663,12 +715,19 @@ function BuildOnYourOwnContent() {
                         View Details
                       </Link>
                       <button
+                        type="button"
                         onClick={(e) => {
+                          e.preventDefault()
                           e.stopPropagation()
-                          if (isCapacityReached) {
+                          e.nativeEvent.stopImmediatePropagation()
+                          if (isCapacityReached || inCart) {
                             return
                           }
                           handleAddToCart(service)
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
                         }}
                         disabled={inCart || isCapacityReached}
                         className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all duration-300 ${

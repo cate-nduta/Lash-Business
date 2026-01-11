@@ -8,10 +8,10 @@ interface WebService {
   name: string
   description: string
   price: number
-  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'other'
+  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'marketing' | 'other'
   imageUrl?: string // Product image URL
   isRequired?: boolean // For auto-add logic
-  billingPeriod?: 'one-time' | 'yearly' // Billing period: one-time payment or yearly subscription
+  billingPeriod?: 'one-time' | 'yearly' | 'monthly' // Billing period: one-time payment, yearly subscription, or monthly subscription
   setupFee?: number // One-time setup fee for annually billed services
   createdAt?: string
   updatedAt?: string
@@ -47,6 +47,7 @@ interface WebServicesData {
     partialPaymentThreshold: number // Above this, pay 80% at checkout
     partialPaymentPercentage: number // Default 80
   }
+  taxPercentage?: number // VAT/Tax percentage (e.g., 16 for 16% VAT)
   keyFeatures?: {
     timelineText?: string // Timeline text: "Your website will be designed and built within 21 days"
     deliveryText?: string // Delivery text: "You'll receive your live domain, admin login details, and a scheduled online walkthrough"
@@ -78,6 +79,7 @@ const DEFAULT_DATA: WebServicesData = {
     partialPaymentThreshold: 50000,
     partialPaymentPercentage: 80,
   },
+  taxPercentage: 0, // Default 0% (no tax), can be set to 16 for 16% VAT, etc.
   keyFeatures: {
     timelineText: 'Your website will be designed and built within <strong>21 days</strong>',
     deliveryText: "You'll receive your <strong>live domain</strong>, <strong>admin login details</strong>, and a <strong>scheduled online walkthrough</strong>",
@@ -194,6 +196,9 @@ export async function POST(request: NextRequest) {
           ? Math.max(0, Math.min(100, body.checkoutRules.partialPaymentPercentage))
           : DEFAULT_DATA.checkoutRules.partialPaymentPercentage,
       },
+      taxPercentage: typeof body.taxPercentage === 'number'
+        ? Math.max(0, Math.min(100, body.taxPercentage)) // Clamp between 0 and 100
+        : (typeof body.taxPercentage === 'undefined' ? DEFAULT_DATA.taxPercentage : 0),
       keyFeatures: body.keyFeatures && typeof body.keyFeatures === 'object'
         ? {
             timelineText: typeof body.keyFeatures?.timelineText === 'string'

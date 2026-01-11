@@ -8,7 +8,7 @@ export interface LabsCartItem {
   price: number
   quantity: number
   category?: string
-  billingPeriod?: 'one-time' | 'yearly'
+  billingPeriod?: 'one-time' | 'yearly' | 'monthly'
   setupFee?: number // One-time setup fee for annually billed services
 }
 

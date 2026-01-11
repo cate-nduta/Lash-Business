@@ -9,7 +9,7 @@ interface WebService {
   name: string
   description: string
   price: number
-  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'other'
+  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'marketing' | 'other'
   imageUrl?: string
   isRequired?: boolean
   discount?: number
@@ -22,7 +22,7 @@ interface CartItem {
   name: string
   price: number
   quantity: number
-  billingPeriod?: 'one-time' | 'yearly'
+  billingPeriod?: 'one-time' | 'yearly' | 'monthly'
   setupFee?: number // One-time setup fee for annually billed services
 }
 
@@ -47,6 +47,7 @@ interface WebServicesData {
     partialPaymentThreshold: number
     partialPaymentPercentage: number
   }
+  taxPercentage?: number // VAT/Tax percentage (e.g., 16 for 16% VAT)
 }
 
 interface Order {
@@ -56,13 +57,15 @@ interface Order {
     productName: string
     quantity: number
     price: number
-    billingPeriod?: 'one-time' | 'yearly'
+    billingPeriod?: 'one-time' | 'yearly' | 'monthly'
     setupFee?: number
   }>
   subtotal: number
   setupFeesTotal: number // Total of all setup fees
   referralDiscount?: number
   appliedReferralCode?: string
+  taxAmount?: number // Tax/VAT amount
+  taxPercentage?: number // Tax/VAT percentage
   total: number
   initialPayment: number
   remainingPayment: number
@@ -539,19 +542,24 @@ export async function POST(request: NextRequest) {
     // Calculate final subtotal after discount
     const subtotal = originalSubtotal - referralDiscount
 
-    // Apply payment rules
+    // Calculate tax/VAT if tax percentage is set
+    const taxPercentage = webServicesData.taxPercentage || 0
+    const taxAmount = taxPercentage > 0 ? Math.round(subtotal * (taxPercentage / 100)) : 0
+    const total = subtotal + taxAmount
+
+    // Apply payment rules to the total (including tax)
     const { checkoutRules } = webServicesData
     let initialPayment: number
     let remainingPayment: number
 
-    if (subtotal < checkoutRules.fullPaymentThreshold) {
+    if (total < checkoutRules.fullPaymentThreshold) {
       // Pay full amount
-      initialPayment = subtotal
+      initialPayment = total
       remainingPayment = 0
     } else {
       // Pay partial (80% or configured percentage)
-      initialPayment = Math.round(subtotal * (checkoutRules.partialPaymentPercentage / 100))
-      remainingPayment = subtotal - initialPayment
+      initialPayment = Math.round(total * (checkoutRules.partialPaymentPercentage / 100))
+      remainingPayment = total - initialPayment
     }
 
     // Create order
@@ -575,7 +583,9 @@ export async function POST(request: NextRequest) {
       } : undefined,
       referralDiscount: referralDiscount > 0 ? referralDiscount : undefined,
       appliedReferralCode: appliedReferralCode || undefined,
-      total: subtotal, // Final total after discount
+      taxAmount: taxAmount > 0 ? taxAmount : undefined,
+      taxPercentage: taxPercentage > 0 ? taxPercentage : undefined,
+      total, // Final total after discount and tax
       initialPayment,
       remainingPayment,
       paymentStatus: remainingPayment > 0 ? 'partial' : 'pending',
@@ -628,7 +638,9 @@ export async function POST(request: NextRequest) {
       } : undefined,
       referralDiscount: referralDiscount > 0 ? referralDiscount : undefined,
       appliedReferralCode: appliedReferralCode || undefined,
-      total: subtotal, // Final total after discount
+      taxAmount: taxAmount > 0 ? taxAmount : undefined,
+      taxPercentage: taxPercentage > 0 ? taxPercentage : undefined,
+      total, // Final total after discount and tax
       initialPayment,
       remainingPayment,
       paymentStatus: order.paymentStatus,

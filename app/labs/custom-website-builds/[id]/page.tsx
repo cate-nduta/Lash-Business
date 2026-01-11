@@ -22,7 +22,7 @@ interface WebService {
   name: string
   description: string
   price: number
-  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'other'
+  category: 'domain' | 'hosting' | 'page' | 'feature' | 'email' | 'design' | 'marketing' | 'other'
   imageUrl?: string
   isRequired?: boolean
   billingPeriod?: 'one-time' | 'yearly'

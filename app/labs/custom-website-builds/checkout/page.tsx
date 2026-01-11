@@ -23,7 +23,7 @@ interface CheckoutData {
     name: string
     price: number
     quantity: number
-    billingPeriod?: 'one-time' | 'yearly'
+    billingPeriod?: 'one-time' | 'yearly' | 'monthly'
     setupFee?: number
   }>
   subtotal: number
@@ -35,6 +35,8 @@ interface CheckoutData {
   }
   referralDiscount?: number
   appliedReferralCode?: string
+  taxAmount?: number // Tax/VAT amount
+  taxPercentage?: number // Tax/VAT percentage
   total: number
   initialPayment: number
   remainingPayment: number
@@ -48,6 +50,8 @@ function LabsCheckoutContentInner() {
   const { items, clearCart, restoreCart, getTotalPrice, addToCart, removeFromCart, updateQuantity } = useLabsCart()
   const { currency, formatCurrency } = useCurrency()
   const [orderRestored, setOrderRestored] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [fromGuide, setFromGuide] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -70,6 +74,23 @@ function LabsCheckoutContentInner() {
   const [enableBusinessInfo, setEnableBusinessInfo] = useState<boolean>(true)
   const [allServices, setAllServices] = useState<any[]>([])
   const [referralDiscountPercentage, setReferralDiscountPercentage] = useState<number>(10) // Default 10%
+  // Initialize tax percentage from localStorage for instant display, then update from API
+  const [taxPercentage, setTaxPercentage] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('labs-tax-percentage')
+        if (cached) {
+          const parsed = parseFloat(cached)
+          if (!isNaN(parsed) && parsed >= 0) {
+            return parsed
+          }
+        }
+      } catch (error) {
+        console.error('Error reading cached tax percentage:', error)
+      }
+    }
+    return 0
+  })
   const [domainPricing, setDomainPricing] = useState<{
     setupFee: number
     annualPrice: number
@@ -136,7 +157,7 @@ function LabsCheckoutContentInner() {
   // Timeline/deadline
   const [timeline, setTimeline] = useState<'10' | '21' | 'urgent' | ''>('')
   const [priorityFee, setPriorityFee] = useState<number>(2000) // Default priority fee
-  
+
   // Calendar/Time slot selection for consultation call
   const [consultationDate, setConsultationDate] = useState<string>('')
   const [consultationTimeSlot, setConsultationTimeSlot] = useState<string>('')
@@ -153,6 +174,31 @@ function LabsCheckoutContentInner() {
     timeSlots: Array<{ hour: number; minute: number; label: string }>
   } | null>(null)
 
+  // Set mounted state after component mounts to prevent hydration errors
+  useEffect(() => {
+    setMounted(true)
+    // Check if user came from a guide page - check both URL parameter and localStorage
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const fromGuideParam = urlParams.get('fromGuide') === 'true'
+      const fromGuideStorage = localStorage.getItem('labs-checkout-from-guide') === 'true'
+      const fromGuideFlag = fromGuideParam || fromGuideStorage
+      
+      setFromGuide(fromGuideFlag)
+      
+      // Clear the flag and URL parameter after reading
+      if (fromGuideFlag) {
+        localStorage.removeItem('labs-checkout-from-guide')
+        // Remove fromGuide parameter from URL without page reload
+        if (fromGuideParam) {
+          const newUrl = window.location.pathname + (window.location.search.replace(/[?&]fromGuide=true/, '').replace(/^\?/, '') || '')
+          window.history.replaceState({}, '', newUrl)
+        }
+      }
+
+    }
+  }, [])
+
   // Discount amount is now calculated by the API during validation
   // No need to recalculate here - it's set in the validation handler
   useEffect(() => {
@@ -162,7 +208,17 @@ function LabsCheckoutContentInner() {
   }, [codeValid, getTotalPrice, timeline, priorityFee, domainType, domainPricing])
 
   // Load availability data and calendar dates for consultation call scheduling
+  // Defer this to load after critical data (settings, tax) to improve initial page load
   useEffect(() => {
+    // Small delay to let critical data load first
+    const delayTimer = setTimeout(() => {
+      loadAvailabilityData()
+    }, 200)
+
+    return () => clearTimeout(delayTimer)
+  }, [])
+
+  const loadAvailabilityData = () => {
     let isMounted = true
     let controller: AbortController | null = null
     let availabilityTimeout: ReturnType<typeof setTimeout> | null = null
@@ -176,10 +232,11 @@ function LabsCheckoutContentInner() {
         controller = new AbortController()
         
         // Safe abort with reason to prevent "aborted without reason" error
+        // Reduced timeout to 5 seconds for faster loading
         availabilityTimeout = setTimeout(() => {
           if (controller && !controller.signal.aborted) {
             try {
-              controller.abort('Request timeout after 8 seconds')
+              controller.abort('Request timeout after 5 seconds')
             } catch (e: any) {
               // Silently handle abort errors - they're expected
               const isAbortError = 
@@ -191,7 +248,7 @@ function LabsCheckoutContentInner() {
               }
             }
           }
-        }, 8000)
+        }, 5000)
         
         const availabilityOptions = {
           cache: 'no-store' as RequestCache,
@@ -292,6 +349,7 @@ function LabsCheckoutContentInner() {
 
     loadAvailability()
 
+    // Return cleanup function
     return () => {
       isMounted = false
       if (controller && !controller.signal.aborted) {
@@ -311,7 +369,7 @@ function LabsCheckoutContentInner() {
       if (availabilityTimeout) clearTimeout(availabilityTimeout)
       if (calendarTimeout) clearTimeout(calendarTimeout)
     }
-  }, [])
+  }
 
   // Filter and format time slots when consultation date is selected
   useEffect(() => {
@@ -459,31 +517,69 @@ function LabsCheckoutContentInner() {
     }
   }, [consultationTimeSlot])
 
+  // Load settings and exchange rates in parallel for faster loading
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch('/api/labs/web-services', { cache: 'no-store' })
-        if (response.ok) {
-          const data = await response.json()
+        // Load both in parallel, but prioritize settings for tax display
+        const settingsPromise = fetch('/api/labs/web-services', { 
+          cache: 'no-store',
+          next: { revalidate: 0 }
+        })
+        const exchangePromise = fetch('/api/exchange-rates', { 
+          cache: 'no-store',
+          next: { revalidate: 0 }
+        })
+
+        // Process settings first (for tax percentage)
+        const settingsRes = await settingsPromise
+        if (settingsRes.ok) {
+          const data = await settingsRes.json()
           setMinimumCartValue(data.cartRules?.minimumCartValue || 20000)
           setEnableBusinessInfo(data.enableBusinessInfo !== false)
           setPriorityFee(data.priorityFee || 2000)
           setReferralDiscountPercentage(data.referralDiscountPercentage || 10)
+          const newTaxPercentage = data.taxPercentage || 0
+          setTaxPercentage(newTaxPercentage)
+          // Cache tax percentage for instant display on next load
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('labs-tax-percentage', String(newTaxPercentage))
+            } catch (error) {
+              console.error('Error caching tax percentage:', error)
+            }
+          }
           setAllServices(data.services || [])
           if (data.domainPricing) {
             setDomainPricing(data.domainPricing)
           } else {
-            // Set default domain pricing
             setDomainPricing({
               setupFee: 4000,
               annualPrice: 2000,
               totalFirstPayment: 6000,
             })
           }
+        } else {
+          // Set defaults on error
+          setDomainPricing({
+            setupFee: 4000,
+            annualPrice: 2000,
+            totalFirstPayment: 6000,
+          })
         }
+
+        // Process exchange rates (can load in background)
+        exchangePromise.then(async (exchangeRes) => {
+          if (exchangeRes.ok) {
+            const data = await exchangeRes.json()
+            setExchangeRates(data)
+          }
+        }).catch(() => {
+          // Silently fail for exchange rates - not critical
+        })
       } catch (error) {
-        console.error('Error loading settings:', error)
-        // Set default domain pricing on error
+        console.error('Error loading data:', error)
+        // Set defaults on error
         setDomainPricing({
           setupFee: 4000,
           annualPrice: 2000,
@@ -491,22 +587,7 @@ function LabsCheckoutContentInner() {
         })
       }
     }
-    loadSettings()
-  }, [])
-
-  useEffect(() => {
-    const loadExchangeRates = async () => {
-      try {
-        const response = await fetch('/api/exchange-rates', { cache: 'no-store' })
-        if (response.ok) {
-          const data = await response.json()
-          setExchangeRates(data)
-        }
-      } catch (error) {
-        console.error('Error loading exchange rates:', error)
-      }
-    }
-    loadExchangeRates()
+    loadData()
   }, [])
 
   // Restore order from orderId in URL
@@ -526,18 +607,19 @@ function LabsCheckoutContentInner() {
               // Restore cart items
               restoreCart(order.items || [])
               
-              // Restore form fields
+              // Restore form fields (only restore basic contact info, not business/domain/logo fields)
               if (order.name) setName(order.name)
               if (order.email) setEmail(order.email)
               if (order.phoneNumber) setPhoneNumber(order.phoneNumber)
-              if (order.businessName) setBusinessName(order.businessName)
-              if (order.domainType) setDomainType(order.domainType)
-              if (order.domainExtension) setDomainExtension(order.domainExtension)
-              if (order.domainName) setDomainName(order.domainName)
-              if (order.existingDomain) setExistingDomain(order.existingDomain)
-              if (order.logoType) setLogoType(order.logoType)
-              if (order.logoUrl) setLogoUrl(order.logoUrl)
-              if (order.logoText) setLogoText(order.logoText)
+              // Don't auto-fill business/domain/logo fields - user must enter manually
+              // if (order.businessName) setBusinessName(order.businessName)
+              // if (order.domainType) setDomainType(order.domainType)
+              // if (order.domainExtension) setDomainExtension(order.domainExtension)
+              // if (order.domainName) setDomainName(order.domainName)
+              // if (order.existingDomain) setExistingDomain(order.existingDomain)
+              // if (order.logoType) setLogoType(order.logoType)
+              // if (order.logoUrl) setLogoUrl(order.logoUrl)
+              // if (order.logoText) setLogoText(order.logoText)
               if (order.primaryColor) setPrimaryColor(order.primaryColor)
               if (order.secondaryColor) setSecondaryColor(order.secondaryColor)
               if (order.businessDescription) setBusinessDescription(order.businessDescription)
@@ -563,14 +645,9 @@ function LabsCheckoutContentInner() {
     }
   }, [searchParams, orderRestored, restoreCart])
 
-  // Auto-fill logo text with business name (only if empty)
-  useEffect(() => {
-    if (logoType === 'text' && businessName && !logoText.trim()) {
-      setLogoText(businessName)
-    }
-  }, [businessName, logoType]) // Don't include logoText in deps to avoid overwriting user input
+  // No auto-fill - user must enter all fields manually
 
-  // Update logo design suggestion when cart changes and auto-add logo design service
+  // Update logo design suggestion when cart changes and auto-add/remove logo design service
   useEffect(() => {
     if (logoType === 'custom') {
       const hasLogoDesign = items.some(item => 
@@ -596,8 +673,18 @@ function LabsCheckoutContentInner() {
           })
         }
       }
+    } else if (logoType === 'upload' || logoType === 'text') {
+      // Remove Logo Design service from cart when Text Logo or Own Logo is selected
+      const logoDesignItem = items.find(item => 
+        item.name.toLowerCase().includes('logo') && 
+        item.name.toLowerCase().includes('design')
+      )
+      if (logoDesignItem) {
+        removeFromCart(logoDesignItem.productId)
+      }
+      setShowLogoDesignSuggestion(false)
     }
-  }, [logoType, items, allServices, addToCart])
+  }, [logoType, items, allServices, addToCart, removeFromCart])
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {
@@ -646,11 +733,12 @@ function LabsCheckoutContentInner() {
   }
 
   // Helper function to check for missing required services
-  const checkMissingRequiredServices = (): string[] => {
+  const checkMissingRequiredServices = (): Array<{ id: string; name: string; price: number; setupFee?: number; category: string; billingPeriod?: 'one-time' | 'yearly' | 'monthly' }> => {
     if (items.length === 0 || allServices.length === 0) return []
     
     const cartItemIds = items.map(item => item.productId)
-    const missingRequiredServices: string[] = []
+    const missingRequiredServices: Array<{ id: string; name: string; price: number; setupFee?: number; category: string; billingPeriod?: 'one-time' | 'yearly' | 'monthly' }> = []
+    const seenServiceIds = new Set<string>()
     
     // Recursive function to check all required services (including nested requirements)
     const checkRequiredServices = (serviceId: string, visited: Set<string>) => {
@@ -663,8 +751,16 @@ function LabsCheckoutContentInner() {
       for (const requiredId of service.requiredServices) {
         if (!cartItemIds.includes(requiredId)) {
           const requiredService = allServices.find(s => s.id === requiredId)
-          if (requiredService && !missingRequiredServices.includes(requiredService.name)) {
-            missingRequiredServices.push(requiredService.name)
+          if (requiredService && !seenServiceIds.has(requiredService.id)) {
+            seenServiceIds.add(requiredService.id)
+            missingRequiredServices.push({
+              id: requiredService.id,
+              name: requiredService.name,
+              price: requiredService.price || 0,
+              setupFee: requiredService.setupFee,
+              category: requiredService.category,
+              billingPeriod: requiredService.billingPeriod || 'one-time',
+            })
           }
           // Recursively check if this required service itself has required services
           checkRequiredServices(requiredId, visited)
@@ -694,10 +790,13 @@ function LabsCheckoutContentInner() {
     }
 
     // Check for required services first (before other validations)
-    const missingRequiredServices = checkMissingRequiredServices()
-    if (missingRequiredServices.length > 0) {
-      setError(`The following required services must be added to your cart before checkout: ${missingRequiredServices.join(', ')}. These services are required and cannot be purchased separately. If you'd like to discuss your options, please book a consultation at lashdiary.co.ke/labs/book-appointment.`)
-      return
+    // Skip this check if user came from a guide page (must-haves and recommended are already added)
+    if (!fromGuide) {
+      const missingRequiredServices = checkMissingRequiredServices()
+      if (missingRequiredServices.length > 0) {
+        setError(`The following required services must be added to your cart before checkout: ${missingRequiredServices.map(s => s.name).join(', ')}. These services are required and cannot be purchased separately. If you'd like to discuss your options, please book a consultation at lashdiary.co.ke/labs/book-appointment.`)
+        return
+      }
     }
 
     // Calculate original cart total (before discount, includes setup fees for yearly services, priority fee, and domain pricing)
@@ -972,7 +1071,9 @@ function LabsCheckoutContentInner() {
     }
   }
 
-  if (items.length === 0) {
+  // Only show empty cart page after mounting (client-side check of localStorage)
+  // This prevents hydration mismatch where server renders empty but client has items
+  if (mounted && items.length === 0) {
     return (
       <div className="min-h-screen bg-baby-pink-light py-12 px-4">
         <div className="max-w-4xl mx-auto text-center">
@@ -988,9 +1089,22 @@ function LabsCheckoutContentInner() {
       </div>
     )
   }
+  
+  // Show loading state on server or before mount to prevent hydration glitch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-baby-pink-light py-12 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-12">
+            <p className="text-brown-dark/70">Loading checkout...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-baby-pink-light py-12 px-4">
+    <div className="min-h-screen bg-baby-pink-light py-12 px-4" suppressHydrationWarning>
       <div className="max-w-7xl mx-auto">
         <Link
           href="/labs/custom-website-builds"
@@ -1011,7 +1125,15 @@ function LabsCheckoutContentInner() {
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-4">
             <h2 className="text-2xl font-semibold text-brown-dark mb-4">Order Summary</h2>
-            {items.map((item) => {
+            {mounted && items.length > 0 && items
+              .filter((item) => {
+                // Hide domain service if user selected "I Have My Own Domain"
+                if (domainType === 'existing' && item.category === 'domain') {
+                  return false
+                }
+                return true
+              })
+              .map((item) => {
               const hasSetupFee = item.billingPeriod === 'yearly' && item.setupFee && item.setupFee > 0
               const totalFirstPayment = hasSetupFee 
                 ? (item.setupFee! * item.quantity) + (item.price * item.quantity)
@@ -1027,8 +1149,17 @@ function LabsCheckoutContentInner() {
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-semibold text-brown-dark">{item.name}</h3>
                         <button
-                          onClick={() => removeFromCart(item.productId)}
-                          className="text-red-600 hover:text-red-700 text-sm font-semibold px-2 py-1 hover:bg-red-50 rounded transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            removeFromCart(item.productId)
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
+                          className="text-red-600 hover:text-red-700 text-sm font-semibold px-2 py-1 hover:bg-red-50 rounded transition-colors z-10"
                           title="Remove item"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1076,11 +1207,20 @@ function LabsCheckoutContentInner() {
                           </span>
                         </div>
                       )}
+                      {item.billingPeriod === 'monthly' && (
+                        <div className="mt-2">
+                          <span className="text-sm font-semibold text-brown-dark">Monthly Subscription:</span>
+                          <span className="ml-2 text-lg font-bold text-brown-dark">
+                            {getDisplayPrice(item.price * item.quantity)}/month
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {!hasSetupFee && (
                       <div className="text-right ml-4">
                         <div className="text-lg font-bold text-brown-dark">
                           {getDisplayPrice(item.price * item.quantity)}
+                          {item.billingPeriod === 'monthly' && <span className="text-sm font-normal text-brown-dark/70">/month</span>}
                         </div>
                       </div>
                     )}
@@ -1104,12 +1244,35 @@ function LabsCheckoutContentInner() {
                       </p>
                     </div>
                   )}
+                  {item.billingPeriod === 'monthly' && (
+                    <div className="space-y-2 pt-3 border-t border-brown-light">
+                      <p className="text-xs text-brown-dark/60 italic">
+                        * Monthly subscription will be billed monthly by Paystack. Payment reminders will be sent each month.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )
             })}
+            {!mounted && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <p className="text-brown-dark/70">Loading cart items...</p>
+              </div>
+            )}
+            {mounted && items.length === 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                <p className="text-brown-dark/70">Your cart is empty</p>
+                <Link
+                  href="/labs/custom-website-builds"
+                  className="inline-block mt-4 bg-brown-dark hover:bg-brown text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+                >
+                  Browse Services
+                </Link>
+              </div>
+            )}
             
             {/* Priority Fee */}
-            {timeline === 'urgent' && priorityFee > 0 && (
+            {mounted && timeline === 'urgent' && priorityFee > 0 && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -1126,56 +1289,91 @@ function LabsCheckoutContentInner() {
             )}
             
             {/* Add More Services Link */}
-            <div className="bg-white rounded-lg shadow-lg p-6 text-center">
-              <Link
-                href="/labs/custom-website-builds"
-                className="inline-flex items-center gap-2 text-brown-dark hover:text-brown font-semibold transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add More Services
-              </Link>
-            </div>
+            {mounted && (
+              <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                <Link
+                  href="/labs/custom-website-builds"
+                  className="inline-flex items-center gap-2 text-brown-dark hover:text-brown font-semibold transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add More Services
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Checkout Summary */}
           <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-lg p-8 sticky top-24">
+            <div className="bg-white rounded-lg shadow-lg p-8 sticky top-24" suppressHydrationWarning>
               <h2 className="text-2xl font-semibold text-brown-dark mb-6">Payment Details</h2>
 
               {/* Required Services Warning */}
-              {(() => {
-                const missingRequiredServices = checkMissingRequiredServices()
-                if (missingRequiredServices.length > 0) {
-                  return (
-                    <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg">
-                      <p className="text-sm font-semibold text-red-800 mb-2">
-                        ⚠️ Required Services Missing
-                      </p>
-                      <p className="text-xs text-red-700 mb-2">
-                        The following services must be added to your cart before checkout:
-                      </p>
-                      <ul className="list-disc list-inside text-xs text-red-700 mb-2 space-y-1">
-                        {missingRequiredServices.map((serviceName) => (
-                          <li key={serviceName}>{serviceName}</li>
-                        ))}
-                      </ul>
-                      <p className="text-xs text-red-700">
-                        These services are required and cannot be purchased separately. If you'd like to discuss your options, please{' '}
-                        <Link href="/labs/book-appointment" className="text-red-900 underline font-semibold hover:text-red-950">
-                          book a consultation
-                        </Link>
-                        {' '}so we can determine the best way forward for your needs.
-                      </p>
-                    </div>
-                  )
+              {/* Skip this warning if user came from a guide page */}
+              {mounted && !fromGuide && (() => {
+                // Double-check fromGuide status (check URL param and localStorage)
+                if (typeof window !== 'undefined') {
+                  const urlParams = new URLSearchParams(window.location.search)
+                  const fromGuideParam = urlParams.get('fromGuide') === 'true'
+                  const fromGuideStorage = localStorage.getItem('labs-checkout-from-guide') === 'true'
+                  if (fromGuideParam || fromGuideStorage) {
+                    return null
+                  }
                 }
-                return null
+                
+                const missingRequiredServices = checkMissingRequiredServices()
+                if (missingRequiredServices.length === 0) return null
+                
+                const handleAddRequiredService = (service: { id: string; name: string; price: number; setupFee?: number; category: string; billingPeriod?: 'one-time' | 'yearly' | 'monthly' }) => {
+                  // Remove if exists first to reset quantity to 1
+                  removeFromCart(service.id)
+                  // Add fresh with quantity 1
+                  addToCart({
+                    productId: service.id,
+                    name: service.name,
+                    price: service.price,
+                    setupFee: service.setupFee || 0,
+                    category: service.category,
+                    billingPeriod: service.billingPeriod || 'one-time',
+                  })
+                }
+                
+                return (
+                  <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg" suppressHydrationWarning>
+                    <p className="text-sm font-semibold text-red-800 mb-2">
+                      ⚠️ Required Services Missing
+                    </p>
+                    <p className="text-xs text-red-700 mb-2">
+                      The following services must be added to your cart before checkout:
+                    </p>
+                    <ul className="list-none text-xs text-red-700 mb-2 space-y-2">
+                      {missingRequiredServices.map((service) => (
+                        <li key={service.id} className="flex items-center justify-between gap-3">
+                          <span className="flex-1">{service.name}</span>
+                          <button
+                            onClick={() => handleAddRequiredService(service)}
+                            className="px-3 py-1 bg-red-700 text-white rounded hover:bg-red-800 transition-colors text-xs font-semibold whitespace-nowrap"
+                            type="button"
+                          >
+                            Add to Cart
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-red-700">
+                      These services are required and cannot be purchased separately. If you'd like to discuss your options, please{' '}
+                      <span className="text-red-900 underline font-semibold hover:text-red-950 cursor-pointer" onClick={() => window.location.href = '/labs/book-appointment'}>
+                        book a consultation
+                      </span>
+                      {' '}so we can determine the best way forward for your needs.
+                    </p>
+                  </div>
+                )
               })()}
 
               {/* Minimum Cart Value Warning */}
-              {(() => {
+              {mounted && (() => {
                 // Check original cart total (before discount, including priority fee and domain pricing) against minimum
                 // Show warning only if original total is below minimum (not if discount brought it below)
                 const urgentPriorityFee = timeline === 'urgent' && priorityFee > 0 ? priorityFee : 0
@@ -1268,6 +1466,19 @@ function LabsCheckoutContentInner() {
                     </div>
                   )}
 
+                  {checkoutData.taxAmount && checkoutData.taxAmount > 0 && checkoutData.taxPercentage && (
+                    <div className="flex justify-between">
+                      <span className="text-brown-dark/70">
+                        VAT/Tax ({checkoutData.taxPercentage}%)
+                      </span>
+                      <div className="text-right">
+                        <span className="font-semibold text-brown-dark">
+                          {getDisplayPrice(checkoutData.taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {checkoutData.remainingPayment > 0 && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <p className="text-sm text-blue-800 mb-2">
@@ -1317,43 +1528,8 @@ function LabsCheckoutContentInner() {
                 </div>
               )}
 
-              {!checkoutData && (
+              {!checkoutData && mounted && (
                 <div className="space-y-5 mb-6">
-                  {/* Domain Pricing Preview */}
-                  {domainType === 'new' && domainPricing && (
-                    <div className="bg-white border-2 border-brown-light rounded-lg p-4 mb-4">
-                      <h3 className="text-lg font-semibold text-brown-dark mb-3">Your Own Website Domain</h3>
-                      <div className="space-y-2 mb-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-brown-dark/70">Setup Fee (One-time):</span>
-                          <span className="font-semibold text-brown-dark">
-                            {getDisplayPrice(domainPricing.setupFee)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-brown-dark/70">Annual Subscription:</span>
-                          <span className="font-semibold text-brown-dark">
-                            {getDisplayPrice(domainPricing.annualPrice)}
-                            <span className="text-xs text-brown-dark/60 ml-1">
-                              per year ({getDisplayPrice(Math.round(domainPricing.annualPrice / 12))}/month)
-                            </span>
-                          </span>
-                        </div>
-                        <div className="border-t border-brown-light pt-2 mt-2">
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-brown-dark">Total First Payment:</span>
-                            <span className="font-bold text-brown-dark text-lg">
-                              {getDisplayPrice(domainPricing.totalFirstPayment)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-xs text-brown-dark/60 italic">
-                        Your unique web address (e.g. {domainName || 'yourbusiness'}{domainExtension || '.co.ke'}) that people type to find you online.
-                      </p>
-                    </div>
-                  )}
-                  
                   {timeline === 'urgent' && priorityFee > 0 && (
                     <div className="flex justify-between">
                       <span className="text-brown-dark/70">Priority Fee</span>
@@ -1377,7 +1553,7 @@ function LabsCheckoutContentInner() {
                     </div>
                   </div>
                   {codeValid === true && calculatedDiscount > 0 && (
-                    <div className="flex justify-between text-green-600 border-t border-brown-light pt-3">
+                    <div className="flex justify-between text-green-600">
                       <span className="text-sm">
                         Discount {referralCode && `(${referralCode})`}
                       </span>
@@ -1388,21 +1564,45 @@ function LabsCheckoutContentInner() {
                       </div>
                     </div>
                   )}
-                  {codeValid === true && calculatedDiscount > 0 && (
+                  {(() => {
+                    // Show tax immediately if taxPercentage is available (from cache or API)
+                    const subtotalBeforeDiscount = getTotalPrice() + 
+                      (timeline === 'urgent' && priorityFee > 0 ? priorityFee : 0) +
+                      (domainType === 'new' && domainPricing ? domainPricing.totalFirstPayment : 0)
+                    const subtotalAfterDiscount = subtotalBeforeDiscount - (calculatedDiscount || 0)
+                    const taxAmount = taxPercentage > 0 ? Math.round(subtotalAfterDiscount * (taxPercentage / 100)) : 0
+                    
+                    if (taxPercentage > 0 && taxAmount > 0) {
+                      return (
+                        <div className="flex justify-between">
+                          <span className="text-brown-dark/70">
+                            VAT/Tax ({taxPercentage}%)
+                          </span>
+                          <div className="text-right">
+                            <span className="font-semibold text-brown-dark">
+                              {getDisplayPrice(taxAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
                     <div className="flex justify-between text-lg font-semibold border-t border-brown-dark pt-3">
                       <span className="text-brown-dark">Total</span>
                       <div className="text-right">
                         <span className="font-bold text-brown-dark">
-                          {getDisplayPrice(
-                            (getTotalPrice() + 
+                        {(() => {
+                          const subtotalBeforeDiscount = getTotalPrice() + 
                             (timeline === 'urgent' && priorityFee > 0 ? priorityFee : 0) +
-                            (domainType === 'new' && domainPricing ? domainPricing.totalFirstPayment : 0)) - 
-                            calculatedDiscount
-                          )}
+                            (domainType === 'new' && domainPricing ? domainPricing.totalFirstPayment : 0)
+                          const subtotalAfterDiscount = subtotalBeforeDiscount - (calculatedDiscount || 0)
+                          const taxAmount = taxPercentage > 0 ? Math.round(subtotalAfterDiscount * (taxPercentage / 100)) : 0
+                          return getDisplayPrice(subtotalAfterDiscount + taxAmount)
+                        })()}
                         </span>
                       </div>
                     </div>
-                  )}
                 </div>
               )}
 
@@ -1789,7 +1989,7 @@ function LabsCheckoutContentInner() {
                           />
                           <span className="text-sm text-brown-dark">Custom Logo Design (Extra Fee)</span>
                         </label>
-                            {logoType === 'custom' && (
+                            {logoType === 'custom' && mounted && (
                           <div className="ml-6">
                             {showLogoDesignSuggestion ? (
                               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1809,7 +2009,7 @@ function LabsCheckoutContentInner() {
                             ) : (
                               <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                                 <p className="text-xs text-green-700">
-                                  ✓ Logo Design service found in cart
+                                  ✓ Logo Design service has been added to your cart
                                 </p>
                               </div>
                             )}
@@ -2210,9 +2410,9 @@ function LabsCheckoutContentInner() {
 
                   {/* Consultation Call Scheduling */}
                   <div className="mt-6">
-                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
                       Consultation Call <span className="text-red-500">*</span>
-                    </label>
+                  </label>
                     <p className="text-xs text-brown-dark/70 mb-4">
                       Select a convenient day and time for us to discuss your website requirements and go through everything that may not have been mentioned in the checkout. The meeting can be a scheduled Google Meet call or a normal phone call/WhatsApp call.
                     </p>
@@ -2238,18 +2438,18 @@ function LabsCheckoutContentInner() {
                           availabilityData={availabilityData}
                         />
                       </Suspense>
-                    </div>
+                </div>
 
                     {/* Time Slot Selection */}
                     {consultationDate && (
                       <div className="mt-4">
-                        <label className="block text-sm font-medium text-brown-dark mb-2">
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
                           Select Time <span className="text-red-500">*</span>
-                        </label>
+                  </label>
                         {loadingSlots ? (
                           <div className="w-full bg-white rounded-lg border-2 border-brown-light p-4 text-center">
                             <div className="text-brown-dark text-sm">Loading available times...</div>
-                          </div>
+                </div>
                         ) : timeSlots.length === 0 ? (
                           <div className="w-full bg-red-50 rounded-lg border-2 border-red-200 p-4">
                             <p className="text-red-800 text-sm font-medium">
@@ -2292,9 +2492,9 @@ function LabsCheckoutContentInner() {
                     {/* Meeting Type Selection */}
                     {consultationDate && consultationTimeSlot && (
                       <div className="mt-4">
-                        <label className="block text-sm font-medium text-brown-dark mb-2">
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
                           Meeting Type <span className="text-red-500">*</span>
-                        </label>
+                  </label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <button
                             type="button"
@@ -2310,7 +2510,7 @@ function LabsCheckoutContentInner() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               </svg>
                               <span className="font-semibold">Google Meet</span>
-                            </div>
+                </div>
                             <p className="text-xs opacity-80">
                               Video call via Google Meet
                             </p>
@@ -2329,7 +2529,7 @@ function LabsCheckoutContentInner() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                               </svg>
                               <span className="font-semibold">Phone/WhatsApp Call</span>
-                            </div>
+              </div>
                             <p className="text-xs opacity-80">
                               Audio call via phone or WhatsApp
                             </p>
@@ -2344,12 +2544,12 @@ function LabsCheckoutContentInner() {
 
               <button
                 onClick={handleCheckout}
-                disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || checkMissingRequiredServices().length > 0 || !timeline || !consultationDate || !consultationTimeSlot || !consultationMeetingType}
+                disabled={processing || !name.trim() || !email.trim() || !phoneNumber.trim() || (!fromGuide && checkMissingRequiredServices().length > 0) || !timeline || !consultationDate || !consultationTimeSlot || !consultationMeetingType}
                 className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? 'Processing...' : checkoutData ? 'Proceed to Payment' : 'Calculate Payment'}
               </button>
-              {checkMissingRequiredServices().length > 0 && (
+              {!fromGuide && checkMissingRequiredServices().length > 0 && (
                 <p className="text-xs text-red-600 mt-2 text-center">
                   Please add all required services to your cart before proceeding.
                 </p>

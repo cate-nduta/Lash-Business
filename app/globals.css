@@ -1017,6 +1017,96 @@
     outline: none;
   }
 
+  /* Quill editor - remove colored backgrounds, use plain white */
+  .ql-toolbar.ql-snow {
+    background-color: #ffffff !important;
+    border: 1px solid #ccc !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-stroke {
+    stroke: #333 !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-fill {
+    fill: #333 !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-label {
+    color: #333 !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-options {
+    background-color: #ffffff !important;
+    border: 1px solid #ccc !important;
+    min-width: 200px !important;
+    width: auto !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-item {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-item:hover,
+  .ql-toolbar.ql-snow .ql-picker-item.ql-selected {
+    color: #000000 !important;
+    background-color: #f0f0f0 !important;
+  }
+
+  .ql-container.ql-snow {
+    border: 1px solid #ccc !important;
+    background-color: #ffffff !important;
+    min-height: 150px !important;
+  }
+
+  .ql-editor {
+    min-height: 120px !important;
+  }
+
+  /* Remove colored backgrounds from Quill toolbar buttons (not picker dropdown items) */
+  .ql-toolbar.ql-snow button,
+  .ql-toolbar.ql-snow .ql-picker-label {
+    background-color: transparent !important;
+    border: none !important;
+  }
+
+  .ql-toolbar.ql-snow button:hover,
+  .ql-toolbar.ql-snow button:focus,
+  .ql-toolbar.ql-snow button.ql-active,
+  .ql-toolbar.ql-snow .ql-picker-label:hover {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+    color: #333 !important;
+  }
+
+  /* Picker dropdown items - black text on white background */
+  .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    padding: 5px 10px !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item:hover {
+    background-color: #f0f0f0 !important;
+    color: #000000 !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker-options .ql-picker-item.ql-selected {
+    background-color: #e0e0e0 !important;
+    color: #000000 !important;
+  }
+
+  .ql-toolbar.ql-snow button.ql-active .ql-stroke,
+  .ql-toolbar.ql-snow button:hover .ql-stroke {
+    stroke: #333 !important;
+  }
+
+  .ql-toolbar.ql-snow button.ql-active .ql-fill,
+  .ql-toolbar.ql-snow button:hover .ql-fill {
+    fill: #333 !important;
+  }
+
   /* Wavy border for Meet Your Lash Artist section */
   .wavy-border-container {
     padding: 4px;
@@ -1320,6 +1410,13 @@ a.back-to-services-link:hover {
 /* Ensure it's black by default since pages use bg-baby-pink-light (light background) */
 a.back-to-services-link:not([style*="color"]) {
   color: #000000 !important;
+}
+
+/* Force white text for View Details button inside guide cards */
+a[href*="/guide/"] .bg-brown-dark,
+a[href*="/guide/"] .bg-brown-dark span,
+a[href*="/guide/"] .bg-brown-dark * {
+  color: #ffffff !important;
 }
 
 .custom-website-builds-banner,
