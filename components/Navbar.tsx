@@ -180,7 +180,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-105 transform relative group text-wiggle whitespace-nowrap"
+                className="text-brown-dark hover:text-brown transition-all duration-300 font-medium hover:scale-105 transform relative group text-wiggle whitespace-nowrap sm:whitespace-normal"
               >
                 {link.label}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[var(--color-primary)] group-hover:w-full transition-all duration-300"></span>
@@ -190,7 +190,7 @@ export default function Navbar() {
             {/* Shop Button */}
             <Link
               href="/shop"
-              className="btn-fun bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 whitespace-nowrap flex-shrink-0"
+              className="btn-fun bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 whitespace-normal sm:whitespace-nowrap flex-shrink-0"
             >
               Shop
             </Link>

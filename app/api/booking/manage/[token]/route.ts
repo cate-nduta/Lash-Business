@@ -183,7 +183,7 @@ export async function POST(
     const { catalog } = await import('@/lib/services-utils').then(m => m.normalizeServiceCatalog(servicesData))
     
     // Find current and new service prices
-    let currentServicePrice = booking.originalPrice || booking.finalPrice || 0
+    const currentServicePrice = booking.originalPrice || booking.finalPrice || 0
     let newServicePrice = 0
     
     // Search for service in catalog

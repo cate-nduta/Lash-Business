@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+import ImageCrop from '@/components/ImageCrop'
 
 interface HomepageData {
   hero: {
@@ -13,6 +14,12 @@ interface HomepageData {
     highlight?: string
     badge?: string
     mobileServiceNote?: string
+    buttons?: Array<{
+      text: string
+      url: string
+      primary?: boolean
+      external?: boolean
+    }>
   }
   intro: {
     title: string
@@ -24,6 +31,10 @@ interface HomepageData {
     title: string
     description: string
   }>
+  featuresSection?: {
+    enabled?: boolean
+    title?: string
+  }
   meetArtist?: {
     enabled: boolean
     title: string
@@ -70,6 +81,19 @@ interface HomepageData {
     title: string
     description: string
     buttonText: string
+    enabled?: boolean
+    badge?: string
+    primaryButtonUrl?: string
+    secondaryButtonText?: string
+    secondaryButtonUrl?: string
+  }
+  faqSection?: {
+    enabled?: boolean
+    title?: string
+    description?: string
+    buttonText?: string
+    buttonUrl?: string
+    icon?: string
   }
   showFridayBooking?: boolean
   fridayBookingMessage?: string
@@ -124,9 +148,10 @@ const createDefaultCountdownBanner = () => ({
 
 export default function AdminHomepage() {
   const [homepage, setHomepage] = useState<HomepageData>({
-    hero: { title: '', subtitle: '', highlight: '', badge: '' },
+    hero: { title: '', subtitle: '', highlight: '', badge: '', buttons: [] },
     intro: { title: '', paragraph1: '', paragraph2: '', features: '' },
     features: [],
+    featuresSection: { enabled: true, title: 'Why Choose LashDiary?' },
     meetArtist: {
       enabled: false,
       title: 'Meet Your Lash Artist',
@@ -145,7 +170,8 @@ export default function AdminHomepage() {
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
-    cta: { title: '', description: '', buttonText: '' },
+    cta: { title: '', description: '', buttonText: '', enabled: true, badge: 'Confidence Awaits', primaryButtonUrl: '/booking', secondaryButtonText: 'Browse Services', secondaryButtonUrl: '/services' },
+    faqSection: { enabled: true, title: 'Frequently Asked Questions', description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.", buttonText: 'View FAQs', buttonUrl: '/policies#faq', icon: '💭' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
   })
@@ -171,7 +197,8 @@ export default function AdminHomepage() {
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
-    cta: { title: '', description: '', buttonText: '' },
+          cta: { title: '', description: '', buttonText: '', enabled: true, badge: 'Confidence Awaits', primaryButtonUrl: '/booking', secondaryButtonText: 'Browse Services', secondaryButtonUrl: '/services' },
+          faqSection: { enabled: true, title: 'Frequently Asked Questions', description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.", buttonText: 'View FAQs', buttonUrl: '/policies#faq', icon: '💭' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
   })
@@ -185,6 +212,9 @@ export default function AdminHomepage() {
   const [uploadingMassageBackground, setUploadingMassageBackground] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [showCropModal, setShowCropModal] = useState(false)
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null)
+  const [croppedImageFile, setCroppedImageFile] = useState<File | null>(null)
   const router = useRouter()
   const updateMassage = (partial: Partial<MassageSettings>) => {
     setHomepage((prev) => {
@@ -244,6 +274,7 @@ export default function AdminHomepage() {
           ...data.hero,
           highlight: data.hero?.highlight ?? data.hero?.mobileServiceNote ?? '',
           badge: data.hero?.badge ?? data.hero?.mobileServiceNote ?? '',
+          buttons: Array.isArray(data.hero?.buttons) ? data.hero.buttons : [],
         }
         const normalizedHomepage: HomepageData = {
           ...data,
@@ -285,6 +316,28 @@ export default function AdminHomepage() {
             title: data.modelSignup?.title ?? 'Model Casting Call',
             description: data.modelSignup?.description ?? 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
             buttonText: data.modelSignup?.buttonText ?? 'Apply Now',
+          },
+          featuresSection: {
+            enabled: data.featuresSection?.enabled !== false,
+            title: data.featuresSection?.title ?? 'Why Choose LashDiary?',
+          },
+          cta: {
+            title: data.cta?.title ?? '',
+            description: data.cta?.description ?? '',
+            buttonText: data.cta?.buttonText ?? '',
+            enabled: data.cta?.enabled !== false,
+            badge: data.cta?.badge ?? 'Confidence Awaits',
+            primaryButtonUrl: data.cta?.primaryButtonUrl ?? '/booking',
+            secondaryButtonText: data.cta?.secondaryButtonText ?? 'Browse Services',
+            secondaryButtonUrl: data.cta?.secondaryButtonUrl ?? '/services',
+          },
+          faqSection: {
+            enabled: data.faqSection?.enabled !== false,
+            title: data.faqSection?.title ?? 'Frequently Asked Questions',
+            description: data.faqSection?.description ?? "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+            buttonText: data.faqSection?.buttonText ?? 'View FAQs',
+            buttonUrl: data.faqSection?.buttonUrl ?? '/policies#faq',
+            icon: data.faqSection?.icon ?? '💭',
           },
           showFridayBooking: data.showFridayBooking !== undefined ? data.showFridayBooking : true,
           fridayBookingMessage: data.fridayBookingMessage ?? 'Friday Night Bookings Available',
@@ -436,7 +489,7 @@ export default function AdminHomepage() {
       const discountsOk = !discountsChanged || (discountsResponse?.ok ?? false)
 
       if (homepageOk && discountsOk) {
-        setMessage({ type: 'success', text: 'Homepage settings updated successfully!' })
+        setMessage({ type: 'success', text: 'Homepage settings updated successfully! Please refresh the homepage (press Ctrl+Shift+R or Cmd+Shift+R) to see your new buttons.' })
         setOriginalHomepage(homepage)
         if (discountsChanged) {
           setOriginalDiscounts(JSON.parse(JSON.stringify(discounts)) as DiscountsData)
@@ -580,9 +633,27 @@ export default function AdminHomepage() {
     }
   }
 
-  const handleArtistPhotoUpload = async (file: File) => {
+  const handleArtistPhotoSelect = (file: File) => {
     if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const imageSrc = e.target?.result as string
+      setImageToCrop(imageSrc)
+      setShowCropModal(true)
+    }
+    reader.readAsDataURL(file)
+  }
 
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    setShowCropModal(false)
+    setImageToCrop(null)
+    
+    // Convert blob to file
+    const file = new File([croppedBlob], 'artist-photo.jpg', { type: 'image/jpeg' })
+    setCroppedImageFile(file)
+    
+    // Upload the cropped image
     setUploadingArtistPhoto(true)
 
     try {
@@ -615,7 +686,7 @@ export default function AdminHomepage() {
           photo: data.url,
         },
       })
-      setMessage({ type: 'success', text: 'Photo uploaded successfully!' })
+      setMessage({ type: 'success', text: 'Photo uploaded and cropped successfully!' })
     } catch (error) {
       console.error('Error uploading photo:', error)
       setMessage({
@@ -624,7 +695,13 @@ export default function AdminHomepage() {
       })
     } finally {
       setUploadingArtistPhoto(false)
+      setCroppedImageFile(null)
     }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropModal(false)
+    setImageToCrop(null)
   }
 
   const handleMassageBackgroundUpload = async (file: File) => {
@@ -856,6 +933,106 @@ export default function AdminHomepage() {
                   placeholder="e.g., Visit our Nairobi studio for a bespoke lash experience."
                   className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                 />
+              </div>
+
+              {/* Hero Buttons */}
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-brown-dark mb-3">Hero Section Buttons</label>
+                <p className="text-xs text-brown-dark/70 mb-4">
+                  Customize the buttons in your hero section. The first button will be styled as the primary button.
+                </p>
+                {(homepage.hero.buttons || []).map((button, index) => (
+                  <div key={index} className="mb-4 p-4 border-2 border-brown-light rounded-lg bg-white">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-brown-dark">Button {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newButtons = [...(homepage.hero.buttons || [])]
+                          newButtons.splice(index, 1)
+                          setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                        }}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-brown-dark mb-1">Button Text</label>
+                        <input
+                          type="text"
+                          value={button.text}
+                          onChange={(e) => {
+                            const newButtons = [...(homepage.hero.buttons || [])]
+                            newButtons[index] = { ...newButtons[index], text: e.target.value }
+                            setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                          }}
+                          placeholder="e.g., Book Now"
+                          className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-brown-dark mb-1">Button URL</label>
+                        <input
+                          type="text"
+                          value={button.url}
+                          onChange={(e) => {
+                            const newButtons = [...(homepage.hero.buttons || [])]
+                            newButtons[index] = { ...newButtons[index], url: e.target.value }
+                            setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                          }}
+                          placeholder="e.g., /booking or https://example.com"
+                          className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm"
+                        />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={button.primary !== false && index === 0}
+                            onChange={(e) => {
+                              const newButtons = [...(homepage.hero.buttons || [])]
+                              newButtons[index] = { ...newButtons[index], primary: e.target.checked }
+                              setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                            }}
+                            className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                            disabled={index === 0}
+                          />
+                          <span className="text-xs text-brown-dark">Primary Button (first button is primary by default)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={button.external === true}
+                            onChange={(e) => {
+                              const newButtons = [...(homepage.hero.buttons || [])]
+                              newButtons[index] = { ...newButtons[index], external: e.target.checked }
+                              setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                            }}
+                            className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                          />
+                          <span className="text-xs text-brown-dark">External Link (opens in new tab)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newButtons = [...(homepage.hero.buttons || []), { text: '', url: '', primary: false, external: false }]
+                    setHomepage({ ...homepage, hero: { ...homepage.hero, buttons: newButtons } })
+                  }}
+                  className="mt-3 px-4 py-2 bg-brown-light text-brown-dark rounded-lg hover:bg-brown hover:text-white transition-colors text-sm font-medium"
+                >
+                  + Add Button
+                </button>
+                {(!homepage.hero.buttons || homepage.hero.buttons.length === 0) && (
+                  <p className="mt-2 text-xs text-brown-dark/60 italic">
+                    No buttons configured. Default buttons (Book Now, View Gallery) will be shown.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1112,7 +1289,50 @@ export default function AdminHomepage() {
 
           {/* Features Section */}
           <div className="mb-8 pb-8 border-b-2 border-brown-light">
-            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Features</h2>
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Why Choose LashDiary? Section</h2>
+            <p className="text-sm text-brown-dark/80 mb-4">
+              Customize the "Why Choose LashDiary?" section that appears on your homepage. You can change the title and enable/disable the entire section.
+            </p>
+            <div className="space-y-4 mb-6">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={homepage.featuresSection?.enabled !== false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      featuresSection: {
+                        ...(prev.featuresSection || { enabled: true, title: 'Why Choose LashDiary?' }),
+                        enabled: e.target.checked,
+                      },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show "Why Choose LashDiary?" section on homepage</span>
+              </label>
+              {homepage.featuresSection?.enabled !== false && (
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Section Title</label>
+                  <input
+                    type="text"
+                    value={homepage.featuresSection?.title || 'Why Choose LashDiary?'}
+                    onChange={(e) =>
+                      setHomepage((prev) => ({
+                        ...prev,
+                        featuresSection: {
+                          ...(prev.featuresSection || { enabled: true, title: 'Why Choose LashDiary?' }),
+                          title: e.target.value,
+                        },
+                      }))
+                    }
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    placeholder="Why Choose LashDiary?"
+                  />
+                </div>
+              )}
+            </div>
+            <h3 className="text-xl font-semibold text-brown-dark mb-4">Features List</h3>
             {homepage.features.length === 0 && (
               <div className="mb-4 p-4 bg-pink-light/20 border border-dashed border-brown-light rounded-lg text-sm text-brown-dark/80">
                 No features yet. Click "Add Feature" to highlight what makes your studio special.
@@ -1309,12 +1529,15 @@ export default function AdminHomepage() {
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            handleArtistPhotoUpload(file)
+                            handleArtistPhotoSelect(file)
                           }
                         }}
-                        disabled={uploadingArtistPhoto}
+                        disabled={uploadingArtistPhoto || showCropModal}
                         className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brown-dark file:text-white hover:file:bg-brown transition-colors cursor-pointer disabled:opacity-50"
                       />
+                      <p className="text-xs text-brown-dark/60 mt-1">
+                        After selecting an image, you'll be able to crop it to select the perfect portion.
+                      </p>
                       {uploadingArtistPhoto && (
                         <p className="text-xs text-brown mt-1">Uploading...</p>
                       )}
@@ -1672,37 +1895,271 @@ export default function AdminHomepage() {
             </div>
           </div>
 
-          {/* CTA Section */}
-          <div>
-            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Call to Action Section</h2>
+          {/* FAQ Section */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">FAQ Section</h2>
+            <p className="text-sm text-brown-dark/80 mb-4">
+              Customize the FAQ section that appears on your homepage. This section links to your FAQ page.
+            </p>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
+              <label className="flex items-center gap-2">
                 <input
-                  type="text"
-                  value={homepage.cta.title}
-                  onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, title: e.target.value } })}
-                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  type="checkbox"
+                  checked={homepage.faqSection?.enabled !== false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      faqSection: {
+                        ...(prev.faqSection || {
+                          enabled: true,
+                          title: 'Frequently Asked Questions',
+                          description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                          buttonText: 'View FAQs',
+                          buttonUrl: '/policies#faq',
+                          icon: '💭',
+                        }),
+                        enabled: e.target.checked,
+                      },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
-                <textarea
-                  value={homepage.cta.description}
-                  onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, description: e.target.value } })}
-                  rows={2}
-                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">Button Text</label>
+                <span className="text-sm font-medium text-brown-dark">Show FAQ section on homepage</span>
+              </label>
+              {homepage.faqSection?.enabled !== false && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Icon (Emoji)</label>
+                    <input
+                      type="text"
+                      value={homepage.faqSection?.icon || '💭'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          faqSection: {
+                            ...(prev.faqSection || {
+                              enabled: true,
+                              title: 'Frequently Asked Questions',
+                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                              buttonText: 'View FAQs',
+                              buttonUrl: '/policies#faq',
+                              icon: '💭',
+                            }),
+                            icon: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="💭"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
+                    <input
+                      type="text"
+                      value={homepage.faqSection?.title || 'Frequently Asked Questions'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          faqSection: {
+                            ...(prev.faqSection || {
+                              enabled: true,
+                              title: 'Frequently Asked Questions',
+                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                              buttonText: 'View FAQs',
+                              buttonUrl: '/policies#faq',
+                              icon: '💭',
+                            }),
+                            title: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Frequently Asked Questions"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
+                    <textarea
+                      value={homepage.faqSection?.description || ''}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          faqSection: {
+                            ...(prev.faqSection || {
+                              enabled: true,
+                              title: 'Frequently Asked Questions',
+                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                              buttonText: 'View FAQs',
+                              buttonUrl: '/policies#faq',
+                              icon: '💭',
+                            }),
+                            description: e.target.value,
+                          },
+                        }))
+                      }
+                      rows={2}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Button Text</label>
+                    <input
+                      type="text"
+                      value={homepage.faqSection?.buttonText || 'View FAQs'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          faqSection: {
+                            ...(prev.faqSection || {
+                              enabled: true,
+                              title: 'Frequently Asked Questions',
+                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                              buttonText: 'View FAQs',
+                              buttonUrl: '/policies#faq',
+                              icon: '💭',
+                            }),
+                            buttonText: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="View FAQs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Button URL</label>
+                    <input
+                      type="text"
+                      value={homepage.faqSection?.buttonUrl || '/policies#faq'}
+                      onChange={(e) =>
+                        setHomepage((prev) => ({
+                          ...prev,
+                          faqSection: {
+                            ...(prev.faqSection || {
+                              enabled: true,
+                              title: 'Frequently Asked Questions',
+                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+                              buttonText: 'View FAQs',
+                              buttonUrl: '/policies#faq',
+                              icon: '💭',
+                            }),
+                            buttonUrl: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="/policies#faq"
+                    />
+                    <p className="text-xs text-brown-dark/60 mt-1">Use relative URLs like /policies#faq or full URLs like https://example.com</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CTA Section */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Call to Action Section</h2>
+            <p className="text-sm text-brown-dark/80 mb-4">
+              Customize the final call-to-action section at the bottom of your homepage. This section encourages visitors to book an appointment.
+            </p>
+            <div className="space-y-4">
+              <label className="flex items-center gap-2">
                 <input
-                  type="text"
-                  value={homepage.cta.buttonText}
-                  onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, buttonText: e.target.value } })}
-                  className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  type="checkbox"
+                  checked={homepage.cta?.enabled !== false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      cta: {
+                        ...prev.cta,
+                        enabled: e.target.checked,
+                      },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
                 />
-              </div>
+                <span className="text-sm font-medium text-brown-dark">Show CTA section on homepage</span>
+              </label>
+              {homepage.cta?.enabled !== false && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Badge Text (Small text above title)</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.badge || 'Confidence Awaits'}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, badge: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Confidence Awaits"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.title}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, title: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Ready to Transform Your Look?"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
+                    <textarea
+                      value={homepage.cta.description}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, description: e.target.value } })}
+                      rows={2}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Book your appointment today and enjoy luxury lash services at our Nairobi studio!"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Primary Button Text</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.buttonText}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, buttonText: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Book Now!"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Primary Button URL</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.primaryButtonUrl || '/booking'}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, primaryButtonUrl: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="/booking"
+                    />
+                    <p className="text-xs text-brown-dark/60 mt-1">Use relative URLs like /booking or full URLs like https://example.com</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Secondary Button Text (Optional)</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.secondaryButtonText || 'Browse Services'}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, secondaryButtonText: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="Browse Services"
+                    />
+                    <p className="text-xs text-brown-dark/60 mt-1">Leave empty to hide the secondary button</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Secondary Button URL</label>
+                    <input
+                      type="text"
+                      value={homepage.cta.secondaryButtonUrl || '/services'}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, secondaryButtonUrl: e.target.value } })}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                      placeholder="/services"
+                    />
+                    <p className="text-xs text-brown-dark/60 mt-1">Only used if secondary button text is provided</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1715,6 +2172,16 @@ export default function AdminHomepage() {
         onCancel={handleDialogCancel}
         saving={saving}
       />
+
+      {/* Image Crop Modal */}
+      {showCropModal && imageToCrop && (
+        <ImageCrop
+          imageSrc={imageToCrop}
+          onCrop={handleCropComplete}
+          onCancel={handleCropCancel}
+          aspectRatio={1} // Square crop for artist photos
+        />
+      )}
     </div>
   )
 }

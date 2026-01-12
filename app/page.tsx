@@ -13,6 +13,12 @@ interface HomepageData {
     highlight?: string
     badge?: string
     mobileServiceNote?: string
+    buttons?: Array<{
+      text: string
+      url: string
+      primary?: boolean
+      external?: boolean
+    }>
   }
   intro: {
     title: string
@@ -24,6 +30,10 @@ interface HomepageData {
     title: string
     description: string
   }>
+  featuresSection?: {
+    enabled?: boolean
+    title?: string
+  }
   meetArtist?: {
     enabled: boolean
     title: string
@@ -64,6 +74,19 @@ interface HomepageData {
     title: string
     description: string
     buttonText: string
+    enabled?: boolean
+    badge?: string
+    primaryButtonUrl?: string
+    secondaryButtonText?: string
+    secondaryButtonUrl?: string
+  }
+  faqSection?: {
+    enabled?: boolean
+    title?: string
+    description?: string
+    buttonText?: string
+    buttonUrl?: string
+    icon?: string
   }
   modelSignup?: {
     enabled?: boolean
@@ -207,7 +230,17 @@ export default function Home() {
         const availabilityData = results[2].status === 'fulfilled' ? results[2].value : null
         
         if (homepageData) {
-          setHomepageData(homepageData)
+          // Ensure buttons array exists and is properly structured
+          const normalizedHomepageData = {
+            ...homepageData,
+            hero: {
+              ...homepageData.hero,
+              buttons: Array.isArray(homepageData.hero?.buttons) 
+                ? homepageData.hero.buttons.filter((btn: { text?: string; url?: string }) => btn.text && btn.url) // Filter out empty buttons
+                : []
+            }
+          }
+          setHomepageData(normalizedHomepageData)
         }
         setTestimonials(testimonialsData.testimonials || [])
         
@@ -308,6 +341,11 @@ export default function Home() {
   }, [homepageData?.ourStudio])
 
   const cta = useMemo(() => homepageData?.cta || {
+    enabled: true,
+    badge: 'Confidence Awaits',
+    primaryButtonUrl: '/booking',
+    secondaryButtonText: 'Browse Services',
+    secondaryButtonUrl: '/services',
     title: '',
     description: '',
     buttonText: '',
@@ -486,12 +524,12 @@ export default function Home() {
             </div>
           )}
           {hero.title && (
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title break-words overflow-wrap-anywhere">
               {hero.title}
             </h1>
           )}
           {hero.subtitle && (
-            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2 break-words overflow-wrap-anywhere">
               {hero.subtitle}
             </p>
           )}
@@ -559,23 +597,69 @@ export default function Home() {
               </span>
             </div>
           )}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
-            <Link
-              href="/booking"
-              className="btn-fun btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                Book Now
-                <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
-              </span>
-            </Link>
-            <Link
-              href="/gallery"
-              className="btn-fun hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
-            >
-              <span className="relative z-10">View Gallery</span>
-            </Link>
-          </div>
+          {hero.buttons && hero.buttons.length > 0 ? (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
+              {hero.buttons.map((button, index) => {
+                const isPrimary = button.primary !== false && index === 0
+                const isExternal = button.external === true
+                const buttonClassName = isPrimary
+                  ? "btn-fun btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
+                  : "btn-fun hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
+                
+                if (isExternal) {
+                  return (
+                    <a
+                      key={index}
+                      href={button.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={buttonClassName}
+                    >
+                      <span className="relative z-10 flex items-center gap-2">
+                        {button.text}
+                        {isPrimary && (
+                          <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                        )}
+                      </span>
+                    </a>
+                  )
+                }
+                
+                return (
+                  <Link
+                    key={index}
+                    href={button.url}
+                    className={buttonClassName}
+                  >
+                    <span className="relative z-10 flex items-center gap-2">
+                      {button.text}
+                      {isPrimary && (
+                        <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                      )}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
+              <Link
+                href="/booking"
+                className="btn-fun btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  Book Now
+                  <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                </span>
+              </Link>
+              <Link
+                href="/gallery"
+                className="btn-fun hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
+              >
+                <span className="relative z-10">View Gallery</span>
+              </Link>
+            </div>
+          )}
           {fridaySlotsActivated && (homepageData?.showFridayBooking !== false) && (
             <div className="mt-6 px-4">
               <p className="text-sm md:text-base text-[var(--color-text)]/75 inline-flex items-center gap-2 bg-[var(--color-surface)]/40 backdrop-blur-sm border border-[var(--color-primary)]/20 rounded-full px-4 py-2">
@@ -670,7 +754,7 @@ export default function Home() {
       )}
 
       {/* Features Section */}
-      {features.length > 0 && (
+      {(homepageData?.featuresSection?.enabled !== false) && features.length > 0 && (
         <section className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div
             className="absolute inset-0 -z-10"
@@ -680,8 +764,8 @@ export default function Home() {
           />
           <div className="absolute inset-3 -z-10 rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 92%, var(--color-background) 8%)]" />
           <div className="relative max-w-7xl mx-auto">
-            <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14">
-              Why Choose LashDiary?
+            <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14 break-words overflow-wrap-anywhere">
+              {homepageData?.featuresSection?.title || 'Why Choose LashDiary?'}
             </h2>
             <div className={`grid grid-cols-1 ${
               features.length === 3 
@@ -1034,38 +1118,40 @@ export default function Home() {
       )}
 
       {/* FAQ Link Section */}
-      <section className="relative py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <Link
-            href="/policies#faq"
-            className="group block relative overflow-hidden rounded-3xl bg-gradient-to-br from-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] to-[color-mix(in srgb,var(--color-surface)_88%,var(--color-primary)_12%)] border-2 border-[var(--color-primary)]/20 shadow-soft hover:shadow-soft-lg transition-all duration-300 hover:border-[var(--color-primary)]/40 hover-lift p-8 sm:p-10"
-          >
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
-            <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="sticker-sparkle"></div>
-            </div>
-            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
-              <div className="flex-1 text-center sm:text-left">
-                <div className="inline-flex items-center gap-2 mb-3">
-                  <span className="text-2xl">💭</span>
-                  <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300">
-                    Frequently Asked Questions
-                  </h3>
-                </div>
-                <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
-                  Have questions? We&apos;ve got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.
-                </p>
+      {(homepageData?.faqSection?.enabled !== false) && (
+        <section className="relative py-16 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto">
+            <Link
+              href={homepageData?.faqSection?.buttonUrl || '/policies#faq'}
+              className="group block relative overflow-hidden rounded-3xl bg-gradient-to-br from-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] to-[color-mix(in srgb,var(--color-surface)_88%,var(--color-primary)_12%)] border-2 border-[var(--color-primary)]/20 shadow-soft hover:shadow-soft-lg transition-all duration-300 hover:border-[var(--color-primary)]/40 hover-lift p-8 sm:p-10"
+            >
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
+              <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="sticker-sparkle"></div>
               </div>
-              <div className="flex-shrink-0">
-                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
-                  <span>View FAQs</span>
-                  <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+              <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-2 mb-3">
+                    <span className="text-2xl">{homepageData?.faqSection?.icon || '💭'}</span>
+                    <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300 break-words overflow-wrap-anywhere">
+                      {homepageData?.faqSection?.title || 'Frequently Asked Questions'}
+                    </h3>
+                  </div>
+                  <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed break-words overflow-wrap-anywhere">
+                    {homepageData?.faqSection?.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
+                  </p>
+                </div>
+                <div className="flex-shrink-0">
+                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
+                    <span>{homepageData?.faqSection?.buttonText || 'View FAQs'}</span>
+                    <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Link>
-        </div>
-      </section>
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Model Signup Section */}
       {homepageData?.modelSignup?.enabled && (
@@ -1088,40 +1174,59 @@ export default function Home() {
       )}
 
       {/* CTA Section */}
-      {(cta.title || cta.description || cta.buttonText) && (
+      {(homepageData?.cta?.enabled !== false) && (cta.title || cta.description || cta.buttonText) && (
         <section className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-primary)] via-[color-mix(in srgb,var(--color-primary) 70%,var(--color-background) 30%)] to-[var(--color-primary-dark)]" />
           <div className="relative max-w-4xl mx-auto text-center text-[var(--color-on-primary)]">
             <div className="flex flex-col items-center gap-4">
-              <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
-                Confidence Awaits
-              </span>
+              {cta.badge && (
+                <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
+                  {cta.badge}
+                </span>
+              )}
+              {!cta.badge && (
+                <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
+                  Confidence Awaits
+                </span>
+              )}
               {cta.title && (
-                <h2 className="text-4xl md:text-5xl font-display leading-tight">
+                <h2 className="text-4xl md:text-5xl font-display leading-tight break-words overflow-wrap-anywhere">
                   {cta.title}
                 </h2>
               )}
               {cta.description && (
-                <p className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl">
+                <p className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl break-words overflow-wrap-anywhere">
                   {cta.description}
                 </p>
               )}
             <div className="flex flex-wrap justify-center gap-4 pt-4">
-              <Link
-                href="/booking"
-                className="btn-fun btn-cute hover-lift inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl group relative overflow-hidden"
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  {cta.buttonText}
-                  <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
-                </span>
-              </Link>
-              <Link
-                href="/services"
-                className="btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
-              >
-                <span className="relative z-10">Browse Services</span>
-              </Link>
+              {cta.buttonText && (
+                <Link
+                  href={cta.primaryButtonUrl || '/booking'}
+                  className="btn-fun btn-cute hover-lift inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl group relative overflow-hidden"
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    {cta.buttonText}
+                    <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                  </span>
+                </Link>
+              )}
+              {cta.secondaryButtonText && cta.secondaryButtonUrl && (
+                <Link
+                  href={cta.secondaryButtonUrl}
+                  className="btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
+                >
+                  <span className="relative z-10">{cta.secondaryButtonText}</span>
+                </Link>
+              )}
+              {!cta.secondaryButtonText && (
+                <Link
+                  href="/services"
+                  className="btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
+                >
+                  <span className="relative z-10">Browse Services</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>

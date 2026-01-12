@@ -3,7 +3,21 @@
     "title": "",
     "subtitle": "",
     "highlight": "",
-    "badge": ""
+    "badge": "",
+    "buttons": [
+      {
+        "text": "Book Now",
+        "url": "/booking",
+        "primary": true,
+        "external": false
+      },
+      {
+        "text": "View Gallery",
+        "url": "/gallery",
+        "primary": false,
+        "external": false
+      }
+    ]
   },
   "intro": {
     "title": "",
@@ -12,6 +26,10 @@
     "features": ""
   },
   "features": [],
+  "featuresSection": {
+    "enabled": true,
+    "title": "Why Choose LashDiary?"
+  },
   "meetArtist": {
     "enabled": false,
     "title": "",
@@ -33,7 +51,20 @@
   "cta": {
     "title": "",
     "description": "",
-    "buttonText": ""
+    "buttonText": "",
+    "enabled": true,
+    "badge": "Confidence Awaits",
+    "primaryButtonUrl": "/booking",
+    "secondaryButtonText": "Browse Services",
+    "secondaryButtonUrl": "/services"
+  },
+  "faqSection": {
+    "enabled": true,
+    "title": "Frequently Asked Questions",
+    "description": "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
+    "buttonText": "View FAQs",
+    "buttonUrl": "/policies#faq",
+    "icon": "💭"
   },
   "modelSignup": {
     "enabled": false,

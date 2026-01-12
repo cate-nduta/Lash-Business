@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
       return availabilityData.availableDays?.[dayName as keyof typeof availabilityData.availableDays] === true
     }
 
-    let currentDate = new Date(today)
+    const currentDate = new Date(today)
     while (currentDate <= endDate) {
       const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`
       

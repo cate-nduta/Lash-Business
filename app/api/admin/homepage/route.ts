@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
@@ -21,6 +22,12 @@ export async function POST(request: NextRequest) {
     await requireAdminAuth()
     const homepage = await request.json()
     await writeDataFile('homepage.json', homepage)
+    
+    // Revalidate cache to ensure changes appear immediately
+    revalidatePath('/')
+    revalidatePath('/api/homepage')
+    revalidatePath('/admin/homepage')
+    
     return NextResponse.json({ success: true })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

@@ -14,6 +14,9 @@
     text-rendering: optimizeLegibility;
     margin-top: 0 !important;
     padding-top: 0 !important;
+    /* Ensure proper viewport handling */
+    width: 100%;
+    max-width: 100vw;
   }
 
   body {
@@ -25,6 +28,11 @@
     position: relative;
     margin-top: 0 !important;
     padding-top: 0 !important;
+    /* Prevent text selection issues on mobile */
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   /* Ensure all containers respect viewport width */
@@ -963,6 +971,101 @@
       padding-left: 1rem;
       padding-right: 1rem;
     }
+
+    /* Prevent text overflow on mobile */
+    h1, h2, h3, h4, h5, h6 {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      max-width: 100%;
+    }
+
+    p, span, div, li, td, th {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      max-width: 100%;
+    }
+
+    /* Ensure all text containers respect viewport width */
+    * {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Fix long URLs and text */
+    a {
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+
+    /* Fix table overflow */
+    table {
+      width: 100%;
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Fix input and textarea overflow */
+    input, textarea, select {
+      max-width: 100%;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Ensure images don't overflow */
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Fix flex containers */
+    .flex {
+      flex-wrap: wrap;
+    }
+
+    /* Prevent horizontal scroll */
+    body, html {
+      overflow-x: hidden;
+      width: 100%;
+      max-width: 100vw;
+    }
+
+    /* Fix padding on mobile */
+    .px-4, .px-6, .px-8 {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    /* Reduce font sizes on mobile for better fit */
+    .text-7xl { font-size: 2.5rem; }
+    .text-6xl { font-size: 2rem; }
+    .text-5xl { font-size: 1.75rem; }
+    .text-4xl { font-size: 1.5rem; }
+    .text-3xl { font-size: 1.25rem; }
+    .text-2xl { font-size: 1.125rem; }
+    .text-xl { font-size: 1rem; }
+    .text-lg { font-size: 0.9375rem; }
+
+    /* Fix grid and flex layouts */
+    .grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Ensure cards don't overflow */
+    .card, [class*="card"] {
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    /* Fix buttons on mobile */
+    button, .btn, [role="button"] {
+      white-space: normal;
+      word-wrap: break-word;
+      padding: 0.75rem 1rem;
+    }
   }
 
   /* Tablet optimizations */
@@ -987,6 +1090,29 @@
     max-width: 100%;
   }
 
+  /* Global text overflow prevention */
+  h1, h2, h3, h4, h5, h6, p, span, div, a, li, td, th, label {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
+  /* Prevent long text from overflowing */
+  .text-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Allow text to wrap in buttons on mobile */
+  @media (max-width: 640px) {
+    button, .btn, a[class*="btn"] {
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+    }
+  }
+
   /* Fix for iOS Safari viewport issues */
   @supports (-webkit-touch-callout: none) {
     html {
@@ -995,6 +1121,120 @@
     
     body {
       min-height: -webkit-fill-available;
+    }
+  }
+
+  /* Additional mobile fixes for common overflow issues */
+  @media (max-width: 640px) {
+    /* Fix containers with fixed widths */
+    [class*="w-"]:not([class*="max-w"]):not([class*="min-w"]) {
+      max-width: 100% !important;
+    }
+
+    /* Fix absolute positioned elements */
+    [class*="absolute"] {
+      max-width: calc(100vw - 2rem);
+    }
+
+    /* Fix padding that might cause overflow */
+    [class*="px-"] {
+      padding-left: clamp(0.5rem, 4vw, 1rem) !important;
+      padding-right: clamp(0.5rem, 4vw, 1rem) !important;
+    }
+
+    /* Fix margins */
+    [class*="mx-"] {
+      margin-left: clamp(0.5rem, 4vw, 1rem) !important;
+      margin-right: clamp(0.5rem, 4vw, 1rem) !important;
+    }
+
+    /* Ensure all flex items wrap on mobile */
+    .flex-row {
+      flex-direction: column;
+    }
+
+    .flex-row > * {
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Fix grid columns on mobile */
+    .grid-cols-2, .grid-cols-3, .grid-cols-4 {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* Fix tables - make them scrollable */
+    table {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    thead, tbody, tr {
+      display: block;
+    }
+
+    td, th {
+      display: block;
+      text-align: left;
+      padding: 0.5rem;
+      border: none;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    th {
+      font-weight: bold;
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Fix long text in badges and labels */
+    [class*="badge"], [class*="label"] {
+      word-wrap: break-word;
+      white-space: normal;
+      display: inline-block;
+      max-width: 100%;
+    }
+
+    /* Fix hero section on mobile */
+    section[class*="hero"] {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    /* Fix countdown banner on mobile */
+    [class*="countdown"] {
+      padding: 1rem;
+      font-size: 0.875rem;
+    }
+
+    /* Ensure buttons don't overflow */
+    button, .btn, a[class*="btn"] {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+
+    /* Fix form elements */
+    form {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="password"],
+    input[type="date"],
+    input[type="number"],
+    textarea,
+    select {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      font-size: 16px; /* Prevents zoom on iOS */
     }
   }
 }
