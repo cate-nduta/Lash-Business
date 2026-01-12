@@ -37,7 +37,7 @@ async function ensureUserAccount(email: string, name: string): Promise<{ userId:
   }
   
   // Check if user already exists
-  const existingUser = usersData.users.find(
+  let existingUser = usersData.users.find(
     (u) => u && u.email && u.email.toLowerCase().trim() === normalizedEmail
   )
   

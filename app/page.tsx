@@ -30,10 +30,6 @@ interface HomepageData {
     title: string
     description: string
   }>
-  featuresSection?: {
-    enabled?: boolean
-    title?: string
-  }
   meetArtist?: {
     enabled: boolean
     title: string
@@ -70,23 +66,23 @@ interface HomepageData {
   giftCardSection?: {
     enabled?: boolean
   }
-  cta: {
-    title: string
-    description: string
-    buttonText: string
-    enabled?: boolean
-    badge?: string
-    primaryButtonUrl?: string
-    secondaryButtonText?: string
-    secondaryButtonUrl?: string
-  }
   faqSection?: {
     enabled?: boolean
+    icon?: string
     title?: string
     description?: string
     buttonText?: string
     buttonUrl?: string
-    icon?: string
+  }
+  cta: {
+    enabled?: boolean
+    badge?: string
+    title: string
+    description: string
+    buttonText: string
+    buttonUrl?: string
+    secondaryButtonText?: string
+    secondaryButtonUrl?: string
   }
   modelSignup?: {
     enabled?: boolean
@@ -235,8 +231,8 @@ export default function Home() {
             ...homepageData,
             hero: {
               ...homepageData.hero,
-              buttons: Array.isArray(homepageData.hero?.buttons) 
-                ? homepageData.hero.buttons.filter((btn: { text?: string; url?: string }) => btn.text && btn.url) // Filter out empty buttons
+              buttons: Array.isArray(homepageData.hero?.buttons)
+                ? homepageData.hero.buttons.filter((btn: { text: string; url: string; primary?: boolean; external?: boolean }) => btn.text && btn.url) // Filter out empty buttons
                 : []
             }
           }
@@ -343,12 +339,12 @@ export default function Home() {
   const cta = useMemo(() => homepageData?.cta || {
     enabled: true,
     badge: 'Confidence Awaits',
-    primaryButtonUrl: '/booking',
-    secondaryButtonText: 'Browse Services',
-    secondaryButtonUrl: '/services',
     title: '',
     description: '',
     buttonText: '',
+    buttonUrl: '/booking',
+    secondaryButtonText: 'Browse Services',
+    secondaryButtonUrl: '/services',
   }, [homepageData?.cta])
   const tsubokiMassage = useMemo(() => {
     const data = homepageData?.tsubokiMassage
@@ -524,12 +520,12 @@ export default function Home() {
             </div>
           )}
           {hero.title && (
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title break-words overflow-wrap-anywhere">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title">
               {hero.title}
             </h1>
           )}
           {hero.subtitle && (
-            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2 break-words overflow-wrap-anywhere">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2">
               {hero.subtitle}
             </p>
           )}
@@ -754,7 +750,7 @@ export default function Home() {
       )}
 
       {/* Features Section */}
-      {(homepageData?.featuresSection?.enabled !== false) && features.length > 0 && (
+      {features.length > 0 && (
         <section className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div
             className="absolute inset-0 -z-10"
@@ -764,8 +760,8 @@ export default function Home() {
           />
           <div className="absolute inset-3 -z-10 rounded-3xl bg-[color-mix(in srgb,var(--color-surface) 92%, var(--color-background) 8%)]" />
           <div className="relative max-w-7xl mx-auto">
-            <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14 break-words overflow-wrap-anywhere">
-              {homepageData?.featuresSection?.title || 'Why Choose LashDiary?'}
+            <h2 className="text-4xl font-display text-center text-[var(--color-text)] mb-14">
+              Why Choose LashDiary?
             </h2>
             <div className={`grid grid-cols-1 ${
               features.length === 3 
@@ -1121,34 +1117,78 @@ export default function Home() {
       {(homepageData?.faqSection?.enabled !== false) && (
         <section className="relative py-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
-            <Link
-              href={homepageData?.faqSection?.buttonUrl || '/policies#faq'}
-              className="group block relative overflow-hidden rounded-3xl bg-gradient-to-br from-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] to-[color-mix(in srgb,var(--color-surface)_88%,var(--color-primary)_12%)] border-2 border-[var(--color-primary)]/20 shadow-soft hover:shadow-soft-lg transition-all duration-300 hover:border-[var(--color-primary)]/40 hover-lift p-8 sm:p-10"
-            >
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
-              <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="sticker-sparkle"></div>
-              </div>
-              <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="inline-flex items-center gap-2 mb-3">
-                    <span className="text-2xl">{homepageData?.faqSection?.icon || '💭'}</span>
-                    <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300 break-words overflow-wrap-anywhere">
-                      {homepageData?.faqSection?.title || 'Frequently Asked Questions'}
-                    </h3>
+            {(() => {
+              const faq = homepageData?.faqSection || {}
+              const faqUrl = faq.buttonUrl || '/policies#faq'
+              const isExternal = faqUrl.startsWith('http://') || faqUrl.startsWith('https://')
+              const linkClassName = "group block relative overflow-hidden rounded-3xl bg-gradient-to-br from-[color-mix(in srgb,var(--color-surface)_95%,var(--color-primary)_5%)] to-[color-mix(in srgb,var(--color-surface)_88%,var(--color-primary)_12%)] border-2 border-[var(--color-primary)]/20 shadow-soft hover:shadow-soft-lg transition-all duration-300 hover:border-[var(--color-primary)]/40 hover-lift p-8 sm:p-10"
+              
+              if (isExternal) {
+                return (
+                  <a
+                    href={faqUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={linkClassName}
+                  >
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
+                  <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="sticker-sparkle"></div>
                   </div>
-                  <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed break-words overflow-wrap-anywhere">
-                    {homepageData?.faqSection?.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
-                  </p>
-                </div>
-                <div className="flex-shrink-0">
-                  <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
-                    <span>{homepageData?.faqSection?.buttonText || 'View FAQs'}</span>
-                    <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                  <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div className="flex-1 text-center sm:text-left">
+                      <div className="inline-flex items-center gap-2 mb-3">
+                        <span className="text-2xl">{faq.icon || '💭'}</span>
+                        <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300">
+                          {faq.title || 'Frequently Asked Questions'}
+                        </h3>
+                      </div>
+                      <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
+                        {faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
+                        <span>{faq.buttonText || 'View FAQs'}</span>
+                        <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            </Link>
+                  </a>
+                )
+              }
+              
+              return (
+                <Link
+                  href={faqUrl}
+                  className={linkClassName}
+                >
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent" />
+                  <div className="cartoon-sticker top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="sticker-sparkle"></div>
+                  </div>
+                  <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div className="flex-1 text-center sm:text-left">
+                      <div className="inline-flex items-center gap-2 mb-3">
+                        <span className="text-2xl">{faq.icon || '💭'}</span>
+                        <h3 className="text-2xl sm:text-3xl font-display text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors duration-300">
+                          {faq.title || 'Frequently Asked Questions'}
+                        </h3>
+                      </div>
+                      <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
+                        {faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
+                        <span>{faq.buttonText || 'View FAQs'}</span>
+                        <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })()}
           </div>
         </section>
       )}
@@ -1179,53 +1219,83 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-primary)] via-[color-mix(in srgb,var(--color-primary) 70%,var(--color-background) 30%)] to-[var(--color-primary-dark)]" />
           <div className="relative max-w-4xl mx-auto text-center text-[var(--color-on-primary)]">
             <div className="flex flex-col items-center gap-4">
-              {cta.badge && (
-                <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
-                  {cta.badge}
-                </span>
-              )}
-              {!cta.badge && (
-                <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
-                  Confidence Awaits
-                </span>
-              )}
+              <span className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/15 border border-white/30 text-xs uppercase tracking-[0.4em] text-[var(--color-on-primary)]/80">
+                {cta.badge || 'Confidence Awaits'}
+              </span>
               {cta.title && (
-                <h2 className="text-4xl md:text-5xl font-display leading-tight break-words overflow-wrap-anywhere">
+                <h2 className="text-4xl md:text-5xl font-display leading-tight">
                   {cta.title}
                 </h2>
               )}
               {cta.description && (
-                <p className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl break-words overflow-wrap-anywhere">
+                <p className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl">
                   {cta.description}
                 </p>
               )}
             <div className="flex flex-wrap justify-center gap-4 pt-4">
               {cta.buttonText && (
-                <Link
-                  href={cta.primaryButtonUrl || '/booking'}
-                  className="btn-fun btn-cute hover-lift inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl group relative overflow-hidden"
-                >
-                  <span className="relative z-10 flex items-center gap-2">
-                    {cta.buttonText}
-                    <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
-                  </span>
-                </Link>
+                (() => {
+                  const buttonUrl = cta.buttonUrl || '/booking'
+                  const isExternal = buttonUrl.startsWith('http://') || buttonUrl.startsWith('https://')
+                  const buttonClassName = "btn-fun btn-cute hover-lift inline-flex items-center gap-2 bg-white text-[var(--color-primary)] font-semibold px-10 py-4 rounded-full shadow-xl group relative overflow-hidden"
+                  
+                  if (isExternal) {
+                    return (
+                      <a
+                        href={buttonUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonClassName}
+                      >
+                        <span className="relative z-10 flex items-center gap-2">
+                          {cta.buttonText}
+                          <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                        </span>
+                      </a>
+                    )
+                  }
+                  
+                  return (
+                    <Link
+                      href={buttonUrl}
+                      className={buttonClassName}
+                    >
+                      <span className="relative z-10 flex items-center gap-2">
+                        {cta.buttonText}
+                        <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
+                      </span>
+                    </Link>
+                  )
+                })()
               )}
               {cta.secondaryButtonText && cta.secondaryButtonUrl && (
-                <Link
-                  href={cta.secondaryButtonUrl}
-                  className="btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
-                >
-                  <span className="relative z-10">{cta.secondaryButtonText}</span>
-                </Link>
-              )}
-              {!cta.secondaryButtonText && (
-                <Link
-                  href="/services"
-                  className="btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
-                >
-                  <span className="relative z-10">Browse Services</span>
-                </Link>
+                (() => {
+                  const secondaryUrl = cta.secondaryButtonUrl
+                  const isExternal = secondaryUrl.startsWith('http://') || secondaryUrl.startsWith('https://')
+                  const buttonClassName = "btn-fun hover-lift hover-sparkle inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full border border-white/30 relative"
+                  
+                  if (isExternal) {
+                    return (
+                      <a
+                        href={secondaryUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonClassName}
+                      >
+                        <span className="relative z-10">{cta.secondaryButtonText}</span>
+                      </a>
+                    )
+                  }
+                  
+                  return (
+                    <Link
+                      href={secondaryUrl}
+                      className={buttonClassName}
+                    >
+                      <span className="relative z-10">{cta.secondaryButtonText}</span>
+                    </Link>
+                  )
+                })()
               )}
             </div>
           </div>

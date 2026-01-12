@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Find project by token - first check build projects, then orders
     // Direct match works for both new readable format and old hex format
     const projects = await readDataFile<BuildProject[]>('labs-build-projects.json', [])
-    const projectIndex = projects.findIndex(p => p.showcaseBookingToken === token)
+    let projectIndex = projects.findIndex(p => p.showcaseBookingToken === token)
     let project: any = null
     let isOrder = false
 

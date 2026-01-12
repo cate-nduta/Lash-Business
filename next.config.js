@@ -119,6 +119,11 @@ const nextConfig = {
   experimental: {
     // optimizeCss: true, // Disabled to prevent CSS 404 errors in dev mode
   },
+  // TypeScript configuration
+  typescript: {
+    // Ignore TypeScript errors during builds (you can run type checking separately)
+    ignoreBuildErrors: false,
+  },
   // ESLint configuration
   eslint: {
     // Disable ESLint during builds to avoid deprecated options error

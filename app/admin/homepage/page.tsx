@@ -31,10 +31,6 @@ interface HomepageData {
     title: string
     description: string
   }>
-  featuresSection?: {
-    enabled?: boolean
-    title?: string
-  }
   meetArtist?: {
     enabled: boolean
     title: string
@@ -77,23 +73,23 @@ interface HomepageData {
     description?: string
     buttonText?: string
   }
-  cta: {
-    title: string
-    description: string
-    buttonText: string
-    enabled?: boolean
-    badge?: string
-    primaryButtonUrl?: string
-    secondaryButtonText?: string
-    secondaryButtonUrl?: string
-  }
   faqSection?: {
     enabled?: boolean
+    icon?: string
     title?: string
     description?: string
     buttonText?: string
     buttonUrl?: string
-    icon?: string
+  }
+  cta: {
+    enabled?: boolean
+    badge?: string
+    title: string
+    description: string
+    buttonText: string
+    buttonUrl?: string
+    secondaryButtonText?: string
+    secondaryButtonUrl?: string
   }
   showFridayBooking?: boolean
   fridayBookingMessage?: string
@@ -151,7 +147,6 @@ export default function AdminHomepage() {
     hero: { title: '', subtitle: '', highlight: '', badge: '', buttons: [] },
     intro: { title: '', paragraph1: '', paragraph2: '', features: '' },
     features: [],
-    featuresSection: { enabled: true, title: 'Why Choose LashDiary?' },
     meetArtist: {
       enabled: false,
       title: 'Meet Your Lash Artist',
@@ -170,8 +165,7 @@ export default function AdminHomepage() {
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
-    cta: { title: '', description: '', buttonText: '', enabled: true, badge: 'Confidence Awaits', primaryButtonUrl: '/booking', secondaryButtonText: 'Browse Services', secondaryButtonUrl: '/services' },
-    faqSection: { enabled: true, title: 'Frequently Asked Questions', description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.", buttonText: 'View FAQs', buttonUrl: '/policies#faq', icon: '💭' },
+    cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
   })
@@ -197,8 +191,7 @@ export default function AdminHomepage() {
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
-          cta: { title: '', description: '', buttonText: '', enabled: true, badge: 'Confidence Awaits', primaryButtonUrl: '/booking', secondaryButtonText: 'Browse Services', secondaryButtonUrl: '/services' },
-          faqSection: { enabled: true, title: 'Frequently Asked Questions', description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.", buttonText: 'View FAQs', buttonUrl: '/policies#faq', icon: '💭' },
+    cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
     fridayBookingMessage: 'Friday Night Bookings Available',
   })
@@ -214,7 +207,6 @@ export default function AdminHomepage() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [showCropModal, setShowCropModal] = useState(false)
   const [imageToCrop, setImageToCrop] = useState<string | null>(null)
-  const [croppedImageFile, setCroppedImageFile] = useState<File | null>(null)
   const router = useRouter()
   const updateMassage = (partial: Partial<MassageSettings>) => {
     setHomepage((prev) => {
@@ -317,27 +309,23 @@ export default function AdminHomepage() {
             description: data.modelSignup?.description ?? 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.',
             buttonText: data.modelSignup?.buttonText ?? 'Apply Now',
           },
-          featuresSection: {
-            enabled: data.featuresSection?.enabled !== false,
-            title: data.featuresSection?.title ?? 'Why Choose LashDiary?',
-          },
-          cta: {
-            title: data.cta?.title ?? '',
-            description: data.cta?.description ?? '',
-            buttonText: data.cta?.buttonText ?? '',
-            enabled: data.cta?.enabled !== false,
-            badge: data.cta?.badge ?? 'Confidence Awaits',
-            primaryButtonUrl: data.cta?.primaryButtonUrl ?? '/booking',
-            secondaryButtonText: data.cta?.secondaryButtonText ?? 'Browse Services',
-            secondaryButtonUrl: data.cta?.secondaryButtonUrl ?? '/services',
-          },
           faqSection: {
             enabled: data.faqSection?.enabled !== false,
+            icon: data.faqSection?.icon ?? '💭',
             title: data.faqSection?.title ?? 'Frequently Asked Questions',
             description: data.faqSection?.description ?? "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
             buttonText: data.faqSection?.buttonText ?? 'View FAQs',
             buttonUrl: data.faqSection?.buttonUrl ?? '/policies#faq',
-            icon: data.faqSection?.icon ?? '💭',
+          },
+          cta: {
+            enabled: data.cta?.enabled !== false,
+            badge: data.cta?.badge ?? 'Confidence Awaits',
+            title: data.cta?.title ?? '',
+            description: data.cta?.description ?? '',
+            buttonText: data.cta?.buttonText ?? '',
+            buttonUrl: data.cta?.buttonUrl ?? '/booking',
+            secondaryButtonText: data.cta?.secondaryButtonText ?? 'Browse Services',
+            secondaryButtonUrl: data.cta?.secondaryButtonUrl ?? '/services',
           },
           showFridayBooking: data.showFridayBooking !== undefined ? data.showFridayBooking : true,
           fridayBookingMessage: data.fridayBookingMessage ?? 'Friday Night Bookings Available',
@@ -649,14 +637,11 @@ export default function AdminHomepage() {
     setShowCropModal(false)
     setImageToCrop(null)
     
-    // Convert blob to file
-    const file = new File([croppedBlob], 'artist-photo.jpg', { type: 'image/jpeg' })
-    setCroppedImageFile(file)
-    
-    // Upload the cropped image
     setUploadingArtistPhoto(true)
 
     try {
+      // Convert blob to file
+      const file = new File([croppedBlob], 'artist-photo.jpg', { type: 'image/jpeg' })
       const formData = new FormData()
       formData.append('file', file)
 
@@ -695,7 +680,6 @@ export default function AdminHomepage() {
       })
     } finally {
       setUploadingArtistPhoto(false)
-      setCroppedImageFile(null)
     }
   }
 
@@ -1289,50 +1273,7 @@ export default function AdminHomepage() {
 
           {/* Features Section */}
           <div className="mb-8 pb-8 border-b-2 border-brown-light">
-            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Why Choose LashDiary? Section</h2>
-            <p className="text-sm text-brown-dark/80 mb-4">
-              Customize the "Why Choose LashDiary?" section that appears on your homepage. You can change the title and enable/disable the entire section.
-            </p>
-            <div className="space-y-4 mb-6">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={homepage.featuresSection?.enabled !== false}
-                  onChange={(e) =>
-                    setHomepage((prev) => ({
-                      ...prev,
-                      featuresSection: {
-                        ...(prev.featuresSection || { enabled: true, title: 'Why Choose LashDiary?' }),
-                        enabled: e.target.checked,
-                      },
-                    }))
-                  }
-                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
-                />
-                <span className="text-sm font-medium text-brown-dark">Show "Why Choose LashDiary?" section on homepage</span>
-              </label>
-              {homepage.featuresSection?.enabled !== false && (
-                <div>
-                  <label className="block text-sm font-medium text-brown-dark mb-2">Section Title</label>
-                  <input
-                    type="text"
-                    value={homepage.featuresSection?.title || 'Why Choose LashDiary?'}
-                    onChange={(e) =>
-                      setHomepage((prev) => ({
-                        ...prev,
-                        featuresSection: {
-                          ...(prev.featuresSection || { enabled: true, title: 'Why Choose LashDiary?' }),
-                          title: e.target.value,
-                        },
-                      }))
-                    }
-                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                    placeholder="Why Choose LashDiary?"
-                  />
-                </div>
-              )}
-            </div>
-            <h3 className="text-xl font-semibold text-brown-dark mb-4">Features List</h3>
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Features</h2>
             {homepage.features.length === 0 && (
               <div className="mb-4 p-4 bg-pink-light/20 border border-dashed border-brown-light rounded-lg text-sm text-brown-dark/80">
                 No features yet. Click "Add Feature" to highlight what makes your studio special.
@@ -1535,9 +1476,6 @@ export default function AdminHomepage() {
                         disabled={uploadingArtistPhoto || showCropModal}
                         className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brown-dark file:text-white hover:file:bg-brown transition-colors cursor-pointer disabled:opacity-50"
                       />
-                      <p className="text-xs text-brown-dark/60 mt-1">
-                        After selecting an image, you'll be able to crop it to select the perfect portion.
-                      </p>
                       {uploadingArtistPhoto && (
                         <p className="text-xs text-brown mt-1">Uploading...</p>
                       )}
@@ -1898,30 +1836,12 @@ export default function AdminHomepage() {
           {/* FAQ Section */}
           <div className="mb-8 pb-8 border-b-2 border-brown-light">
             <h2 className="text-2xl font-semibold text-brown-dark mb-4">FAQ Section</h2>
-            <p className="text-sm text-brown-dark/80 mb-4">
-              Customize the FAQ section that appears on your homepage. This section links to your FAQ page.
-            </p>
             <div className="space-y-4">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={homepage.faqSection?.enabled !== false}
-                  onChange={(e) =>
-                    setHomepage((prev) => ({
-                      ...prev,
-                      faqSection: {
-                        ...(prev.faqSection || {
-                          enabled: true,
-                          title: 'Frequently Asked Questions',
-                          description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                          buttonText: 'View FAQs',
-                          buttonUrl: '/policies#faq',
-                          icon: '💭',
-                        }),
-                        enabled: e.target.checked,
-                      },
-                    }))
-                  }
+                  onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), enabled: e.target.checked } })}
                   className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
                 />
                 <span className="text-sm font-medium text-brown-dark">Show FAQ section on homepage</span>
@@ -1933,22 +1853,7 @@ export default function AdminHomepage() {
                     <input
                       type="text"
                       value={homepage.faqSection?.icon || '💭'}
-                      onChange={(e) =>
-                        setHomepage((prev) => ({
-                          ...prev,
-                          faqSection: {
-                            ...(prev.faqSection || {
-                              enabled: true,
-                              title: 'Frequently Asked Questions',
-                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                              buttonText: 'View FAQs',
-                              buttonUrl: '/policies#faq',
-                              icon: '💭',
-                            }),
-                            icon: e.target.value,
-                          },
-                        }))
-                      }
+                      onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), icon: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                       placeholder="💭"
                     />
@@ -1958,22 +1863,7 @@ export default function AdminHomepage() {
                     <input
                       type="text"
                       value={homepage.faqSection?.title || 'Frequently Asked Questions'}
-                      onChange={(e) =>
-                        setHomepage((prev) => ({
-                          ...prev,
-                          faqSection: {
-                            ...(prev.faqSection || {
-                              enabled: true,
-                              title: 'Frequently Asked Questions',
-                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                              buttonText: 'View FAQs',
-                              buttonUrl: '/policies#faq',
-                              icon: '💭',
-                            }),
-                            title: e.target.value,
-                          },
-                        }))
-                      }
+                      onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), title: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                       placeholder="Frequently Asked Questions"
                     />
@@ -1982,22 +1872,7 @@ export default function AdminHomepage() {
                     <label className="block text-sm font-medium text-brown-dark mb-2">Description</label>
                     <textarea
                       value={homepage.faqSection?.description || ''}
-                      onChange={(e) =>
-                        setHomepage((prev) => ({
-                          ...prev,
-                          faqSection: {
-                            ...(prev.faqSection || {
-                              enabled: true,
-                              title: 'Frequently Asked Questions',
-                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                              buttonText: 'View FAQs',
-                              buttonUrl: '/policies#faq',
-                              icon: '💭',
-                            }),
-                            description: e.target.value,
-                          },
-                        }))
-                      }
+                      onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), description: e.target.value } })}
                       rows={2}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                       placeholder="Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."
@@ -2008,22 +1883,7 @@ export default function AdminHomepage() {
                     <input
                       type="text"
                       value={homepage.faqSection?.buttonText || 'View FAQs'}
-                      onChange={(e) =>
-                        setHomepage((prev) => ({
-                          ...prev,
-                          faqSection: {
-                            ...(prev.faqSection || {
-                              enabled: true,
-                              title: 'Frequently Asked Questions',
-                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                              buttonText: 'View FAQs',
-                              buttonUrl: '/policies#faq',
-                              icon: '💭',
-                            }),
-                            buttonText: e.target.value,
-                          },
-                        }))
-                      }
+                      onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), buttonText: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                       placeholder="View FAQs"
                     />
@@ -2033,24 +1893,9 @@ export default function AdminHomepage() {
                     <input
                       type="text"
                       value={homepage.faqSection?.buttonUrl || '/policies#faq'}
-                      onChange={(e) =>
-                        setHomepage((prev) => ({
-                          ...prev,
-                          faqSection: {
-                            ...(prev.faqSection || {
-                              enabled: true,
-                              title: 'Frequently Asked Questions',
-                              description: "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between.",
-                              buttonText: 'View FAQs',
-                              buttonUrl: '/policies#faq',
-                              icon: '💭',
-                            }),
-                            buttonUrl: e.target.value,
-                          },
-                        }))
-                      }
+                      onChange={(e) => setHomepage({ ...homepage, faqSection: { ...(homepage.faqSection || {}), buttonUrl: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                      placeholder="/policies#faq"
+                      placeholder="/policies#faq or https://example.com"
                     />
                     <p className="text-xs text-brown-dark/60 mt-1">Use relative URLs like /policies#faq or full URLs like https://example.com</p>
                   </div>
@@ -2062,23 +1907,12 @@ export default function AdminHomepage() {
           {/* CTA Section */}
           <div className="mb-8 pb-8 border-b-2 border-brown-light">
             <h2 className="text-2xl font-semibold text-brown-dark mb-4">Call to Action Section</h2>
-            <p className="text-sm text-brown-dark/80 mb-4">
-              Customize the final call-to-action section at the bottom of your homepage. This section encourages visitors to book an appointment.
-            </p>
             <div className="space-y-4">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={homepage.cta?.enabled !== false}
-                  onChange={(e) =>
-                    setHomepage((prev) => ({
-                      ...prev,
-                      cta: {
-                        ...prev.cta,
-                        enabled: e.target.checked,
-                      },
-                    }))
-                  }
+                  onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, enabled: e.target.checked } })}
                   className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
                 />
                 <span className="text-sm font-medium text-brown-dark">Show CTA section on homepage</span>
@@ -2129,10 +1963,10 @@ export default function AdminHomepage() {
                     <label className="block text-sm font-medium text-brown-dark mb-2">Primary Button URL</label>
                     <input
                       type="text"
-                      value={homepage.cta.primaryButtonUrl || '/booking'}
-                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, primaryButtonUrl: e.target.value } })}
+                      value={homepage.cta.buttonUrl || '/booking'}
+                      onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, buttonUrl: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                      placeholder="/booking"
+                      placeholder="/booking or https://example.com"
                     />
                     <p className="text-xs text-brown-dark/60 mt-1">Use relative URLs like /booking or full URLs like https://example.com</p>
                   </div>
@@ -2154,7 +1988,7 @@ export default function AdminHomepage() {
                       value={homepage.cta.secondaryButtonUrl || '/services'}
                       onChange={(e) => setHomepage({ ...homepage, cta: { ...homepage.cta, secondaryButtonUrl: e.target.value } })}
                       className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
-                      placeholder="/services"
+                      placeholder="/services or https://example.com"
                     />
                     <p className="text-xs text-brown-dark/60 mt-1">Only used if secondary button text is provided</p>
                   </div>
