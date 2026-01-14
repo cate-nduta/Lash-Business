@@ -128,7 +128,7 @@ export default function PaystackInlinePayment({
       let formattedPhone: string | undefined = undefined
       if (phone) {
         // Remove all non-digit characters
-        let cleaned = phone.replace(/\D/g, '')
+        const cleaned = phone.replace(/\D/g, '')
         // Remove leading + if present (already handled by replace)
         // Ensure it starts with country code (e.g., 254 for Kenya)
         if (cleaned.length >= 9 && cleaned.length <= 15) {

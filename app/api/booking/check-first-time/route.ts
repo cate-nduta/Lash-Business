@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     // Always return as first-time client to avoid blocking the booking flow
     // Calendar checks were causing timeout errors and blocking user experience
     // This prevents the "TimeoutError: signal timed out" error
-    let isFirstTime = true
+    const isFirstTime = true
     
     // No calendar API calls - removed to prevent timeouts
 

@@ -488,6 +488,46 @@ export default function LabsBookAppointment() {
     return `${priceKES.toLocaleString('en-US')} KSH`
   }
 
+  // Convert budget range label from KES to USD if needed
+  const formatBudgetRangeLabel = (label: string): string => {
+    if (currency === 'KES' || !exchangeRates) {
+      return label
+    }
+    
+    // Format USD amounts (use K for thousands if >= 1K)
+    const formatUSD = (amount: number) => {
+      if (amount >= 1000) {
+        return `${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}K`
+      }
+      return amount.toFixed(2).replace(/\.00$/, '')
+    }
+    
+    // Parse KES range like "180K–230K KES" or "250K–300K+ KES"
+    const rangeMatch = label.match(/(\d+(?:\.\d+)?)K?\s*[–-]\s*(\d+(?:\.\d+)?)K?(\+)?\s*(KES)?/i)
+    if (rangeMatch) {
+      const minKES = parseFloat(rangeMatch[1]) * 1000 // Convert K to thousands
+      const maxKES = parseFloat(rangeMatch[2]) * 1000
+      const hasPlus = rangeMatch[3] === '+' // Check if there's a plus sign
+      const minUSD = Math.round((minKES / exchangeRates.usdToKes) * 100) / 100
+      const maxUSD = Math.round((maxKES / exchangeRates.usdToKes) * 100) / 100
+      
+      return `$${formatUSD(minUSD)}–$${formatUSD(maxUSD)}${hasPlus ? '+' : ''} USD`
+    }
+    
+    // Parse single value like "350K" or "350K KES"
+    const singleMatch = label.match(/(\d+(?:\.\d+)?)K?(\+)?\s*(KES)?/i)
+    if (singleMatch) {
+      const valueKES = parseFloat(singleMatch[1]) * 1000 // Convert K to thousands
+      const hasPlus = singleMatch[2] === '+' // Check if there's a plus sign
+      const valueUSD = Math.round((valueKES / exchangeRates.usdToKes) * 100) / 100
+      
+      return `$${formatUSD(valueUSD)}${hasPlus ? '+' : ''} USD`
+    }
+    
+    // If format doesn't match, return original
+    return label
+  }
+
   // Validate discount code (waitlist discount codes)
   const validateDiscountCode = useCallback(async (code: string) => {
     if (!code || !code.trim()) {
@@ -1067,50 +1107,36 @@ export default function LabsBookAppointment() {
               {/* Consultation Fee */}
               {(() => {
                 // Calculate displayed price with discount if valid code
-                let displayPrice = consultationFeeKES
-                if (currency === 'USD' && exchangeRates) {
-                  displayPrice = consultationFeeKES / exchangeRates.usdToKes
-                  displayPrice = Math.round(displayPrice * 100) / 100
-                } else if (currency === 'USD' && !exchangeRates) {
-                  const defaultRate = 130
-                  displayPrice = consultationFeeKES / defaultRate
-                  displayPrice = Math.round(displayPrice * 100) / 100
-                }
+                // Keep original KES price for formatPrice function (it handles conversion)
+                const originalPriceKES = consultationFeeKES
                 
                 // Calculate discount - waitlist discount code
-                let discountAmount = 0
+                let discountAmountKES = 0
                 let discountMessage = ''
-                let finalPrice = displayPrice
                 
                 if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
                   if (discountCodeValidationStatus.discountType === 'percentage') {
-                    discountAmount = (displayPrice * discountCodeValidationStatus.discountValue) / 100
+                    discountAmountKES = (originalPriceKES * discountCodeValidationStatus.discountValue) / 100
                     discountMessage = `✓ ${discountCodeValidationStatus.discountValue}% waitlist discount applied`
                   } else if (discountCodeValidationStatus.discountType === 'fixed') {
-                    // For fixed discount, convert to currency if needed
-                    if (currency === 'USD' && exchangeRates) {
-                      discountAmount = discountCodeValidationStatus.discountValue / exchangeRates.usdToKes
-                    } else {
-                      discountAmount = discountCodeValidationStatus.discountValue
-                    }
+                    discountAmountKES = discountCodeValidationStatus.discountValue
                     discountMessage = `✓ ${discountCodeValidationStatus.discountValue.toLocaleString()} KES waitlist discount applied`
                   }
-                  finalPrice = currency === 'USD' 
-                    ? Math.round((displayPrice - discountAmount) * 100) / 100
-                    : Math.round(displayPrice - discountAmount)
                 }
                 
-                if (discountAmount > 0) {
+                const finalPriceKES = Math.max(0, originalPriceKES - discountAmountKES)
+                
+                if (discountAmountKES > 0) {
                   return (
                     <div>
                       <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
-                        {loadingFee ? 'Loading...' : formatPrice(finalPrice)}
+                        {loadingFee ? 'Loading...' : formatPrice(finalPriceKES)}
                       </div>
                       <div className="text-sm text-green-600 font-semibold mb-1">
                         {discountMessage}
                       </div>
                       <div className="text-xs text-[var(--color-text)]/60 line-through mb-1">
-                        Original: {formatPrice(displayPrice)}
+                        Original: {formatPrice(originalPriceKES)}
                       </div>
                       <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
                     </div>
@@ -1120,7 +1146,7 @@ export default function LabsBookAppointment() {
                 return (
                   <div>
                     <div className="inline-block bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold text-lg mb-2">
-                      {loadingFee ? 'Loading...' : formatPrice(displayPrice)}
+                      {loadingFee ? 'Loading...' : formatPrice(originalPriceKES)}
                     </div>
                     <p className="text-sm text-[var(--color-text)]/70">One comprehensive session</p>
                   </div>
@@ -1478,7 +1504,7 @@ export default function LabsBookAppointment() {
                   <option value="">Select range</option>
                   {budgetRanges.map((range) => (
                     <option key={range.id} value={range.value}>
-                      {range.label}
+                      {formatBudgetRangeLabel(range.label)}
                     </option>
                   ))}
                 </select>
@@ -1967,36 +1993,18 @@ export default function LabsBookAppointment() {
                   if (isRebooking) return 'Reschedule Consultation (No Payment Required)'
                   if (consultationFeeKES === 0) return 'Submit Free Consultation Request'
                   
-                  // Calculate final price with discount
-                  let displayPrice = consultationFeeKES
-                  if (currency === 'USD' && exchangeRates) {
-                    displayPrice = consultationFeeKES / exchangeRates.usdToKes
-                    displayPrice = Math.round(displayPrice * 100) / 100
-                  } else if (currency === 'USD' && !exchangeRates) {
-                    const defaultRate = 130
-                    displayPrice = consultationFeeKES / defaultRate
-                    displayPrice = Math.round(displayPrice * 100) / 100
-                  }
-                  
-                  // Apply waitlist discount
-                  let finalPrice = displayPrice
+                  // Apply waitlist discount - work with KES amounts (formatPrice handles conversion)
+                  let finalPriceKES = consultationFeeKES
                   if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
                     if (discountCodeValidationStatus.discountType === 'percentage') {
-                      const discountAmount = (displayPrice * discountCodeValidationStatus.discountValue) / 100
-                      finalPrice = currency === 'USD' 
-                        ? Math.round((displayPrice - discountAmount) * 100) / 100
-                        : Math.round(displayPrice - discountAmount)
+                      const discountAmountKES = (consultationFeeKES * discountCodeValidationStatus.discountValue) / 100
+                      finalPriceKES = Math.round(consultationFeeKES - discountAmountKES)
                     } else if (discountCodeValidationStatus.discountType === 'fixed') {
-                      if (currency === 'USD' && exchangeRates) {
-                        const discountAmount = discountCodeValidationStatus.discountValue / exchangeRates.usdToKes
-                        finalPrice = Math.round((displayPrice - discountAmount) * 100) / 100
-                      } else {
-                        finalPrice = Math.round(displayPrice - discountCodeValidationStatus.discountValue)
-                      }
+                      finalPriceKES = Math.round(consultationFeeKES - discountCodeValidationStatus.discountValue)
                     }
                   }
                   
-                  return `Submit Consultation Request - ${formatPrice(finalPrice)}`
+                  return `Submit Consultation Request - ${formatPrice(finalPriceKES)}`
                 })()}
               </button>
               <Link

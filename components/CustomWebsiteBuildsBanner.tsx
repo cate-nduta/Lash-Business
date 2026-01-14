@@ -66,7 +66,6 @@ export default function CustomWebsiteBuildsBanner() {
     }
 
     let isMounted = true
-    let retryCount = 0
     const maxRetries = 3
 
     const fetchBanner = async (retryAttempt = 0) => {
@@ -160,7 +159,7 @@ export default function CustomWebsiteBuildsBanner() {
         if (bannerElement) {
           // Get actual rendered height with padding included - use getBoundingClientRect for pixel-perfect accuracy
           // Force a reflow to ensure accurate measurement
-          bannerElement.offsetHeight
+          void bannerElement.offsetHeight
           const rect = bannerElement.getBoundingClientRect()
           // Use exact height without rounding - ensure no gap by using precise value
           const bannerHeight = rect.height

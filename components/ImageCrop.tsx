@@ -95,7 +95,7 @@ export default function ImageCrop({ imageSrc, onCrop, onCancel, aspectRatio = 1 
       const deltaX = moveEvent.clientX - startX
       const deltaY = moveEvent.clientY - startY
       
-      let newCrop = { ...startCrop }
+      const newCrop = { ...startCrop }
       
       if (direction.includes('e')) {
         newCrop.width = Math.max(50, startCrop.width + deltaX)

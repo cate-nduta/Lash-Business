@@ -350,7 +350,7 @@ export async function GET(request: NextRequest) {
       })
       }
       // Clone start for iteration
-      let currentDate = new Date(windowStart)
+      const currentDate = new Date(windowStart)
 
       // Skip local bookings processing for initial load - it's not used for date filtering
       // Local bookings are only checked when fetching time slots for a specific date
@@ -524,7 +524,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Try to fetch booked slots from Google Calendar (with fallback if API fails)
-    let bookedSlots = new Set<string>()
+    const bookedSlots = new Set<string>()
     
     try {
       const calendar = await getCalendarClient()
