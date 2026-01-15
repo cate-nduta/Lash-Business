@@ -134,6 +134,68 @@ export default function Booking() {
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')
 
+  // Timezone detection and management
+  const [clientTimezone, setClientTimezone] = useState<string>('')
+  const [clientCountry, setClientCountry] = useState<string>('')
+  const [availableTimezones, setAvailableTimezones] = useState<Array<{ value: string; label: string; country?: string }>>([])
+  const [detectingTimezone, setDetectingTimezone] = useState(true)
+  
+  // Country to timezones mapping
+  const countryTimezonesMap: Record<string, Array<{ value: string; label: string }>> = {
+    'United States': [
+      { value: 'America/New_York', label: 'Eastern Time (New York)' },
+      { value: 'America/Chicago', label: 'Central Time (Chicago)' },
+      { value: 'America/Denver', label: 'Mountain Time (Denver)' },
+      { value: 'America/Los_Angeles', label: 'Pacific Time (Los Angeles)' },
+    ],
+    'Canada': [
+      { value: 'America/Toronto', label: 'Eastern Time (Toronto)' },
+      { value: 'America/Vancouver', label: 'Pacific Time (Vancouver)' },
+      { value: 'America/Winnipeg', label: 'Central Time (Winnipeg)' },
+      { value: 'America/Edmonton', label: 'Mountain Time (Edmonton)' },
+    ],
+    'United Kingdom': [{ value: 'Europe/London', label: 'London' }],
+    'Germany': [{ value: 'Europe/Berlin', label: 'Berlin' }],
+    'France': [{ value: 'Europe/Paris', label: 'Paris' }],
+    'Spain': [{ value: 'Europe/Madrid', label: 'Madrid' }],
+    'Italy': [{ value: 'Europe/Rome', label: 'Rome' }],
+    'Sweden': [{ value: 'Europe/Stockholm', label: 'Stockholm' }],
+    'Norway': [{ value: 'Europe/Oslo', label: 'Oslo' }],
+    'Finland': [{ value: 'Europe/Helsinki', label: 'Helsinki' }],
+    'Ireland': [{ value: 'Europe/Dublin', label: 'Dublin' }],
+    'United Arab Emirates': [{ value: 'Asia/Dubai', label: 'Dubai' }],
+    'Singapore': [{ value: 'Asia/Singapore', label: 'Singapore' }],
+    'Malaysia': [{ value: 'Asia/Kuala_Lumpur', label: 'Kuala Lumpur' }],
+    'Hong Kong': [{ value: 'Asia/Hong_Kong', label: 'Hong Kong' }],
+    'Japan': [{ value: 'Asia/Tokyo', label: 'Tokyo' }],
+    'China': [{ value: 'Asia/Shanghai', label: 'Shanghai' }],
+    'India': [{ value: 'Asia/Kolkata', label: 'Mumbai/New Delhi' }],
+    'Australia': [
+      { value: 'Australia/Sydney', label: 'Sydney' },
+      { value: 'Australia/Melbourne', label: 'Melbourne' },
+      { value: 'Australia/Brisbane', label: 'Brisbane' },
+      { value: 'Australia/Perth', label: 'Perth' },
+    ],
+    'New Zealand': [{ value: 'Pacific/Auckland', label: 'Auckland' }],
+    'South Africa': [{ value: 'Africa/Johannesburg', label: 'Johannesburg' }],
+    'Nigeria': [{ value: 'Africa/Lagos', label: 'Lagos' }],
+    'Kenya': [{ value: 'Africa/Nairobi', label: 'Nairobi' }],
+    'Uganda': [{ value: 'Africa/Kampala', label: 'Kampala' }],
+    'Tanzania': [{ value: 'Africa/Dar_es_Salaam', label: 'Dar es Salaam' }],
+    'Rwanda': [{ value: 'Africa/Kigali', label: 'Kigali' }],
+    'Ethiopia': [{ value: 'Africa/Addis_Ababa', label: 'Addis Ababa' }],
+    'Ghana': [{ value: 'Africa/Accra', label: 'Accra' }],
+    'Egypt': [{ value: 'Africa/Cairo', label: 'Cairo' }],
+    'Brazil': [
+      { value: 'America/Sao_Paulo', label: 'São Paulo' },
+      { value: 'America/Manaus', label: 'Manaus' },
+    ],
+    'Mexico': [{ value: 'America/Mexico_City', label: 'Mexico City' }],
+    'Argentina': [{ value: 'America/Buenos_Aires', label: 'Buenos Aires' }],
+  }
+  
+  const allCountries = Object.keys(countryTimezonesMap).sort()
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -160,6 +222,167 @@ export default function Booking() {
   const isConsultation = selectedServiceNames.some(name => 
     name && name.toLowerCase().includes('consult')
   )
+
+  // Timezone detection and utilities
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setClientTimezone(detectedTimezone)
+      
+      // Try to get country from timezone (basic mapping)
+      const timezoneToCountry: Record<string, string> = {
+        'America/New_York': 'United States',
+        'America/Chicago': 'United States',
+        'America/Denver': 'United States',
+        'America/Los_Angeles': 'United States',
+        'America/Toronto': 'Canada',
+        'America/Vancouver': 'Canada',
+        'Europe/London': 'United Kingdom',
+        'Europe/Berlin': 'Germany',
+        'Europe/Paris': 'France',
+        'Europe/Madrid': 'Spain',
+        'Europe/Rome': 'Italy',
+        'Europe/Stockholm': 'Sweden',
+        'Europe/Oslo': 'Norway',
+        'Europe/Helsinki': 'Finland',
+        'Europe/Dublin': 'Ireland',
+        'Asia/Dubai': 'United Arab Emirates',
+        'Asia/Singapore': 'Singapore',
+        'Asia/Kuala_Lumpur': 'Malaysia',
+        'Asia/Hong_Kong': 'Hong Kong',
+        'Asia/Tokyo': 'Japan',
+        'Asia/Shanghai': 'China',
+        'Asia/Kolkata': 'India',
+        'Australia/Sydney': 'Australia',
+        'Australia/Melbourne': 'Australia',
+        'Pacific/Auckland': 'New Zealand',
+        'Africa/Johannesburg': 'South Africa',
+        'Africa/Lagos': 'Nigeria',
+        'Africa/Nairobi': 'Kenya',
+        'Africa/Kampala': 'Uganda',
+        'Africa/Dar_es_Salaam': 'Tanzania',
+        'Africa/Kigali': 'Rwanda',
+        'Africa/Addis_Ababa': 'Ethiopia',
+        'Africa/Accra': 'Ghana',
+        'Africa/Cairo': 'Egypt',
+        'America/Sao_Paulo': 'Brazil',
+        'America/Mexico_City': 'Mexico',
+        'America/Buenos_Aires': 'Argentina',
+      }
+      
+      // Find country from timezone
+      let detectedCountry = 'Unknown'
+      for (const [country, timezones] of Object.entries(countryTimezonesMap)) {
+        if (timezones.some(tz => tz.value === detectedTimezone)) {
+          detectedCountry = country
+          break
+        }
+      }
+      
+      // Fallback to old mapping if not found
+      if (detectedCountry === 'Unknown') {
+        const country = timezoneToCountry[detectedTimezone] || 'Unknown'
+        detectedCountry = country
+      }
+      
+      setClientCountry(detectedCountry)
+      
+      // Get all timezones for the detected country
+      const countryTimezones = countryTimezonesMap[detectedCountry] || [
+        { value: detectedTimezone, label: detectedTimezone.replace(/_/g, ' ') }
+      ]
+      setAvailableTimezones(countryTimezones)
+      
+      // If detected timezone is not in the country's list, add it
+      if (!countryTimezones.some(tz => tz.value === detectedTimezone)) {
+        setAvailableTimezones([
+          { value: detectedTimezone, label: detectedTimezone.replace(/_/g, ' ') },
+          ...countryTimezones
+        ])
+      }
+    } catch (error) {
+      console.error('Error detecting timezone:', error)
+      // Fallback to Nairobi timezone
+      setClientTimezone('Africa/Nairobi')
+      setClientCountry('Kenya')
+      setAvailableTimezones([{ value: 'Africa/Nairobi', label: 'Africa/Nairobi', country: 'Kenya' }])
+    } finally {
+      setDetectingTimezone(false)
+    }
+  }, [])
+
+  // Convert time slot from Nairobi time to client's local time
+  const convertTimeSlotToLocal = (nairobiTimeSlot: string): { value: string; label: string } => {
+    try {
+      if (!clientTimezone || clientTimezone === 'Africa/Nairobi') {
+        // No conversion needed if client is in Nairobi timezone
+        return { value: nairobiTimeSlot, label: nairobiTimeSlot }
+      }
+      
+      // Parse the Nairobi time slot (format: YYYY-MM-DDTHH:MM:00+03:00)
+      const nairobiDate = new Date(nairobiTimeSlot)
+      if (isNaN(nairobiDate.getTime())) {
+        return { value: nairobiTimeSlot, label: nairobiTimeSlot }
+      }
+      
+      // Format in client's local timezone
+      const localTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: clientTimezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(nairobiDate)
+      
+      // Keep the original value (Nairobi time) for backend, but show local time in label
+      return {
+        value: nairobiTimeSlot, // Keep original for backend
+        label: localTime,
+      }
+    } catch (error) {
+      console.error('Error converting time slot:', error)
+      return { value: nairobiTimeSlot, label: nairobiTimeSlot }
+    }
+  }
+
+  // Convert local date + time + timezone to UTC for backend
+  const convertLocalToUTC = (localDate: string, localTime: string, timezone: string): string => {
+    try {
+      // Combine date and time in the client's timezone
+      const localDateTime = `${localDate}T${localTime}:00`
+      const date = new Date(localDateTime)
+      
+      // Create a formatter to interpret the date in the client's timezone
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+      
+      // Get the local date parts
+      const parts = formatter.formatToParts(date)
+      const year = parts.find(p => p.type === 'year')?.value
+      const month = parts.find(p => p.type === 'month')?.value
+      const day = parts.find(p => p.type === 'day')?.value
+      const hour = parts.find(p => p.type === 'hour')?.value
+      const minute = parts.find(p => p.type === 'minute')?.value
+      
+      // Create ISO string in client's timezone, then convert to UTC
+      const localISO = `${year}-${month}-${day}T${hour}:${minute}:00`
+      const utcDate = new Date(new Date(localISO).toLocaleString('en-US', { timeZone: timezone }))
+      
+      return utcDate.toISOString()
+    } catch (error) {
+      console.error('Error converting to UTC:', error)
+      // Fallback: use the original timeSlot if it's already in ISO format
+      return localDate
+    }
+  }
 
   // Debug helper to ensure cart + selection stay in sync (only runs in browser)
   useEffect(() => {
@@ -1739,7 +1962,20 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       })
       const data = await response.json()
       if (data.slots) {
-        setTimeSlots(data.slots)
+        // Convert time slots to client's local timezone for display
+        const convertedSlots = Array.isArray(data.slots) 
+          ? data.slots.map((slot: TimeSlot | string) => {
+              if (typeof slot === 'string') {
+                // If slot is a string, convert it
+                return convertTimeSlotToLocal(slot)
+              } else if (slot && typeof slot === 'object' && 'value' in slot) {
+                // If slot is an object with value property
+                return convertTimeSlotToLocal(slot.value)
+              }
+              return slot as TimeSlot
+            })
+          : []
+        setTimeSlots(convertedSlots)
         if (data.slots.length === 0) {
           setSubmitStatus({
             type: 'error',
@@ -2223,6 +2459,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             paymentStatus: 'pending_payment',
             currency: currency,
             desiredLook: 'Custom',
+            clientTimezone: clientTimezone || 'Africa/Nairobi',
+            clientCountry: clientCountry || 'Unknown',
           }),
         })
         
@@ -2606,6 +2844,69 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             <div className="sticker-lash animate-float-sticker" style={{ animationDelay: '0.5s' }}></div>
           </div>
           <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6" noValidate>
+            {/* Timezone Display and Selection */}
+            {!detectingTimezone && clientTimezone && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 mb-2">
+                      📍 Your Location
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <label htmlFor="countrySelect" className="block text-xs text-blue-800 mb-1">
+                          Country *
+                        </label>
+                        <select
+                          id="countrySelect"
+                          value={clientCountry}
+                          onChange={(e) => {
+                            const selectedCountry = e.target.value
+                            setClientCountry(selectedCountry)
+                            const countryTzs = countryTimezonesMap[selectedCountry] || []
+                            if (countryTzs.length > 0) {
+                              setClientTimezone(countryTzs[0].value)
+                              setAvailableTimezones(countryTzs)
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-md bg-white text-blue-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="Unknown">Select your country...</option>
+                          {allCountries.map((country) => (
+                            <option key={country} value={country}>
+                              {country}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {clientCountry && clientCountry !== 'Unknown' && availableTimezones.length > 0 && (
+                        <div>
+                          <label htmlFor="timezoneSelect" className="block text-xs text-blue-800 mb-1">
+                            Timezone *
+                          </label>
+                          <select
+                            id="timezoneSelect"
+                            value={clientTimezone}
+                            onChange={(e) => setClientTimezone(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-blue-300 rounded-md bg-white text-blue-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            {availableTimezones.map((tz) => (
+                              <option key={tz.value} value={tz.value}>
+                                {tz.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-700 mt-2 italic">
+                  All times are shown in your local time
+                </p>
+              </div>
+            )}
+
             {/* Time Slot Field */}
                   {formData.date && (
                   <div>

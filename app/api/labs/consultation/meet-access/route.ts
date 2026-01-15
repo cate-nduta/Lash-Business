@@ -153,16 +153,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse the scheduled date and time
-    const scheduledDate = new Date(consultation.preferredDate)
+    // preferredDate is in YYYY-MM-DD format
+    // preferredTime is a label like "9:30 AM" that was shown to the client in their local time,
+    // but the actual booking time is in Nairobi timezone (UTC+3)
+    
     const timeSlot = getTimeForConsultation(consultation.preferredTime)
     
-    // Set the start time of the meeting
-    const meetingStart = new Date(scheduledDate)
-    meetingStart.setHours(timeSlot.startHour, timeSlot.startMinute, 0, 0)
+    // Create datetime in Nairobi timezone (UTC+3)
+    // preferredDate is already in YYYY-MM-DD format
+    const nairobiDateTime = `${consultation.preferredDate}T${String(timeSlot.startHour).padStart(2, '0')}:${String(timeSlot.startMinute).padStart(2, '0')}:00+03:00`
+    let meetingStart = new Date(nairobiDateTime)
     
-    // Set the end time of the meeting
-    const meetingEnd = new Date(scheduledDate)
-    meetingEnd.setHours(timeSlot.endHour, timeSlot.endMinute, 0, 0)
+    // Validate the date
+    if (isNaN(meetingStart.getTime())) {
+      // Fallback: use current date with the time slot
+      const fallbackDate = new Date()
+      const fallbackDateStr = fallbackDate.toISOString().split('T')[0]
+      const fallbackDateTime = `${fallbackDateStr}T${String(timeSlot.startHour).padStart(2, '0')}:${String(timeSlot.startMinute).padStart(2, '0')}:00+03:00`
+      meetingStart = new Date(fallbackDateTime)
+    }
+    
+    // Set the end time (1 hour after start)
+    const meetingEnd = new Date(meetingStart.getTime() + 60 * 60 * 1000)
 
     // Calculate join window
     const joinWindowStart = new Date(meetingStart)

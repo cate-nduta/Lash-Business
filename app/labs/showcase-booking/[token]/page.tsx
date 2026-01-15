@@ -204,6 +204,68 @@ export default function ShowcaseBookingPage() {
   const [meetingType, setMeetingType] = useState<'online' | 'physical'>('online')
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedTime, setSelectedTime] = useState<string>('')
+  
+  // Timezone detection and management
+  const [clientTimezone, setClientTimezone] = useState<string>('')
+  const [clientCountry, setClientCountry] = useState<string>('')
+  const [availableTimezones, setAvailableTimezones] = useState<Array<{ value: string; label: string }>>([])
+  const [detectingTimezone, setDetectingTimezone] = useState(true)
+  
+  // Country to timezones mapping
+  const countryTimezonesMap: Record<string, Array<{ value: string; label: string }>> = {
+    'United States': [
+      { value: 'America/New_York', label: 'Eastern Time (New York)' },
+      { value: 'America/Chicago', label: 'Central Time (Chicago)' },
+      { value: 'America/Denver', label: 'Mountain Time (Denver)' },
+      { value: 'America/Los_Angeles', label: 'Pacific Time (Los Angeles)' },
+    ],
+    'Canada': [
+      { value: 'America/Toronto', label: 'Eastern Time (Toronto)' },
+      { value: 'America/Vancouver', label: 'Pacific Time (Vancouver)' },
+      { value: 'America/Winnipeg', label: 'Central Time (Winnipeg)' },
+      { value: 'America/Edmonton', label: 'Mountain Time (Edmonton)' },
+    ],
+    'United Kingdom': [{ value: 'Europe/London', label: 'London' }],
+    'Germany': [{ value: 'Europe/Berlin', label: 'Berlin' }],
+    'France': [{ value: 'Europe/Paris', label: 'Paris' }],
+    'Spain': [{ value: 'Europe/Madrid', label: 'Madrid' }],
+    'Italy': [{ value: 'Europe/Rome', label: 'Rome' }],
+    'Sweden': [{ value: 'Europe/Stockholm', label: 'Stockholm' }],
+    'Norway': [{ value: 'Europe/Oslo', label: 'Oslo' }],
+    'Finland': [{ value: 'Europe/Helsinki', label: 'Helsinki' }],
+    'Ireland': [{ value: 'Europe/Dublin', label: 'Dublin' }],
+    'United Arab Emirates': [{ value: 'Asia/Dubai', label: 'Dubai' }],
+    'Singapore': [{ value: 'Asia/Singapore', label: 'Singapore' }],
+    'Malaysia': [{ value: 'Asia/Kuala_Lumpur', label: 'Kuala Lumpur' }],
+    'Hong Kong': [{ value: 'Asia/Hong_Kong', label: 'Hong Kong' }],
+    'Japan': [{ value: 'Asia/Tokyo', label: 'Tokyo' }],
+    'China': [{ value: 'Asia/Shanghai', label: 'Shanghai' }],
+    'India': [{ value: 'Asia/Kolkata', label: 'Mumbai/New Delhi' }],
+    'Australia': [
+      { value: 'Australia/Sydney', label: 'Sydney' },
+      { value: 'Australia/Melbourne', label: 'Melbourne' },
+      { value: 'Australia/Brisbane', label: 'Brisbane' },
+      { value: 'Australia/Perth', label: 'Perth' },
+    ],
+    'New Zealand': [{ value: 'Pacific/Auckland', label: 'Auckland' }],
+    'South Africa': [{ value: 'Africa/Johannesburg', label: 'Johannesburg' }],
+    'Nigeria': [{ value: 'Africa/Lagos', label: 'Lagos' }],
+    'Kenya': [{ value: 'Africa/Nairobi', label: 'Nairobi' }],
+    'Uganda': [{ value: 'Africa/Kampala', label: 'Kampala' }],
+    'Tanzania': [{ value: 'Africa/Dar_es_Salaam', label: 'Dar es Salaam' }],
+    'Rwanda': [{ value: 'Africa/Kigali', label: 'Kigali' }],
+    'Ethiopia': [{ value: 'Africa/Addis_Ababa', label: 'Addis Ababa' }],
+    'Ghana': [{ value: 'Africa/Accra', label: 'Accra' }],
+    'Egypt': [{ value: 'Africa/Cairo', label: 'Cairo' }],
+    'Brazil': [
+      { value: 'America/Sao_Paulo', label: 'São Paulo' },
+      { value: 'America/Manaus', label: 'Manaus' },
+    ],
+    'Mexico': [{ value: 'America/Mexico_City', label: 'Mexico City' }],
+    'Argentina': [{ value: 'America/Buenos_Aires', label: 'Buenos Aires' }],
+  }
+  
+  const allCountries = Object.keys(countryTimezonesMap).sort()
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [blockedDates, setBlockedDates] = useState<string[]>([])
   const [bookedSlots, setBookedSlots] = useState<Array<{ date: string; time: string }>>([])
@@ -349,6 +411,49 @@ export default function ShowcaseBookingPage() {
     }
   }, [token])
 
+  // Timezone detection
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setClientTimezone(detectedTimezone)
+      
+      // Find country from timezone
+      let detectedCountry = 'Unknown'
+      for (const [country, timezones] of Object.entries(countryTimezonesMap)) {
+        if (timezones.some(tz => tz.value === detectedTimezone)) {
+          detectedCountry = country
+          break
+        }
+      }
+      
+      setClientCountry(detectedCountry)
+      
+      // Get all timezones for the detected country
+      const countryTimezones = countryTimezonesMap[detectedCountry] || [
+        { value: detectedTimezone, label: detectedTimezone.replace(/_/g, ' ') }
+      ]
+      setAvailableTimezones(countryTimezones)
+      
+      // If detected timezone is not in the country's list, add it
+      if (!countryTimezones.some(tz => tz.value === detectedTimezone)) {
+        setAvailableTimezones([
+          { value: detectedTimezone, label: detectedTimezone.replace(/_/g, ' ') },
+          ...countryTimezones
+        ])
+      }
+    } catch (error) {
+      console.error('Error detecting timezone:', error)
+      // Fallback to Nairobi timezone
+      setClientTimezone('Africa/Nairobi')
+      setClientCountry('Kenya')
+      setAvailableTimezones([{ value: 'Africa/Nairobi', label: 'Africa/Nairobi' }])
+    } finally {
+      setDetectingTimezone(false)
+    }
+  }, [])
+
   // Normalize date for comparison
   const normalizeDateForComparison = (dateStr: string): string => {
     if (!dateStr) return ''
@@ -463,6 +568,8 @@ export default function ShowcaseBookingPage() {
           meetingType,
           date: selectedDate,
           time: selectedTime,
+          clientTimezone: clientTimezone || 'Africa/Nairobi',
+          clientCountry: clientCountry || 'Unknown',
         }),
       })
 
@@ -598,6 +705,69 @@ export default function ShowcaseBookingPage() {
                   </label>
                 </div>
               </div>
+
+              {/* Timezone Display and Selection */}
+              {!detectingTimezone && clientTimezone && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 mb-2">
+                        📍 Your Location
+                      </p>
+                      <div className="space-y-2">
+                        <div>
+                          <label htmlFor="countrySelect" className="block text-xs text-blue-800 mb-1">
+                            Country *
+                          </label>
+                          <select
+                            id="countrySelect"
+                            value={clientCountry}
+                            onChange={(e) => {
+                              const selectedCountry = e.target.value
+                              setClientCountry(selectedCountry)
+                              const countryTzs = countryTimezonesMap[selectedCountry] || []
+                              if (countryTzs.length > 0) {
+                                setClientTimezone(countryTzs[0].value)
+                                setAvailableTimezones(countryTzs)
+                              }
+                            }}
+                            className="w-full px-3 py-2 text-sm border border-blue-300 rounded-md bg-white text-blue-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="Unknown">Select your country...</option>
+                            {allCountries.map((country) => (
+                              <option key={country} value={country}>
+                                {country}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {clientCountry && clientCountry !== 'Unknown' && availableTimezones.length > 0 && (
+                          <div>
+                            <label htmlFor="timezoneSelect" className="block text-xs text-blue-800 mb-1">
+                              Timezone *
+                            </label>
+                            <select
+                              id="timezoneSelect"
+                              value={clientTimezone}
+                              onChange={(e) => setClientTimezone(e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-blue-300 rounded-md bg-white text-blue-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              {availableTimezones.map((tz) => (
+                                <option key={tz.value} value={tz.value}>
+                                  {tz.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-700 mt-2 italic">
+                    All times are shown in your local time
+                  </p>
+                </div>
+              )}
 
               {/* Date Selection */}
               <div>

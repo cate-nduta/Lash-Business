@@ -572,7 +572,29 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
                   </tr>
                   <tr>
                     <td style="padding: 8px 0; color: #6B4A3B; font-weight: 600;">Time:</td>
-                    <td style="padding: 8px 0; color: #3E2A20; font-size: 16px; font-weight: 600;">${formatTime(data.preferredTime)}</td>
+                    <td style="padding: 8px 0; color: #3E2A20; font-size: 16px; font-weight: 600;">
+                      ${formatTime(data.preferredTime)}
+                      ${data.clientTimezone && data.clientCountry && data.clientTimezone !== 'Africa/Nairobi' ? `
+                        <br>
+                        <span style="font-size: 13px; color: #6B4A3B; font-weight: normal;">
+                          (Your local time: ${formatTime(data.preferredTime)} ${data.clientTimezone.replace(/_/g, ' ')})
+                          <br>
+                          Nairobi time: ${(() => {
+                            try {
+                              const nairobiDate = createDateInNairobiTimezone(data.preferredDate, data.preferredTime)
+                              return nairobiDate.toLocaleTimeString('en-US', {
+                                timeZone: 'Africa/Nairobi',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              })
+                            } catch {
+                              return formatTime(data.preferredTime)
+                            }
+                          })()} (Africa/Nairobi)
+                        </span>
+                      ` : ''}
+                    </td>
                   </tr>
                   <tr>
                     <td style="padding: 8px 0; color: #6B4A3B; font-weight: 600;">Meeting Type:</td>
@@ -591,7 +613,28 @@ Submitted: ${new Date(data.submittedAt).toLocaleString()}
                             🎥 Join Your Consultation Meeting →
                           </a>
                           <p style="margin:12px 0 0 0; color: #5f6368; font-size: 13px; line-height: 1.6;">
-                            <strong>🔒 Secure Access:</strong> This link will only work during your scheduled time slot (${formatTime(data.preferredTime)} on ${formatDate(data.preferredDate)}). This ensures your privacy and prevents unauthorized access.
+                            <strong>🔒 Secure Access:</strong> This link will only work during your scheduled time slot. 
+                            ${data.clientTimezone && data.clientCountry ? `
+                              <br><br>
+                              <strong>Your local time:</strong> ${formatTime(data.preferredTime)} on ${formatDate(data.preferredDate)} (${data.clientTimezone.replace(/_/g, ' ')})
+                              <br>
+                              <strong>Nairobi time:</strong> ${(() => {
+                                try {
+                                  const nairobiDate = createDateInNairobiTimezone(data.preferredDate, data.preferredTime)
+                                  return nairobiDate.toLocaleTimeString('en-US', {
+                                    timeZone: 'Africa/Nairobi',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                  })
+                                } catch {
+                                  return formatTime(data.preferredTime)
+                                }
+                              })()} on ${formatDate(data.preferredDate)} (Africa/Nairobi)
+                              <br><br>
+                              <em style="color: #d32f2f;">⚠️ Important: The meeting link will activate based on Nairobi time (Africa/Nairobi). Please join at your scheduled local time, which corresponds to the Nairobi time shown above.</em>
+                            ` : `(${formatTime(data.preferredTime)} on ${formatDate(data.preferredDate)})`}
+                            This ensures your privacy and prevents unauthorized access.
                           </p>
                           <p style="margin:12px 0 0 0; color: #d32f2f; font-size: 12px; line-height: 1.6; background-color: #ffebee; padding: 10px; border-radius: 4px; border: 1px solid #ffcdd2;">
                             ⚠️ <strong>Security:</strong> Do not copy or share the meeting URL from your browser - this link is unique to your consultation only.

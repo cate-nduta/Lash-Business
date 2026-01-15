@@ -123,12 +123,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse the scheduled date and time
-    const appointmentDate = new Date(booking.appointmentDate)
-    const appointmentTimeStr = booking.appointmentTime
+    // appointmentDate is stored as ISO string (UTC), representing the meeting time in Nairobi timezone (UTC+3)
+    // When we create a Date from an ISO string, JavaScript automatically converts it to UTC
+    // So we can use it directly for time comparisons
     
-    // Parse time string (e.g., "9:30 AM" or "14:30")
     let meetingStart: Date
     try {
+      // appointmentDate is an ISO string - parse it directly
+      // This represents the actual meeting time (was created in Nairobi timezone, stored as UTC)
+      meetingStart = new Date(booking.appointmentDate)
+      
+      // Validate the date
+      if (isNaN(meetingStart.getTime())) {
+        throw new Error('Invalid appointment date')
+      }
+    } catch {
+      // Fallback: try to parse from appointmentTime label and preferredDate
+      // This should rarely happen, but provides a backup
+      const appointmentTimeStr = booking.appointmentTime
+      const dateStr = booking.appointmentDate.split('T')[0] || new Date().toISOString().split('T')[0]
+      
       // Try to parse as "HH:MM AM/PM" format
       const timeMatch = appointmentTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
       if (timeMatch) {
@@ -142,23 +156,18 @@ export async function GET(request: NextRequest) {
           hours = 0
         }
         
-        meetingStart = new Date(appointmentDate)
-        meetingStart.setHours(hours, minutes, 0, 0)
+        // Create datetime in Nairobi timezone (UTC+3)
+        const nairobiDateTime = `${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+03:00`
+        meetingStart = new Date(nairobiDateTime)
       } else {
-        // Try to parse as "HH:MM" format
-        const [hours, minutes] = appointmentTimeStr.split(':').map(Number)
-        meetingStart = new Date(appointmentDate)
-        meetingStart.setHours(hours || 10, minutes || 0, 0, 0)
+        // Default to 10:00 AM Nairobi time if parsing fails
+        const nairobiDateTime = `${dateStr}T10:00:00+03:00`
+        meetingStart = new Date(nairobiDateTime)
       }
-    } catch {
-      // Default to 10:00 AM if parsing fails
-      meetingStart = new Date(appointmentDate)
-      meetingStart.setHours(10, 0, 0, 0)
     }
     
     // Set the end time (1 hour after start)
-    const meetingEnd = new Date(meetingStart)
-    meetingEnd.setHours(meetingEnd.getHours() + 1)
+    const meetingEnd = new Date(meetingStart.getTime() + 60 * 60 * 1000)
 
     // Calculate join window
     const joinWindowStart = new Date(meetingStart)

@@ -29,7 +29,7 @@ const BASE_URL = normalizeBaseUrl()
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { token, clientName, clientEmail, clientPhone, meetingType, date, time } = body
+    const { token, clientName, clientEmail, clientPhone, meetingType, date, time, clientTimezone, clientCountry } = body
 
     if (!token || !clientName || !clientEmail || !date || !time) {
       return NextResponse.json(
@@ -244,6 +244,8 @@ export async function POST(request: NextRequest) {
       status: 'confirmed',
       createdAt: new Date().toISOString(),
       orderId: isOrder ? project.projectId : undefined,
+      clientTimezone: typeof clientTimezone === 'string' && clientTimezone.trim() ? clientTimezone.trim() : 'Africa/Nairobi',
+      clientCountry: typeof clientCountry === 'string' && clientCountry.trim() ? clientCountry.trim() : 'Unknown',
     }
 
     showcaseBookings.push(showcaseBooking)
@@ -326,6 +328,18 @@ export async function POST(request: NextRequest) {
       minute: '2-digit',
       timeZone: 'Africa/Nairobi', // Ensure we use Nairobi timezone
     })
+    
+    // Format time in client's timezone if available
+    // Use the timezone from the booking object (which was set from the request body)
+    const bookingClientTimezone = showcaseBooking.clientTimezone || 'Africa/Nairobi'
+    const bookingClientCountry = showcaseBooking.clientCountry || 'Unknown'
+    const formattedClientTime = (bookingClientTimezone && bookingClientTimezone !== 'Africa/Nairobi')
+      ? meetingDate.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: bookingClientTimezone,
+        })
+      : formattedTime
 
     // Generate Google Calendar link
     // slotDateTime is in ISO format with timezone (+03:00 for Nairobi), so we can use it directly
@@ -437,7 +451,16 @@ If you need to reschedule, please contact us at hello@lashdiary.co.ke`)
             <div style="background: #F3E6DC; border-radius: 6px; padding: 20px; margin: 24px 0;">
               <h2 style="color: #7C4B31; margin-top: 0;">Meeting Details</h2>
               <p><strong>Date:</strong> ${formattedDate}</p>
-              <p><strong>Time:</strong> ${formattedTime}</p>
+              <p><strong>Time:</strong> ${formattedTime}
+                ${bookingClientTimezone && bookingClientCountry && bookingClientTimezone !== 'Africa/Nairobi' ? `
+                  <br>
+                  <span style="font-size: 13px; color: #6B4A3B; font-weight: normal; display: block; margin-top: 4px;">
+                    Your local time: ${formattedClientTime} (${bookingClientTimezone.replace(/_/g, ' ')})
+                    <br>
+                    Nairobi time: ${formattedTime} (Africa/Nairobi)
+                  </span>
+                ` : ''}
+              </p>
               <p><strong>Type:</strong> ${meetingType === 'online' ? 'Online Meeting' : 'Physical Meeting'}</p>
               ${meetingType === 'physical' ? '<p><strong>Location:</strong> LashDiary Studio, Nairobi, Kenya</p>' : (timeGatedLink ? `<p><strong>Location:</strong> Online Meeting</p>
               <div style="background: #E3F2FD; border-radius: 6px; padding: 16px; margin: 16px 0;">
@@ -446,7 +469,16 @@ If you need to reschedule, please contact us at hello@lashdiary.co.ke`)
                   <a href="${timeGatedLink}" style="color: #1976D2; text-decoration: underline; word-break: break-all;">${timeGatedLink}</a>
                 </p>
                 <p style="margin: 0; font-size: 12px; color: #616161;">
-                  <strong>Security:</strong> This link will only work during your scheduled time slot (${formattedTime} on ${formattedDate}). This ensures your privacy and prevents unauthorized access.
+                  <strong>Security:</strong> This link will only work during your scheduled time slot.
+                  ${bookingClientTimezone && bookingClientCountry && bookingClientTimezone !== 'Africa/Nairobi' ? `
+                    <br><br>
+                    <strong>Your local time:</strong> ${formattedClientTime} on ${formattedDate} (${bookingClientTimezone.replace(/_/g, ' ')})
+                    <br>
+                    <strong>Nairobi time:</strong> ${formattedTime} on ${formattedDate} (Africa/Nairobi)
+                    <br><br>
+                    <em style="color: #d32f2f;">⚠️ Important: The meeting link will activate based on Nairobi time (Africa/Nairobi). Please join at your scheduled local time, which corresponds to the Nairobi time shown above.</em>
+                  ` : `(${formattedTime} on ${formattedDate})`}
+                  This ensures your privacy and prevents unauthorized access.
                 </p>
               </div>` : '<p><strong>Location:</strong> Online (meeting link will be sent separately)</p>')}
             </div>

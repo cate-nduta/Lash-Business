@@ -71,6 +71,9 @@ export interface ConsultationSubmission {
   meetingCity?: string
   meetingBuilding?: string
   meetingStreet?: string
+  // Timezone information
+  clientTimezone?: string
+  clientCountry?: string
 }
 
 // NOTE: Calendar event generation has been moved to email-utils.ts
@@ -233,6 +236,8 @@ export async function POST(request: NextRequest) {
       meetingCity: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingCity, { fieldName: 'Meeting city', maxLength: 100, optional: true }) || '') : '',
       meetingBuilding: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingBuilding, { fieldName: 'Meeting building', maxLength: 200, optional: true }) || '') : '',
       meetingStreet: body.meetingType === 'physical' ? (sanitizeOptionalText(body.meetingStreet, { fieldName: 'Meeting street', maxLength: 200, optional: true }) || '') : '',
+      clientTimezone: typeof body.clientTimezone === 'string' && body.clientTimezone.trim() ? body.clientTimezone.trim() : 'Africa/Nairobi',
+      clientCountry: typeof body.clientCountry === 'string' && body.clientCountry.trim() ? body.clientCountry.trim() : 'Unknown',
       consultationPrice: typeof body.consultationPrice === 'number' ? body.consultationPrice : 0,
       originalPrice: typeof body.originalPrice === 'number' ? body.originalPrice : undefined,
       discountAmount: typeof body.discountAmount === 'number' ? body.discountAmount : undefined,

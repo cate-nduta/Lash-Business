@@ -801,7 +801,40 @@ export default function AdminLabsConsultations() {
       afternoon: 'Afternoon (12 PM - 4 PM)',
       evening: 'Evening (4 PM - 7 PM)',
     }
-    return timeMap[timeStr] || timeStr
+    return timeMap[timeStr.toLowerCase()] || timeStr
+  }
+
+  // Parse time label and create datetime in Nairobi timezone
+  const parseTimeLabelToDateTime = (dateStr: string, timeLabel: string): Date | null => {
+    try {
+      // Parse time label like "9:30 AM" or "morning"
+      const timeMatch = timeLabel.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+      if (timeMatch) {
+        let hours = parseInt(timeMatch[1], 10)
+        const minutes = parseInt(timeMatch[2], 10)
+        const period = timeMatch[3].toUpperCase()
+        
+        if (period === 'PM' && hours !== 12) hours += 12
+        else if (period === 'AM' && hours === 12) hours = 0
+        
+        // Create datetime in Nairobi timezone (UTC+3)
+        const nairobiDateTime = `${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+03:00`
+        return new Date(nairobiDateTime)
+      }
+      
+      // Handle fallback time ranges
+      if (timeLabel.toLowerCase().includes('morning')) {
+        return new Date(`${dateStr}T09:00:00+03:00`)
+      } else if (timeLabel.toLowerCase().includes('afternoon')) {
+        return new Date(`${dateStr}T13:00:00+03:00`)
+      } else if (timeLabel.toLowerCase().includes('evening')) {
+        return new Date(`${dateStr}T16:00:00+03:00`)
+      }
+      
+      return null
+    } catch {
+      return null
+    }
   }
 
   const businessTypeMap: Record<string, string> = {
@@ -1096,6 +1129,55 @@ export default function AdminLabsConsultations() {
                             </p>
                           )}
                         </div>
+                        {consultation.clientTimezone && consultation.clientCountry && consultation.preferredDate && consultation.preferredTime && (
+                          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm font-semibold text-blue-900 mb-2">
+                              {consultation.contactName} — {consultation.clientCountry}
+                            </p>
+                            <div className="space-y-1 text-sm">
+                              <p className="text-blue-800">
+                                <span className="font-medium">Client time:</span>{' '}
+                                {(() => {
+                                  try {
+                                    const dateTime = parseTimeLabelToDateTime(consultation.preferredDate, consultation.preferredTime)
+                                    if (dateTime) {
+                                      return new Intl.DateTimeFormat('en-US', {
+                                        timeZone: consultation.clientTimezone,
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                        hour12: true,
+                                      }).format(dateTime)
+                                    }
+                                    return formatTime(consultation.preferredTime)
+                                  } catch {
+                                    return formatTime(consultation.preferredTime)
+                                  }
+                                })()}{' '}
+                                ({consultation.clientTimezone.replace(/_/g, ' ')})
+                              </p>
+                              <p className="text-blue-800">
+                                <span className="font-medium">Your time:</span>{' '}
+                                {(() => {
+                                  try {
+                                    const dateTime = parseTimeLabelToDateTime(consultation.preferredDate, consultation.preferredTime)
+                                    if (dateTime) {
+                                      return new Intl.DateTimeFormat('en-US', {
+                                        timeZone: 'Africa/Nairobi',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                        hour12: true,
+                                      }).format(dateTime)
+                                    }
+                                    return formatTime(consultation.preferredTime)
+                                  } catch {
+                                    return formatTime(consultation.preferredTime)
+                                  }
+                                })()}{' '}
+                                (Africa/Nairobi)
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Additional Details */}

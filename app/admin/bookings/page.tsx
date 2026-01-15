@@ -72,6 +72,8 @@ interface Booking {
   }
   isWalkIn?: boolean
   walkInFee?: number
+  clientTimezone?: string
+  clientCountry?: string
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -1908,6 +1910,49 @@ export default function AdminBookings() {
                     <p className="text-sm text-gray-600">Time</p>
                     <p className="text-brown-dark font-semibold">{formatTime(selectedBooking.timeSlot)}</p>
                   </div>
+                  {selectedBooking.clientTimezone && selectedBooking.clientCountry && (
+                    <div className="md:col-span-2 mt-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">
+                        {selectedBooking.name} — {selectedBooking.clientCountry}
+                      </p>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-blue-800">
+                          <span className="font-medium">Client time:</span>{' '}
+                          {(() => {
+                            try {
+                              const clientTime = new Date(selectedBooking.timeSlot)
+                              return new Intl.DateTimeFormat('en-US', {
+                                timeZone: selectedBooking.clientTimezone,
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              }).format(clientTime)
+                            } catch {
+                              return formatTime(selectedBooking.timeSlot)
+                            }
+                          })()}{' '}
+                          ({selectedBooking.clientTimezone.replace(/_/g, ' ')})
+                        </p>
+                        <p className="text-blue-800">
+                          <span className="font-medium">Your time:</span>{' '}
+                          {(() => {
+                            try {
+                              const adminTime = new Date(selectedBooking.timeSlot)
+                              return new Intl.DateTimeFormat('en-US', {
+                                timeZone: 'Africa/Nairobi',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              }).format(adminTime)
+                            } catch {
+                              return formatTime(selectedBooking.timeSlot)
+                            }
+                          })()}{' '}
+                          (Africa/Nairobi)
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm text-gray-600">Booking Created</p>
                     <p className="text-brown-dark font-semibold">{formatDateTime(selectedBooking.createdAt)}</p>

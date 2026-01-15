@@ -244,6 +244,8 @@ export async function POST(request: NextRequest) {
       giftCardCode: rawGiftCardCode,
       desiredLook: rawDesiredLook,
       skipEmail, // Flag to skip sending emails (for showcase bookings, etc.)
+      clientTimezone: rawClientTimezone,
+      clientCountry: rawClientCountry,
     } = body
     
     // Fetch location from contact settings if not provided
@@ -657,6 +659,8 @@ export async function POST(request: NextRequest) {
         date,
         timeSlot,
         location: bookingLocation,
+        clientTimezone: typeof rawClientTimezone === 'string' && rawClientTimezone.trim() ? rawClientTimezone.trim() : 'Africa/Nairobi',
+        clientCountry: typeof rawClientCountry === 'string' && rawClientCountry.trim() ? rawClientCountry.trim() : 'Unknown',
         desiredLook: desiredLookLabel,
         desiredLookStatus: lashMapStatus,
         desiredLookStatusMessage: lashMapStatusMessage,
@@ -743,6 +747,8 @@ export async function POST(request: NextRequest) {
         date,
         timeSlot,
         location: bookingLocation,
+        clientTimezone: typeof rawClientTimezone === 'string' && rawClientTimezone.trim() ? rawClientTimezone.trim() : 'Africa/Nairobi',
+        clientCountry: typeof rawClientCountry === 'string' && rawClientCountry.trim() ? rawClientCountry.trim() : 'Unknown',
         desiredLook: desiredLookLabel,
         desiredLookStatus: lashMapStatus,
         desiredLookStatusMessage: lashMapStatusMessage,
