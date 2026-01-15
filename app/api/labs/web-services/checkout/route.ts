@@ -474,68 +474,216 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Apply discount code if provided
+    // Apply discount code if provided (check both referral codes and spin wheel codes)
     let referralDiscount = 0
     let appliedReferralCode: string | null = null
+    let discountServiceName: string | null = null // Name of the service that was discounted
+    let discountServicePercentage: number | null = null // Percentage discount applied to the service
     
     if (referralCode && referralCode.trim()) {
+      const codeToCheck = referralCode.trim().toUpperCase()
+      
+      // First check if it's a spin wheel code
       try {
-        // Create URL with search params for GET request
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url.split('/api')[0]
-        const validateUrl = new URL('/api/labs/web-services/validate-discount', baseUrl)
-        validateUrl.searchParams.set('code', referralCode.trim().toUpperCase())
-        validateUrl.searchParams.set('email', email)
-        validateUrl.searchParams.set('cartTotal', originalSubtotal.toString())
+        const spinWheelUrl = new URL('/api/labs/spin-wheel/validate-code', baseUrl)
+        spinWheelUrl.searchParams.set('code', codeToCheck)
+        spinWheelUrl.searchParams.set('email', email)
+        spinWheelUrl.searchParams.set('context', 'checkout')
         
-        const validateResponse = await fetch(validateUrl.toString(), {
+        const spinWheelResponse = await fetch(spinWheelUrl.toString(), {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         })
         
-        if (validateResponse.ok) {
-          const discountData = await validateResponse.json()
-          if (discountData.valid) {
-            appliedReferralCode = discountData.code
-            referralDiscount = discountData.discountAmount || 0
-            
-            // Mark code as used after successful validation (before creating order)
-            try {
-              const markUsedUrl = new URL('/api/labs/web-services/validate-discount', baseUrl)
-              const markUsedResponse = await fetch(markUsedUrl.toString(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  code: discountData.code,
-                  email: email,
-                }),
-              })
-              
-              if (!markUsedResponse.ok) {
-                console.error('Failed to mark discount code as used')
-                // Don't fail checkout if marking as used fails - code was already validated
+          if (spinWheelResponse.ok) {
+            const spinWheelData = await spinWheelResponse.json()
+            if (spinWheelData.valid) {
+              if (spinWheelData.prize.type === 'discount_percentage' && spinWheelData.prize.value) {
+                // Check if discount applies to a specific service or entire cart
+                const discountServiceId = spinWheelData.prize.discountServiceId || spinWheelData.prize.serviceType
+                const discountPercentage = spinWheelData.prize.value
+                
+                if (discountServiceId) {
+                  // Discount applies to a specific service
+                  const serviceIndex = finalItems.findIndex(item => item.productId === discountServiceId)
+                  if (serviceIndex !== -1) {
+                    // Get service name for display
+                    const service = webServicesData.services.find(s => s.id === discountServiceId)
+                    discountServiceName = service?.name || finalItems[serviceIndex].name || 'Service'
+                    discountServicePercentage = discountPercentage
+                    
+                    // Calculate discount for this specific service
+                    const servicePrice = finalItems[serviceIndex].price * finalItems[serviceIndex].quantity
+                    const serviceSetupFee = (finalItems[serviceIndex].setupFee || 0) * finalItems[serviceIndex].quantity
+                    const serviceTotal = servicePrice + serviceSetupFee
+                    const serviceDiscount = Math.round(serviceTotal * (discountPercentage / 100))
+                    
+                    referralDiscount = serviceDiscount
+                    appliedReferralCode = codeToCheck
+                    
+                    // Apply discount to the service (reduce price proportionally)
+                    const originalServicePrice = finalItems[serviceIndex].price
+                    const originalServiceSetupFee = finalItems[serviceIndex].setupFee || 0
+                    const discountedServicePrice = Math.max(0, Math.round(originalServicePrice * (1 - discountPercentage / 100)))
+                    const discountedServiceSetupFee = Math.max(0, Math.round(originalServiceSetupFee * (1 - discountPercentage / 100)))
+                    
+                    finalItems[serviceIndex] = {
+                      ...finalItems[serviceIndex],
+                      price: discountedServicePrice,
+                      setupFee: discountedServiceSetupFee,
+                    }
+                    
+                    // Recalculate setup fees total after discounting service
+                    setupFeesTotal = finalItems.reduce((sum, item) => {
+                      if (item.billingPeriod === 'yearly' && item.setupFee) {
+                        return sum + (item.setupFee * item.quantity)
+                      }
+                      return sum
+                    }, 0)
+                    if (domainType === 'new' && webServicesData.domainPricing) {
+                      setupFeesTotal += domainSetupFee
+                    }
+                    
+                    // Recalculate subtotal after discounting service
+                    originalSubtotal = finalItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                    originalSubtotal += setupFeesTotal
+                    if (domainType === 'new' && domainAnnualPrice > 0) {
+                      originalSubtotal += domainAnnualPrice
+                    }
+                    originalSubtotal += urgentPriorityFee
+                  } else {
+                    // Service not in cart - return error
+                    return NextResponse.json(
+                      { error: `This code is for a ${discountPercentage}% discount on ${spinWheelData.prize.label || 'a specific service'}, but that service is not in your cart. Please add it first.` },
+                      { status: 400 }
+                    )
+                  }
+                } else {
+                  // Discount applies to entire cart
+                  referralDiscount = Math.round(originalSubtotal * (discountPercentage / 100))
+                  appliedReferralCode = codeToCheck
+                }
+              } else if (spinWheelData.prize.type === 'free_service') {
+                // Free service prize - find the service in cart and make it free
+                const freeServiceId = spinWheelData.prize.freeServiceId || spinWheelData.prize.serviceType
+                if (freeServiceId) {
+                  // Find the service in the cart and set its price to 0
+                  const serviceIndex = finalItems.findIndex(item => item.productId === freeServiceId)
+                  if (serviceIndex !== -1) {
+                    // Calculate the discount amount (price of the free service before making it free)
+                    const freeServicePrice = finalItems[serviceIndex].price * finalItems[serviceIndex].quantity
+                    // If it has a setup fee, include that too
+                    const freeServiceSetupFee = (finalItems[serviceIndex].setupFee || 0) * finalItems[serviceIndex].quantity
+                    referralDiscount = freeServicePrice + freeServiceSetupFee
+                    appliedReferralCode = codeToCheck
+                    
+                    // Set the service price to 0 in the items array
+                    finalItems[serviceIndex] = {
+                      ...finalItems[serviceIndex],
+                      price: 0,
+                      setupFee: 0,
+                    }
+                    
+                    // Recalculate setup fees total after making service free
+                    setupFeesTotal = finalItems.reduce((sum, item) => {
+                      if (item.billingPeriod === 'yearly' && item.setupFee) {
+                        return sum + (item.setupFee * item.quantity)
+                      }
+                      return sum
+                    }, 0)
+                    if (domainType === 'new' && webServicesData.domainPricing) {
+                      setupFeesTotal += domainSetupFee
+                    }
+                    
+                    // Recalculate subtotal after making service free
+                    originalSubtotal = finalItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                    originalSubtotal += setupFeesTotal
+                    if (domainType === 'new' && domainAnnualPrice > 0) {
+                      originalSubtotal += domainAnnualPrice
+                    }
+                    originalSubtotal += urgentPriorityFee
+                  } else {
+                    // Service not in cart - return error
+                    return NextResponse.json(
+                      { error: `This code is for a free ${spinWheelData.prize.label || 'service'}, but that service is not in your cart. Please add it first.` },
+                      { status: 400 }
+                    )
+                  }
+                }
               }
-            } catch (markError) {
-              console.error('Error marking discount code as used:', markError)
-              // Don't fail checkout if marking as used fails
+            } else {
+              // Spin wheel code is invalid - don't try regular discount code
+              return NextResponse.json(
+                { error: spinWheelData.error || 'Invalid or expired spin wheel code' },
+                { status: 400 }
+              )
+            }
+          }
+      } catch (error) {
+        console.error('Error validating spin wheel code:', error)
+      }
+      
+      // If not a spin wheel code or spin wheel validation failed, try regular discount code
+      if (!appliedReferralCode) {
+        try {
+          // Create URL with search params for GET request
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url.split('/api')[0]
+          const validateUrl = new URL('/api/labs/web-services/validate-discount', baseUrl)
+          validateUrl.searchParams.set('code', codeToCheck)
+          validateUrl.searchParams.set('email', email)
+          validateUrl.searchParams.set('cartTotal', originalSubtotal.toString())
+          
+          const validateResponse = await fetch(validateUrl.toString(), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          
+          if (validateResponse.ok) {
+            const discountData = await validateResponse.json()
+            if (discountData.valid) {
+              appliedReferralCode = discountData.code
+              referralDiscount = discountData.discountAmount || 0
+              
+              // Mark code as used after successful validation (before creating order)
+              try {
+                const markUsedUrl = new URL('/api/labs/web-services/validate-discount', baseUrl)
+                const markUsedResponse = await fetch(markUsedUrl.toString(), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    code: discountData.code,
+                    email: email,
+                  }),
+                })
+                
+                if (!markUsedResponse.ok) {
+                  console.error('Failed to mark discount code as used')
+                  // Don't fail checkout if marking as used fails - code was already validated
+                }
+              } catch (markError) {
+                console.error('Error marking discount code as used:', markError)
+                // Don't fail checkout if marking as used fails
+              }
+            } else {
+              // If discount code validation failed, return error
+              return NextResponse.json(
+                { error: discountData.error || 'Invalid or already used discount code' },
+                { status: 400 }
+              )
             }
           } else {
             // If discount code validation failed, return error
+            const errorData = await validateResponse.json().catch(() => ({}))
             return NextResponse.json(
-              { error: discountData.error || 'Invalid or already used discount code' },
+              { error: errorData.error || 'Invalid or already used discount code' },
               { status: 400 }
             )
           }
-        } else {
-          // If discount code validation failed, return error
-          const errorData = await validateResponse.json().catch(() => ({}))
-          return NextResponse.json(
-            { error: errorData.error || 'Invalid or already used discount code' },
-            { status: 400 }
-          )
-        }
       } catch (error) {
         console.error('Error applying discount code:', error)
         // Continue without discount if discount code fails
+      }
       }
     }
 
@@ -625,7 +773,31 @@ export async function POST(request: NextRequest) {
     orders.push(order)
     await writeDataFile('labs-web-services-orders.json', orders)
 
-    return NextResponse.json({
+    // Mark spin wheel code as used if it was applied
+    if (appliedReferralCode && appliedReferralCode.startsWith('SPIN')) {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.url.split('/api')[0]
+        const markUsedUrl = new URL('/api/labs/spin-wheel/mark-used', baseUrl)
+        const markUsedResponse = await fetch(markUsedUrl.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: appliedReferralCode,
+            email: email,
+            usedFor: 'checkout',
+            orderId: orderId,
+          }),
+        })
+        
+        if (!markUsedResponse.ok) {
+          console.error('Failed to mark spin wheel code as used')
+        }
+      } catch (error) {
+        console.error('Error marking spin wheel code as used:', error)
+      }
+    }
+
+    const responseData = {
       success: true,
       orderId,
       items: finalItems,
@@ -638,6 +810,8 @@ export async function POST(request: NextRequest) {
       } : undefined,
       referralDiscount: referralDiscount > 0 ? referralDiscount : undefined,
       appliedReferralCode: appliedReferralCode || undefined,
+      discountServiceName: discountServiceName || undefined, // Name of the service that was discounted
+      discountServicePercentage: discountServicePercentage || undefined, // Percentage discount applied to the service
       taxAmount: taxAmount > 0 ? taxAmount : undefined,
       taxPercentage: taxPercentage > 0 ? taxPercentage : undefined,
       total, // Final total after discount and tax
@@ -645,13 +819,15 @@ export async function POST(request: NextRequest) {
       remainingPayment,
       paymentStatus: order.paymentStatus,
       email,
-    })
+    };
+    
+    return NextResponse.json(responseData);
   } catch (error: any) {
-    console.error('Error processing checkout:', error)
+    console.error('Error processing checkout:', error);
     return NextResponse.json(
       { error: 'Failed to process checkout', details: error.message },
       { status: 500 }
-    )
+    );
   }
 }
 

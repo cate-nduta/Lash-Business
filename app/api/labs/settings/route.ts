@@ -44,6 +44,7 @@ export interface CustomBuildsCTA {
   buttonText: string
   buttonUrl: string
   enabled?: boolean
+  discountPercentage?: number // Discount percentage to display (0-100)
 }
 
 export interface BudgetRange {
@@ -191,6 +192,7 @@ const DEFAULT_SETTINGS: LabsSettings = {
     buttonText: 'Explore Custom Builds',
     buttonUrl: '/labs/custom-website-builds',
     enabled: true,
+    discountPercentage: 10, // Default 10% discount
   },
   whatYouGet: {
     title: 'What You Get',

@@ -290,7 +290,7 @@ export default function LabsBookAppointment() {
   const [validatingDiscountCode, setValidatingDiscountCode] = useState(false)
   const [discountCodeValidationStatus, setDiscountCodeValidationStatus] = useState<{
     valid: boolean | null
-    discountType: 'percentage' | 'fixed' | null
+    discountType: 'percentage' | 'fixed' | 'free_consultation' | null
     discountValue: number
     message: string
   }>({ valid: null, discountType: null, discountValue: 0, message: '' })
@@ -636,6 +636,73 @@ export default function LabsBookAppointment() {
 
   // Validate discount code (waitlist discount codes)
   const validateDiscountCode = useCallback(async (code: string) => {
+    // First check if it's a spin wheel code
+    if (code.toUpperCase().startsWith('SPIN')) {
+      try {
+        // First validate without email to get the code's email
+        const response = await fetch(`/api/labs/spin-wheel/validate-code?code=${encodeURIComponent(code)}&context=consultation`)
+        const data = await response.json()
+        
+        if (data.valid && data.prize.type === 'free_consultation') {
+          // Check if email matches, if not, auto-fill it
+          const codeEmail = data.codeEmail?.toLowerCase().trim()
+          const currentEmail = formData.email?.toLowerCase().trim()
+          
+          if (codeEmail && currentEmail && codeEmail !== currentEmail) {
+            // Email doesn't match - update the email field
+            setFormData(prev => ({ ...prev, email: data.codeEmail }))
+            setDiscountCodeValidationStatus({
+              valid: true,
+              discountType: 'free_consultation',
+              discountValue: 100, // 100% off = free
+              message: `🎉 You won: ${data.prize.label}! Consultation is now free. Email updated to match your spin wheel code.`,
+            })
+          } else if (codeEmail && !currentEmail) {
+            // No email entered yet - pre-fill it
+            setFormData(prev => ({ ...prev, email: data.codeEmail }))
+            setDiscountCodeValidationStatus({
+              valid: true,
+              discountType: 'free_consultation',
+              discountValue: 100, // 100% off = free
+              message: `🎉 You won: ${data.prize.label}! Consultation is now free. Email field updated.`,
+            })
+          } else {
+            // Email matches or no email required
+            setDiscountCodeValidationStatus({
+              valid: true,
+              discountType: 'free_consultation',
+              discountValue: 100, // 100% off = free
+              message: `🎉 You won: ${data.prize.label}! Consultation is now free.`,
+            })
+          }
+          return
+        } else {
+          // If code is valid but email doesn't match, show error with suggestion
+          if (data.codeEmail) {
+            setDiscountCodeValidationStatus({
+              valid: false,
+              discountType: null,
+              discountValue: 0,
+              message: `This code was issued to ${data.codeEmail}. Please use the same email you used when spinning the wheel.`,
+            })
+            // Auto-fill the email
+            setFormData(prev => ({ ...prev, email: data.codeEmail }))
+          } else {
+            setDiscountCodeValidationStatus({
+              valid: false,
+              discountType: null,
+              discountValue: 0,
+              message: data.error || 'Invalid spin wheel code',
+            })
+          }
+          return
+        }
+      } catch (error) {
+        console.error('Error validating spin wheel code:', error)
+      }
+    }
+    
+    // If not a spin wheel code, try regular discount code validation
     if (!code || !code.trim()) {
       setDiscountCodeValidationStatus({ valid: null, discountType: null, discountValue: 0, message: '' })
       return
@@ -682,7 +749,7 @@ export default function LabsBookAppointment() {
     } finally {
       setValidatingDiscountCode(false)
     }
-  }, [])
+  }, [formData.email])
   
   // Debounce discount code validation
   useEffect(() => {
@@ -876,10 +943,22 @@ export default function LabsBookAppointment() {
 
       // If consultation is free, create it directly without payment
       if (isFree) {
+        // Check if free consultation is from spin wheel code
+        const spinWheelCode = discountCodeValidationStatus.valid && 
+                              discountCodeValidationStatus.discountType === 'free_consultation' 
+                              ? discountCode.toUpperCase().trim() 
+                              : undefined
+        
         const consultationData = {
           ...formData,
           phone: fullPhone,
           consultationPrice: 0,
+          originalPrice: consultationPrice, // Store original price
+          discountAmount: consultationPrice, // Full discount
+          discountCode: spinWheelCode, // Store spin wheel code if used
+          discountType: 'fixed',
+          discountValue: consultationPrice,
+          spinWheelCode: spinWheelCode, // Also store as spinWheelCode for API
           currency: currency,
           submittedAt: new Date().toISOString(),
           source: 'labs-consultation',
@@ -927,10 +1006,23 @@ export default function LabsBookAppointment() {
       let appliedDiscountType: 'percentage' | 'fixed' | undefined = undefined
       let appliedDiscountValue: number | undefined = undefined
 
-      // Check if discount code is applied (waitlist discount codes)
+      // Check if discount code is applied (waitlist discount codes or spin wheel codes)
+      let spinWheelCode: string | undefined = undefined
       if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
-        if (discountCodeValidationStatus.discountType === 'percentage') {
+        if (discountCodeValidationStatus.discountType === 'free_consultation') {
+          // Spin wheel free consultation code
+          discountAmount = consultationPrice
+          finalConsultationPrice = 0
+          spinWheelCode = discountCode.toUpperCase().trim()
+          appliedDiscountCode = spinWheelCode
+          appliedDiscountType = 'fixed'
+          appliedDiscountValue = consultationPrice
+        } else if (discountCodeValidationStatus.discountType === 'percentage') {
           discountAmount = (consultationPrice * discountCodeValidationStatus.discountValue) / 100
+          finalConsultationPrice = Math.max(0, consultationPrice - discountAmount)
+          appliedDiscountCode = discountCode.toUpperCase().trim()
+          appliedDiscountType = discountCodeValidationStatus.discountType || undefined
+          appliedDiscountValue = discountCodeValidationStatus.discountValue
         } else if (discountCodeValidationStatus.discountType === 'fixed') {
           // For fixed discount, convert to currency if needed
           if (currency === 'USD' && exchangeRates) {
@@ -938,11 +1030,11 @@ export default function LabsBookAppointment() {
           } else {
             discountAmount = discountCodeValidationStatus.discountValue
           }
+          finalConsultationPrice = Math.max(0, consultationPrice - discountAmount)
+          appliedDiscountCode = discountCode.toUpperCase().trim()
+          appliedDiscountType = discountCodeValidationStatus.discountType || undefined
+          appliedDiscountValue = discountCodeValidationStatus.discountValue
         }
-        finalConsultationPrice = Math.max(0, consultationPrice - discountAmount)
-        appliedDiscountCode = discountCode.toUpperCase().trim()
-        appliedDiscountType = discountCodeValidationStatus.discountType || undefined
-        appliedDiscountValue = discountCodeValidationStatus.discountValue
       }
 
       // Round to 2 decimal places for USD, whole number for KES
@@ -952,6 +1044,135 @@ export default function LabsBookAppointment() {
       } else {
         finalConsultationPrice = Math.round(finalConsultationPrice)
         discountAmount = Math.round(discountAmount)
+      }
+
+      // Check if consultation is free after applying discount
+      const isFreeAfterDiscount = finalConsultationPrice === 0
+
+      // If consultation is free (after discount), create it directly without payment
+      if (isFreeAfterDiscount) {
+        const consultationData = {
+          ...formData,
+          phone: fullPhone,
+          consultationPrice: 0, // Final price is 0
+          originalPrice: consultationPrice, // Store original price before discount
+          discountAmount: discountAmount, // Store discount amount
+          clientTimezone: clientTimezone || 'Africa/Nairobi',
+          clientCountry: clientCountry || 'Unknown',
+          discountCode: appliedDiscountCode, // Store discount code if used
+          discountType: appliedDiscountType, // Store discount type
+          discountValue: appliedDiscountValue, // Store discount value
+          spinWheelCode: spinWheelCode, // Store spin wheel code if used
+          currency: currency,
+          submittedAt: new Date().toISOString(),
+          source: 'labs-consultation',
+          interestedTier: selectedTier ? selectedTier.name : (formData.interestedTier || ''),
+          paymentStatus: 'not_required', // No payment needed for free consultation
+          paymentOrderTrackingId: null,
+          paymentMethod: null,
+        }
+
+        const consultationResponse = await fetch('/api/labs/consultation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(consultationData),
+        })
+
+        const consultationResult = await consultationResponse.json()
+
+        if (!consultationResponse.ok) {
+          setSubmitStatus({
+            type: 'error',
+            message: consultationResult.error || 'Failed to submit consultation request',
+          })
+          setLoading(false)
+          return
+        }
+
+        const consultationId = consultationResult.consultation?.consultationId
+
+        // Mark spin wheel code as used if it was a spin wheel code
+        if (spinWheelCode && consultationId) {
+          try {
+            await fetch('/api/labs/spin-wheel/mark-used', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                code: spinWheelCode,
+                usedFor: 'consultation',
+                consultationId: consultationId,
+              }),
+            }).catch(err => console.error('Error marking spin wheel code as used:', err))
+          } catch (error) {
+            console.error('Error marking spin wheel code as used:', error)
+          }
+        }
+
+        // Free consultation created successfully
+        setSubmitStatus({
+          type: 'success',
+          message: 'Your free consultation has been booked successfully! You will receive a confirmation email shortly.',
+        })
+        setLoading(false)
+
+        // Reset form
+        setFormData({
+          businessName: '',
+          contactName: '',
+          email: '',
+          businessType: '',
+          isBusinessRegistered: '',
+          serviceType: '',
+          currentWebsite: '',
+          hasWebsite: '',
+          monthlyClients: '',
+          currentBookingSystem: '',
+          currentPaymentSystem: '',
+          mainPainPoints: '',
+          budgetRange: '',
+          timeline: '',
+          preferredContact: 'email',
+          additionalDetails: '',
+          preferredDate: '',
+          preferredTime: '',
+          interestedTier: '',
+          meetingType: 'online' as 'online' | 'physical',
+          meetingCountry: '',
+          meetingCity: '',
+          meetingBuilding: '',
+          meetingStreet: '',
+        })
+        setPhoneLocalNumber('')
+        setDiscountCode('')
+        setDiscountCodeValidationStatus({ valid: null, discountType: null, discountValue: 0, message: '' })
+
+        // Refresh booked slots in the background
+        fetch('/api/labs/consultation/availability', { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+        })
+          .then(response => response.ok ? response.json() : null)
+          .then(data => {
+            if (data) {
+              setBookedDates(data.bookedDates || [])
+              setBookedSlots(data.bookedSlots || [])
+              setAvailableDates(data.availableDates || [])
+              setTimeSlots(data.timeSlots || [])
+              setBlockedDates(data.blockedDates || [])
+            }
+          })
+          .catch(error => {
+            console.error('Error refreshing availability after submission:', error)
+          })
+
+        return // Exit early - no payment needed
       }
 
       // For paid consultations, payment will be handled on Paystack page
@@ -972,6 +1193,7 @@ export default function LabsBookAppointment() {
           discountCode: appliedDiscountCode, // Store discount code if used (either discount code or waitlist code)
           discountType: appliedDiscountType, // Store discount type
           discountValue: appliedDiscountValue, // Store discount value
+          spinWheelCode: spinWheelCode, // Store spin wheel code if used
           currency: currency,
         submittedAt: new Date().toISOString(),
         source: 'labs-consultation',
@@ -1008,7 +1230,7 @@ export default function LabsBookAppointment() {
 
       const consultationId = consultationResult.consultation?.consultationId
 
-      // Initialize Paystack payment
+      // Initialize Paystack payment for paid consultations
       setPaymentStatus({ loading: true, success: null, message: 'Processing payment...' })
 
       const paymentResponse = await fetch('/api/paystack/initialize', {
@@ -1227,10 +1449,17 @@ export default function LabsBookAppointment() {
                 if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
                   if (discountCodeValidationStatus.discountType === 'percentage') {
                     discountAmountKES = (originalPriceKES * discountCodeValidationStatus.discountValue) / 100
-                    discountMessage = `✓ ${discountCodeValidationStatus.discountValue}% waitlist discount applied`
+                    if (discountCodeValidationStatus.discountValue === 100) {
+                      discountMessage = `✓ Free consultation - 100% discount applied`
+                    } else {
+                      discountMessage = `✓ ${discountCodeValidationStatus.discountValue}% discount applied`
+                    }
                   } else if (discountCodeValidationStatus.discountType === 'fixed') {
                     discountAmountKES = discountCodeValidationStatus.discountValue
-                    discountMessage = `✓ ${discountCodeValidationStatus.discountValue.toLocaleString()} KES waitlist discount applied`
+                    discountMessage = `✓ ${discountCodeValidationStatus.discountValue.toLocaleString()} KES discount applied`
+                  } else if (discountCodeValidationStatus.discountType === 'free_consultation') {
+                    discountAmountKES = originalPriceKES // Full discount for free consultation
+                    discountMessage = `✓ Free consultation - 100% discount applied`
                   }
                 }
                 
@@ -2053,8 +2282,8 @@ export default function LabsBookAppointment() {
               </div>
             </div>
 
-            {/* Discount Section - Only show if enabled, waitlist page is enabled, and not rebooking and consultation is not free */}
-            {!isRebooking && consultationFeeKES > 0 && discountSectionEnabled && waitlistPageEnabled && (
+            {/* Discount Section - Always show before payment (unless rebooking or consultation is free) */}
+            {!isRebooking && consultationFeeKES > 0 && (
               <div className="space-y-6 pt-6 border-t-2 border-[var(--color-primary)]/10">
                 <h2 className="text-2xl font-display text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]/20 pb-2">
                   Discount Code
@@ -2062,8 +2291,11 @@ export default function LabsBookAppointment() {
                 
                 <div>
                   <label htmlFor="discountCode" className="block text-sm font-semibold text-[var(--color-text)] mb-2">
-                    Waitlist Discount Code (Optional)
+                    Enter Discount Code (Optional)
                   </label>
+                  <p className="text-xs text-[var(--color-text)]/70 mb-3">
+                    Enter your spin wheel code, waitlist discount code, or any other valid discount code to get a discount on your consultation fee.
+                  </p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -2079,7 +2311,7 @@ export default function LabsBookAppointment() {
                         }
                       }}
                       className="flex-1 px-4 py-2 border-2 border-[var(--color-primary)]/20 rounded-lg focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                      placeholder="Enter your waitlist discount code"
+                      placeholder="Enter your discount code (e.g., SPIN123456 or WAITLIST123)"
                     />
                     <button
                       type="button"
@@ -2100,6 +2332,21 @@ export default function LabsBookAppointment() {
                     }`}>
                       {discountCodeValidationStatus.message}
                     </p>
+                  )}
+                  {discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0 && (
+                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-800 font-semibold">
+                        ✓ Discount Applied!
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        {discountCodeValidationStatus.discountType === 'free_consultation'
+                          ? `Consultation is now free! (100% discount applied)`
+                          : discountCodeValidationStatus.discountType === 'percentage' 
+                          ? `You'll save ${discountCodeValidationStatus.discountValue}% off your consultation fee.`
+                          : `You'll save ${discountCodeValidationStatus.discountValue.toLocaleString()} KES off your consultation fee.`
+                        }
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2166,15 +2413,22 @@ export default function LabsBookAppointment() {
                   if (isRebooking) return 'Reschedule Consultation (No Payment Required)'
                   if (consultationFeeKES === 0) return 'Submit Free Consultation Request'
                   
-                  // Apply waitlist discount - work with KES amounts (formatPrice handles conversion)
+                  // Apply discount - work with KES amounts (formatPrice handles conversion)
                   let finalPriceKES = consultationFeeKES
                   if (discountCodeValidationStatus.valid && discountCodeValidationStatus.discountValue > 0) {
-                    if (discountCodeValidationStatus.discountType === 'percentage') {
+                    if (discountCodeValidationStatus.discountType === 'free_consultation') {
+                      // Free consultation = 100% discount
+                      finalPriceKES = 0
+                    } else if (discountCodeValidationStatus.discountType === 'percentage') {
                       const discountAmountKES = (consultationFeeKES * discountCodeValidationStatus.discountValue) / 100
-                      finalPriceKES = Math.round(consultationFeeKES - discountAmountKES)
+                      finalPriceKES = Math.max(0, Math.round(consultationFeeKES - discountAmountKES))
                     } else if (discountCodeValidationStatus.discountType === 'fixed') {
-                      finalPriceKES = Math.round(consultationFeeKES - discountCodeValidationStatus.discountValue)
+                      finalPriceKES = Math.max(0, Math.round(consultationFeeKES - discountCodeValidationStatus.discountValue))
                     }
+                  }
+                  
+                  if (finalPriceKES === 0) {
+                    return 'Submit Free Consultation Request'
                   }
                   
                   return `Submit Consultation Request - ${formatPrice(finalPriceKES)}`

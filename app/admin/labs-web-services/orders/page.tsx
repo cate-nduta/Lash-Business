@@ -722,6 +722,26 @@ export default function LabsWebServicesOrders() {
                         </div>
                       )}
 
+                      {/* Spin Wheel Information */}
+                      {order.appliedReferralCode && order.appliedReferralCode.startsWith('SPIN') && (
+                        <div className="mt-4 bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                          <h4 className="font-semibold text-purple-900 mb-2 text-sm flex items-center gap-2">
+                            🎡 Spin Wheel Prize Used
+                          </h4>
+                          <p className="text-sm text-purple-900 mb-1">
+                            <strong>Spin Wheel Code:</strong> <code className="bg-purple-100 px-2 py-1 rounded font-mono text-xs">{order.appliedReferralCode}</code>
+                          </p>
+                          {order.referralDiscount !== undefined && order.referralDiscount > 0 && (
+                            <p className="text-sm text-purple-900">
+                              <strong>Discount Applied:</strong> KES {order.referralDiscount.toLocaleString()}
+                            </p>
+                          )}
+                          <p className="text-xs text-purple-700 mt-2 italic">
+                            This customer won a spin wheel prize and used it during checkout.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                         <div className="bg-brown-light/20 rounded-lg p-4">
                           <h4 className="font-semibold text-brown-dark mb-2 text-sm">
@@ -763,6 +783,9 @@ export default function LabsWebServicesOrders() {
                           {order.referralDiscount !== undefined && order.referralDiscount > 0 && (
                             <p className="text-sm text-green-600 mb-1">
                               <strong>Discount ({order.appliedReferralCode || 'Code'}):</strong> -KES {order.referralDiscount.toLocaleString()}
+                              {order.appliedReferralCode && order.appliedReferralCode.startsWith('SPIN') && (
+                                <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">🎡 Spin Wheel</span>
+                              )}
                             </p>
                           )}
                           <p className="text-sm text-brown-dark/70 mb-1 font-semibold border-t border-brown-light pt-1 mt-1">

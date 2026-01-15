@@ -48,6 +48,7 @@ interface CustomBuildsCTA {
   description: string
   buttonText: string
   buttonUrl: string
+  discountPercentage?: number
   enabled?: boolean
 }
 
@@ -81,6 +82,61 @@ interface CountdownTime {
   hours: number
   minutes: number
   seconds: number
+}
+
+function SpinWheelNotice() {
+  const [settings, setSettings] = useState<{ enabled: boolean; noticeText: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/labs/spin-wheel/prizes', {
+          cache: 'no-store',
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setSettings(data)
+        }
+      } catch (error) {
+        console.error('Error loading spin wheel settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  if (loading || !settings || !settings.enabled) {
+    return null
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto mb-8 sm:mb-12 px-4">
+      <div className="bg-gradient-to-r from-yellow-400/20 via-orange-400/20 to-pink-400/20 rounded-2xl p-8 sm:p-10 md:p-12 border-2 border-yellow-400/30 shadow-xl">
+        <div className="text-center">
+          <p className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-[var(--color-primary)] mb-6 leading-tight animate-pulse">
+            {settings.noticeText || '🎉🎉🎉 SPIN THE WHEEL & WIN AMAZING PRIZES! 🎉🎉🎉'}
+          </p>
+          <p className="text-base sm:text-lg md:text-xl font-bold text-[var(--color-text)] mb-2 text-orange-600">
+            🎁 FREE Consultations • 💰 HUGE Discounts • 🚀 Free Services!
+          </p>
+          <p className="text-sm sm:text-base md:text-lg text-[var(--color-text)]/80 mb-6 font-semibold">
+            Don't miss out on incredible savings! Every spin is a chance to win! ⚡
+          </p>
+          <Link
+            href="/labs/spin-the-wheel"
+            className="inline-block bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400 text-white px-8 py-4 sm:px-10 sm:py-5 rounded-xl font-extrabold text-lg sm:text-xl md:text-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 animate-bounce"
+          >
+            🎡 SPIN NOW & WIN! 🎡
+          </Link>
+          <p className="text-xs sm:text-sm text-[var(--color-text)]/70 mt-4 font-semibold">
+            ⚡ Limited Time Offer • One Spin Per Email • Prizes Valid for 1 Month ⚡
+          </p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function WaitlistSection({ enabled }: { enabled?: boolean }) {
@@ -417,10 +473,20 @@ export default function LabsPage() {
               </div>
             </div>
 
+            {/* Spin the Wheel Notice Section */}
+            <SpinWheelNotice />
+
             {/* Custom Website Builds CTA */}
             {settings?.customBuildsCTA?.enabled !== false && settings?.customBuildsCTA && (
               <div className="max-w-4xl mx-auto mb-8">
                 <div className="bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-primary)]/90 to-[var(--color-accent)] rounded-2xl p-8 sm:p-10 shadow-2xl border-2 border-[var(--color-primary)]/30 transform hover:scale-[1.02] transition-all duration-300">
+                  {settings.customBuildsCTA.discountPercentage && settings.customBuildsCTA.discountPercentage > 0 && (
+                    <div className="text-center mb-4">
+                      <span className="inline-block bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-full text-lg font-bold border-2 border-white/30">
+                        With {settings.customBuildsCTA.discountPercentage}% Off
+                      </span>
+                    </div>
+                  )}
                   <h3 className="text-2xl sm:text-3xl md:text-4xl font-display text-white mb-4 font-bold">
                     {settings.customBuildsCTA.title || 'Build Your Perfect System'}
                   </h3>

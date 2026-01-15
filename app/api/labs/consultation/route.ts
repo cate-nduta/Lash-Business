@@ -46,6 +46,7 @@ export interface ConsultationSubmission {
   originalPrice?: number // Original price before discount
   discountAmount?: number // Discount amount applied
   discountCode?: string // Discount code used (waitlist or general discount code)
+  spinWheelCode?: string // Spin wheel code used
   discountType?: 'percentage' | 'fixed' // Type of discount applied
   discountValue?: number // Discount value (percentage or fixed amount)
   discountPercentage?: number // Discount percentage applied (legacy field for backward compatibility)
@@ -242,6 +243,7 @@ export async function POST(request: NextRequest) {
       originalPrice: typeof body.originalPrice === 'number' ? body.originalPrice : undefined,
       discountAmount: typeof body.discountAmount === 'number' ? body.discountAmount : undefined,
       discountCode: typeof body.discountCode === 'string' ? body.discountCode : undefined,
+      spinWheelCode: typeof body.spinWheelCode === 'string' ? body.spinWheelCode.toUpperCase().trim() : undefined,
       discountType: typeof body.discountType === 'string' && (body.discountType === 'percentage' || body.discountType === 'fixed') ? body.discountType : undefined,
       discountValue: typeof body.discountValue === 'number' ? body.discountValue : undefined,
       discountPercentage: typeof body.discountPercentage === 'number' ? body.discountPercentage : undefined,
@@ -255,7 +257,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if consultation is free (0 KSH) - if so, create immediately without payment
-    const consultationPrice = consultationData.consultationPrice || 0
+    // If spin wheel code is provided, validate it and apply free consultation if valid
+    let consultationPrice = consultationData.consultationPrice || 0
+    let originalPrice = consultationPrice
+    let spinWheelDiscount = 0
+    
+    if (consultationData.spinWheelCode) {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+        const codeResponse = await fetch(`${baseUrl}/api/labs/spin-wheel/validate-code?code=${encodeURIComponent(consultationData.spinWheelCode)}&email=${encodeURIComponent(consultationData.email)}&context=consultation`)
+        const codeData = await codeResponse.json()
+        
+        if (codeData.valid && codeData.prize.type === 'free_consultation') {
+          originalPrice = consultationPrice
+          spinWheelDiscount = consultationPrice
+          consultationPrice = 0
+          consultationData.consultationPrice = 0
+          consultationData.originalPrice = originalPrice
+          consultationData.discountAmount = spinWheelDiscount
+          consultationData.discountCode = consultationData.spinWheelCode
+          consultationData.discountType = 'fixed'
+          consultationData.discountValue = spinWheelDiscount
+        }
+      } catch (error) {
+        console.error('Error validating spin wheel code:', error)
+      }
+    }
+    
     const isFree = consultationPrice === 0
 
     // IMPORTANT: Always create consultation in main file so it shows in admin
@@ -295,6 +323,30 @@ export async function POST(request: NextRequest) {
       consultationsData.consultations.push(consultationData)
       await writeDataFile('labs-consultations.json', consultationsData)
       console.log('✅ Consultation created:', consultationId, 'Status:', consultationData.status)
+      
+      // Mark spin wheel code as used if it was applied
+      if (consultationData.spinWheelCode) {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+          const markUsedUrl = new URL('/api/labs/spin-wheel/mark-used', baseUrl)
+          const markUsedResponse = await fetch(markUsedUrl.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: consultationData.spinWheelCode,
+              email: consultationData.email,
+              usedFor: 'consultation',
+              consultationId: consultationId,
+            }),
+          })
+          
+          if (!markUsedResponse.ok) {
+            console.error('Failed to mark spin wheel code as used')
+          }
+        } catch (error) {
+          console.error('Error marking spin wheel code as used:', error)
+        }
+      }
     } catch (error) {
       console.error('Error storing consultation data:', error)
       return NextResponse.json(

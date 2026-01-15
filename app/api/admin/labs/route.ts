@@ -62,6 +62,7 @@ export interface CustomBuildsCTA {
   description: string
   buttonText: string
   buttonUrl: string
+  discountPercentage?: number
   enabled?: boolean
 }
 

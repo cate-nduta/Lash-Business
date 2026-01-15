@@ -1180,6 +1180,36 @@ export default function AdminLabsConsultations() {
                         )}
                       </div>
 
+                      {/* Spin Wheel Information */}
+                      {((consultation as any).spinWheelCode || (consultation.discountCode && consultation.discountCode.startsWith('SPIN'))) && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-brown mb-3 border-b-2 border-brown-light pb-2">
+                            🎡 Spin Wheel Prize
+                          </h4>
+                          <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                            <p className="text-sm text-purple-900 mb-2">
+                              <strong>Spin Wheel Code:</strong> <code className="bg-purple-100 px-2 py-1 rounded font-mono">{(consultation as any).spinWheelCode || consultation.discountCode}</code>
+                            </p>
+                            {consultation.discountAmount && consultation.discountAmount > 0 && (
+                              <p className="text-sm text-purple-900">
+                                <strong>Discount Applied:</strong> {consultation.discountAmount.toLocaleString()} {consultation.currency}
+                                {consultation.discountType === 'percentage' && consultation.discountValue && (
+                                  <span> ({consultation.discountValue}% off)</span>
+                                )}
+                              </p>
+                            )}
+                            {consultation.consultationPrice === 0 && (
+                              <p className="text-sm text-green-700 font-semibold mt-2">
+                                ✓ Free Consultation - Spin wheel prize applied!
+                              </p>
+                            )}
+                            <p className="text-xs text-purple-700 mt-2 italic">
+                              This customer won a spin wheel prize and used it when booking this consultation.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Additional Details */}
                       {consultation.additionalDetails && (
                         <div>

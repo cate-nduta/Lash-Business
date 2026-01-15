@@ -396,6 +396,27 @@ export default function AdminLabs() {
           </p>
         </div>
 
+        {/* Spin the Wheel Management Link */}
+        <div className="mb-6">
+          <div className="flex gap-4 flex-wrap">
+            <Link
+              href="/admin/labs/spin-wheel"
+              className="inline-block bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold"
+            >
+              🎡 Manage Spin the Wheel
+            </Link>
+            <Link
+              href="/admin/labs/spin-wheel/winners"
+              className="inline-block bg-purple-500 text-white px-6 py-3 rounded-lg hover:bg-purple-600 transition-colors font-semibold"
+            >
+              🎉 View Winners
+            </Link>
+          </div>
+          <p className="text-sm text-gray-600 mt-2">
+            Edit prizes, probabilities, and enable/disable the spin the wheel feature | View all winners and their prizes
+          </p>
+        </div>
+
         {message && (
           <Toast
             message={message.text}
@@ -1436,6 +1457,7 @@ export default function AdminLabs() {
                     description: prev.customBuildsCTA?.description || '',
                     buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
                     buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    discountPercentage: prev.customBuildsCTA?.discountPercentage || 0,
                     enabled: e.target.checked,
                   },
                 }))}
@@ -1460,6 +1482,7 @@ export default function AdminLabs() {
                     description: prev.customBuildsCTA?.description || '',
                     buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
                     buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    discountPercentage: prev.customBuildsCTA?.discountPercentage || 0,
                     enabled: prev.customBuildsCTA?.enabled !== false,
                   },
                 }))}
@@ -1482,6 +1505,7 @@ export default function AdminLabs() {
                     description: e.target.value,
                     buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
                     buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    discountPercentage: prev.customBuildsCTA?.discountPercentage || 0,
                     enabled: prev.customBuildsCTA?.enabled !== false,
                   },
                 }))}
@@ -1507,6 +1531,7 @@ export default function AdminLabs() {
                       description: prev.customBuildsCTA?.description || '',
                       buttonText: e.target.value,
                       buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                      discountPercentage: prev.customBuildsCTA?.discountPercentage || 0,
                       enabled: prev.customBuildsCTA?.enabled !== false,
                     },
                   }))}
@@ -1530,6 +1555,7 @@ export default function AdminLabs() {
                       description: prev.customBuildsCTA?.description || '',
                       buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
                       buttonUrl: e.target.value,
+                      discountPercentage: prev.customBuildsCTA?.discountPercentage || 0,
                       enabled: prev.customBuildsCTA?.enabled !== false,
                     },
                   }))}
@@ -1537,6 +1563,35 @@ export default function AdminLabs() {
                   placeholder="/labs/custom-website-builds"
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="customBuildsCTADiscountPercentage" className="block text-sm font-semibold text-gray-700 mb-2">
+                Discount Percentage (%):
+              </label>
+              <input
+                type="number"
+                id="customBuildsCTADiscountPercentage"
+                value={settings.customBuildsCTA?.discountPercentage || 0}
+                onChange={(e) => setSettings((prev) => ({
+                  ...prev,
+                  customBuildsCTA: {
+                    title: prev.customBuildsCTA?.title || 'Build Your Perfect System',
+                    description: prev.customBuildsCTA?.description || '',
+                    buttonText: prev.customBuildsCTA?.buttonText || 'Explore Custom Builds',
+                    buttonUrl: prev.customBuildsCTA?.buttonUrl || '/labs/custom-website-builds',
+                    discountPercentage: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)),
+                    enabled: prev.customBuildsCTA?.enabled !== false,
+                  },
+                }))}
+                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown"
+                placeholder="10"
+                min="0"
+                max="100"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter 0 to hide the discount badge. The discount badge will show "With X% Off" above the title.
+              </p>
             </div>
           </div>
         </div>

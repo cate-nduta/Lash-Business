@@ -235,13 +235,26 @@ export default function AdminLabsWebServices() {
     try {
       const response = await fetch('/api/labs/web-services/discount-code', {
         credentials: 'include',
+        cache: 'no-store',
       })
       if (response.ok) {
         const data = await response.json()
-        setDiscountCodes(data.promoCodes || [])
+        const codes = data.promoCodes || []
+        // Ensure all codes have IDs - if not, log a warning
+        codes.forEach((code: any, index: number) => {
+          if (!code.id) {
+            console.warn(`Discount code at index ${index} (${code.code}) is missing an ID. This may prevent deletion.`)
+          }
+        })
+        setDiscountCodes(codes)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Failed to load discount codes:', errorData)
+        setMessage({ type: 'error', text: errorData.error || 'Failed to load discount codes' })
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading discount codes:', error)
+      setMessage({ type: 'error', text: `Failed to load discount codes: ${error.message || 'Unknown error'}` })
     } finally {
       setLoadingDiscountCodes(false)
     }
@@ -1596,12 +1609,15 @@ export default function AdminLabsWebServices() {
                                     method: 'DELETE',
                                     credentials: 'include',
                                   })
+                                  const result = await response.json()
                                   if (response.ok) {
                                     successCount++
                                   } else {
+                                    console.error(`Failed to delete code ${codeId}:`, result.error)
                                     errorCount++
                                   }
-                                } catch (error) {
+                                } catch (error: any) {
+                                  console.error(`Error deleting code ${codeId}:`, error)
                                   errorCount++
                                 }
                               }
@@ -1702,16 +1718,26 @@ export default function AdminLabsWebServices() {
                                     method: 'DELETE',
                                     credentials: 'include',
                                   })
+                                  const result = await response.json()
                                   if (response.ok) {
                                     loadDiscountCodes()
                                     setMessage({ type: 'success', text: 'Discount code deleted successfully' })
+                                    // Also clear from selection if it was selected
+                                    const newSet = new Set(selectedCodesToDelete)
+                                    newSet.delete(code.id)
+                                    setSelectedCodesToDelete(newSet)
+                                  } else {
+                                    setMessage({ type: 'error', text: result.error || 'Failed to delete code' })
                                   }
-                                } catch (error) {
-                                  setMessage({ type: 'error', text: 'Failed to delete code' })
+                                } catch (error: any) {
+                                  console.error('Delete error:', error)
+                                  setMessage({ type: 'error', text: `Failed to delete code: ${error.message || 'Unknown error'}` })
                                 }
                               }
                             }}
-                            className="px-3 py-1 text-xs rounded bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-colors"
+                            className="px-3 py-1 text-xs rounded bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!code.id}
+                            title={!code.id ? 'Code ID missing - cannot delete' : `Delete ${code.code}`}
                           >
                             Delete
                           </button>

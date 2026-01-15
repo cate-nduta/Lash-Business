@@ -35,6 +35,8 @@ interface CheckoutData {
   }
   referralDiscount?: number
   appliedReferralCode?: string
+  discountServiceName?: string // Name of the service that was discounted
+  discountServicePercentage?: number // Percentage discount applied to the service
   taxAmount?: number // Tax/VAT amount
   taxPercentage?: number // Tax/VAT percentage
   total: number
@@ -104,6 +106,8 @@ function LabsCheckoutContentInner() {
   const [codeValid, setCodeValid] = useState<boolean | null>(null)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [calculatedDiscount, setCalculatedDiscount] = useState<number>(0) // Calculated discount amount
+  const [discountServiceName, setDiscountServiceName] = useState<string | null>(null) // Name of the service that was discounted
+  const [discountServicePercentage, setDiscountServicePercentage] = useState<number | null>(null) // Percentage discount applied to the service
   const [contactFormSubmitting, setContactFormSubmitting] = useState(false) // For high-value order contact form
   
   // Website type: 'personal' or 'business'
@@ -1537,9 +1541,16 @@ function LabsCheckoutContentInner() {
 
                   {checkoutData.referralDiscount && checkoutData.referralDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
-                      <span className="text-sm">
-                        Discount {checkoutData.appliedReferralCode && `(${checkoutData.appliedReferralCode})`}
-                      </span>
+                      <div className="flex-1">
+                        <span className="text-sm">
+                          Discount {checkoutData.appliedReferralCode && `(${checkoutData.appliedReferralCode})`}
+                        </span>
+                        {checkoutData.discountServiceName && checkoutData.discountServicePercentage && (
+                          <div className="text-xs text-green-700 mt-1">
+                            {checkoutData.discountServiceName} - {checkoutData.discountServicePercentage}% off applied
+                          </div>
+                        )}
+                      </div>
                       <span className="font-semibold text-sm">
                         -{getDisplayPrice(checkoutData.referralDiscount)}
                       </span>
@@ -1634,9 +1645,16 @@ function LabsCheckoutContentInner() {
                   </div>
                   {codeValid === true && calculatedDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
-                      <span className="text-sm">
-                        Discount {referralCode && `(${referralCode})`}
-                      </span>
+                      <div className="flex-1">
+                        <span className="text-sm">
+                          Discount {referralCode && `(${referralCode})`}
+                        </span>
+                        {discountServiceName && discountServicePercentage && (
+                          <div className="text-xs text-green-700 mt-1">
+                            {discountServiceName} - {discountServicePercentage}% off applied
+                          </div>
+                        )}
+                      </div>
                       <div className="text-right">
                         <span className="font-semibold text-sm">
                           -{getDisplayPrice(calculatedDiscount)}
@@ -1801,24 +1819,110 @@ function LabsCheckoutContentInner() {
                         const domainFee = domainType === 'new' && domainPricing ? domainPricing.totalFirstPayment : 0
                         const originalTotal = getTotalPrice() + urgentPriorityFee + domainFee
                         
-                        // Validate discount code using new discount code API
-                        const validateUrl = new URL('/api/labs/web-services/validate-discount', window.location.origin)
-                        validateUrl.searchParams.set('code', referralCode.trim().toUpperCase())
-                        validateUrl.searchParams.set('email', email || '')
-                        validateUrl.searchParams.set('cartTotal', originalTotal.toString())
+                        const codeToCheck = referralCode.trim().toUpperCase()
                         
-                        const response = await fetch(validateUrl.toString())
-                        const data = await response.json()
-                        
-                        if (data.valid) {
-                          setCodeValid(true)
-                          setCodeError(null)
-                          // Use the discount amount calculated by the API
-                          setCalculatedDiscount(data.discountAmount || 0)
+                        // First check if it's a spin wheel code
+                        if (codeToCheck.startsWith('SPIN')) {
+                          // First validate without email to get the code's email
+                          const spinWheelUrl = new URL('/api/labs/spin-wheel/validate-code', window.location.origin)
+                          spinWheelUrl.searchParams.set('code', codeToCheck)
+                          spinWheelUrl.searchParams.set('context', 'checkout')
+                          
+                          const spinWheelResponse = await fetch(spinWheelUrl.toString())
+                          const spinWheelData = await spinWheelResponse.json()
+                          
+                          if (spinWheelData.valid && spinWheelData.prize.type === 'discount_percentage' && spinWheelData.prize.value) {
+                            // Check if email matches, if not, auto-fill it
+                            const codeEmail = spinWheelData.codeEmail?.toLowerCase().trim()
+                            const currentEmail = email?.toLowerCase().trim()
+                            
+                            const discountPercentage = spinWheelData.prize.value
+                            const discountServiceId = spinWheelData.prize.discountServiceId || spinWheelData.prize.serviceType
+                            
+                            // Check if discount applies to a specific service
+                            if (discountServiceId) {
+                              // Find the service in cart
+                              const serviceInCart = items.find(item => item.productId === discountServiceId)
+                              if (serviceInCart) {
+                                // Calculate discount for this specific service
+                                const servicePrice = serviceInCart.price * serviceInCart.quantity
+                                const serviceSetupFee = (serviceInCart.setupFee || 0) * serviceInCart.quantity
+                                const serviceTotal = servicePrice + serviceSetupFee
+                                const discountAmount = Math.round(serviceTotal * (discountPercentage / 100))
+                                
+                                // Get service name from allServices or cart item
+                                const service = allServices.find((s: any) => s.id === discountServiceId)
+                                const serviceName = service?.name || serviceInCart.name || 'Service'
+                                
+                                setDiscountServiceName(serviceName)
+                                setDiscountServicePercentage(discountPercentage)
+                                setCalculatedDiscount(discountAmount)
+                                
+                                if (codeEmail && currentEmail && codeEmail !== currentEmail) {
+                                  setEmail(spinWheelData.codeEmail)
+                                } else if (codeEmail && !currentEmail) {
+                                  setEmail(spinWheelData.codeEmail)
+                                }
+                                setCodeValid(true)
+                                setCodeError(null)
+                              } else {
+                                // Service not in cart
+                                setCodeValid(false)
+                                setCodeError(`This code is for a ${discountPercentage}% discount on ${spinWheelData.prize.label || 'a specific service'}, but that service is not in your cart. Please add it first.`)
+                                setCalculatedDiscount(0)
+                                setDiscountServiceName(null)
+                                setDiscountServicePercentage(null)
+                                if (codeEmail) setEmail(spinWheelData.codeEmail)
+                              }
+                            } else {
+                              // Discount applies to entire cart
+                              const discountAmount = Math.round(originalTotal * (discountPercentage / 100))
+                              setDiscountServiceName(null)
+                              setDiscountServicePercentage(null)
+                              setCalculatedDiscount(discountAmount)
+                              
+                              if (codeEmail && currentEmail && codeEmail !== currentEmail) {
+                                setEmail(spinWheelData.codeEmail)
+                              } else if (codeEmail && !currentEmail) {
+                                setEmail(spinWheelData.codeEmail)
+                              }
+                              setCodeValid(true)
+                              setCodeError(null)
+                            }
+                          } else {
+                            // If code is valid but email doesn't match, show error with suggestion
+                            if (spinWheelData.codeEmail) {
+                              setCodeValid(false)
+                              setCodeError(`This code was issued to ${spinWheelData.codeEmail}. Email field updated. Please try again.`)
+                              setCalculatedDiscount(0)
+                              // Auto-fill the email
+                              setEmail(spinWheelData.codeEmail)
+                            } else {
+                              setCodeValid(false)
+                              setCodeError(spinWheelData.error || 'Invalid spin wheel code')
+                              setCalculatedDiscount(0)
+                            }
+                          }
                         } else {
-                          setCodeValid(false)
-                          setCodeError(data.error || 'Invalid discount code')
-                          setCalculatedDiscount(0)
+                          // Validate discount code using new discount code API
+                          const validateUrl = new URL('/api/labs/web-services/validate-discount', window.location.origin)
+                          validateUrl.searchParams.set('code', codeToCheck)
+                          validateUrl.searchParams.set('email', email || '')
+                          validateUrl.searchParams.set('cartTotal', originalTotal.toString())
+                          
+                          const response = await fetch(validateUrl.toString())
+                          const data = await response.json()
+                          
+                          if (data.valid) {
+                            setCodeValid(true)
+                            setCodeError(null)
+                            // Use the discount amount calculated by the API
+                            setCalculatedDiscount(data.discountAmount || 0)
+                          } else {
+                            setCodeValid(false)
+                            setCodeError(data.error || 'Invalid discount code')
+                            setCalculatedDiscount(0)
+                          }
                         }
                       } catch (error) {
                         setCodeValid(false)
@@ -1836,12 +1940,14 @@ function LabsCheckoutContentInner() {
                   {codeValid === true && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setReferralCode('')
-                        setCodeValid(null)
-                        setCodeError(null)
-                        setCalculatedDiscount(0)
-                      }}
+                    onClick={() => {
+                      setReferralCode('')
+                      setCodeValid(null)
+                      setCodeError(null)
+                      setCalculatedDiscount(0)
+                      setDiscountServiceName(null)
+                      setDiscountServicePercentage(null)
+                    }}
                       className="px-3 py-2 text-sm text-red-600 hover:text-red-700 font-medium"
                       title="Remove code"
                     >
