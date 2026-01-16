@@ -244,8 +244,13 @@ export default function AdminSettings() {
       const data = await response.json()
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Settings saved successfully! Refreshing favicon...' })
+        setMessage({ type: 'success', text: 'Settings saved successfully! Logo will update across all pages within 5 seconds.' })
         setHasUnsavedChanges(false)
+        
+        // Broadcast settings update to all Logo components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('settingsUpdated'))
+        }
         
         // Refresh favicon if it exists
         if (settings.business.faviconUrl) {

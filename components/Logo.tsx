@@ -31,11 +31,16 @@ export default function Logo({
 
   useEffect(() => {
     let isMounted = true
+    let refreshInterval: ReturnType<typeof setInterval> | null = null
 
     const loadLogoSettings = async () => {
       try {
         const response = await fetch(`/api/settings?ts=${Date.now()}`, {
           cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
         })
         if (!response.ok) {
           throw new Error(`Failed to load settings: ${response.status}`)
@@ -53,6 +58,10 @@ export default function Logo({
 
         if (isMounted) {
           setLogoSettings(updatedSettings)
+          // Debug log in development
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Logo] Settings loaded:', updatedSettings)
+          }
         }
       } catch (error) {
         console.error('Error loading logo settings:', error)
@@ -62,10 +71,49 @@ export default function Logo({
       }
     }
 
+    // Load settings immediately
     loadLogoSettings()
+
+    // Refresh settings every 5 seconds to pick up changes quickly
+    refreshInterval = setInterval(() => {
+      if (isMounted) {
+        loadLogoSettings()
+      }
+    }, 5000)
+
+    // Refresh when window gains focus (user returns to tab)
+    const handleFocus = () => {
+      if (isMounted) {
+        loadLogoSettings()
+      }
+    }
+    
+    // Refresh when page becomes visible (user switches back to tab)
+    const handleVisibilityChange = () => {
+      if (isMounted && !document.hidden) {
+        loadLogoSettings()
+      }
+    }
+    
+    // Listen for settings update events (broadcast from admin settings page)
+    const handleSettingsUpdate = () => {
+      if (isMounted) {
+        loadLogoSettings()
+      }
+    }
+    
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('settingsUpdated', handleSettingsUpdate)
 
     return () => {
       isMounted = false
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+      }
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate)
     }
   }, [])
 
@@ -83,19 +131,30 @@ export default function Logo({
     return null
   }
 
+  // Show image logo only if logoType is 'image' AND logoUrl exists
   if (logoSettings.logoType === 'image' && logoSettings.logoUrl) {
+    // Add cache-busting query parameter to image URL if it's not a data URL
+    const imageUrl = logoSettings.logoUrl.startsWith('data:')
+      ? logoSettings.logoUrl
+      : `${logoSettings.logoUrl}${logoSettings.logoUrl.includes('?') ? '&' : '?'}v=${Date.now()}`
+    
     return (
       <img
-        src={logoSettings.logoUrl}
+        src={imageUrl}
         alt={logoSettings.logoText || 'Logo'}
         className={`logo-image ${imageClassName || 'h-16 md:h-20 object-contain'}`}
+        key={logoSettings.logoUrl} // Force re-render when URL changes
       />
     )
   }
 
+  // Show text logo (default or when logoType is 'text')
+  // Use logoText if available, otherwise fallback to default
+  const displayText = logoSettings.logoText || (logoSettings.logoType === 'text' ? 'LashDiary' : '')
+  
   return (
     <h1 className={className} style={mergedStyle}>
-      {logoSettings.logoText}
+      {displayText}
     </h1>
   )
 }
