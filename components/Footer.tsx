@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Logo from './Logo'
+import type { PagesSettings } from '@/app/api/pages-settings/route'
 
 interface HomepageData {
   modelSignup?: {
@@ -10,8 +11,20 @@ interface HomepageData {
   }
 }
 
+const DEFAULT_FOOTER_LINKS = [
+  { href: '/services', label: 'Services' },
+  { href: '/gallery', label: 'Gallery' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/booking', label: 'Book Appointment' },
+  { href: '/before-your-appointment', label: 'Pre-Appointment Guidelines' },
+  { href: '/policies', label: 'Booking Policies' },
+  { href: '/terms', label: 'Terms & Conditions' },
+  { href: '/contact', label: 'Contact Us' },
+]
+
 export default function Footer() {
   const [modelSignupEnabled, setModelSignupEnabled] = useState(false)
+  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(null)
 
   useEffect(() => {
     const checkModelSignup = async () => {
@@ -27,6 +40,28 @@ export default function Footer() {
     }
     checkModelSignup()
   }, [])
+
+  useEffect(() => {
+    fetch('/api/pages-settings', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setPagesSettings(data))
+      .catch(() => {})
+  }, [])
+
+  const footerLinks = pagesSettings
+    ? Object.entries(pagesSettings.pages)
+        .filter(([, p]) => p.footer)
+        .map(([, p]) => ({ href: p.href, label: p.label }))
+    : DEFAULT_FOOTER_LINKS
+
+  // Normalize label for footer display (some pages use different labels)
+  const getFooterLabel = (href: string, label: string) => {
+    if (href === '/booking') return 'Book Appointment'
+    if (href === '/policies') return 'Booking Policies'
+    if (href === '/terms') return 'Terms & Conditions'
+    if (href === '/contact') return 'Contact Us'
+    return label
+  }
   return (
     <footer className="bg-pink-light border-t border-brown-light mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -49,54 +84,17 @@ export default function Footer() {
               Quick Links
             </h4>
             <ul className="space-y-2">
-              <li>
-                <Link href="/services" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Services
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/gallery" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Gallery
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/blog" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Blog
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/booking" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Book Appointment
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/before-your-appointment" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Pre-Appointment Guidelines
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/policies" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Booking Policies
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Terms &amp; Conditions
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact" className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group">
-                  Contact Us
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
-                </Link>
-              </li>
+              {footerLinks.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-600 hover:text-brown transition-all duration-300 text-sm hover:translate-x-1 inline-block group"
+                  >
+                    {getFooterLabel(link.href, link.label)}
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">→</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 

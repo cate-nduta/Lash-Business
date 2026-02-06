@@ -4,6 +4,12 @@ import { readDataFile } from '@/lib/data-utils'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+export type SocialLink = {
+  platform: string
+  label: string
+  url: string
+}
+
 type ContactSettings = {
   phone?: string | null
   email?: string | null
@@ -23,6 +29,12 @@ type ContactSettings = {
   bookingDescription?: string | null
   bookingButtonText?: string | null
   whatsappMessage?: string | null
+  showContactInfoSection?: boolean | string | null
+  showBusinessHoursSection?: boolean | string | null
+  showStayUpdatedSection?: boolean | string | null
+  showReadyToBookSection?: boolean | string | null
+  showSocialMediaSection?: boolean | string | null
+  socialLinks?: SocialLink[] | null
 }
 
 export async function GET(request: NextRequest) {
@@ -40,6 +52,16 @@ export async function GET(request: NextRequest) {
       return fallback
     }
 
+    // Migrate legacy instagram to socialLinks if socialLinks is empty
+    let socialLinks: SocialLink[] = Array.isArray(contact?.socialLinks) ? contact.socialLinks.filter((s: SocialLink) => s?.url?.trim()) : []
+    if (socialLinks.length === 0 && (contact?.instagramUrl || contact?.instagram)) {
+      socialLinks = [{
+        platform: 'instagram',
+        label: 'Instagram',
+        url: contact.instagramUrl || `https://instagram.com/${(contact.instagram || '').replace('@', '')}`,
+      }]
+    }
+
     const responseBody = {
       phone: contact?.phone ?? '',
       email: contact?.email ?? '',
@@ -48,7 +70,7 @@ export async function GET(request: NextRequest) {
       location: contact?.location ?? '',
       showPhone: coerceBoolean(contact?.showPhone, Boolean(contact?.phone)),
       showEmail: coerceBoolean(contact?.showEmail, Boolean(contact?.email)),
-      showInstagram: coerceBoolean(contact?.showInstagram, Boolean(contact?.instagram || contact?.instagramUrl)),
+      showInstagram: coerceBoolean(contact?.showInstagram, Boolean(contact?.instagram || contact?.instagramUrl || socialLinks.length > 0)),
       showLocation: coerceBoolean(contact?.showLocation, Boolean(contact?.location)),
       headerTitle: contact?.headerTitle ?? '',
       headerSubtitle: contact?.headerSubtitle ?? '',
@@ -59,6 +81,12 @@ export async function GET(request: NextRequest) {
       bookingDescription: contact?.bookingDescription ?? '',
       bookingButtonText: contact?.bookingButtonText ?? '',
       whatsappMessage: contact?.whatsappMessage ?? 'Hello! I would like to chat with you.',
+      showContactInfoSection: coerceBoolean(contact?.showContactInfoSection, true),
+      showBusinessHoursSection: coerceBoolean(contact?.showBusinessHoursSection, true),
+      showStayUpdatedSection: coerceBoolean(contact?.showStayUpdatedSection, true),
+      showReadyToBookSection: coerceBoolean(contact?.showReadyToBookSection, true),
+      showSocialMediaSection: coerceBoolean(contact?.showSocialMediaSection, true),
+      socialLinks,
     }
 
     return NextResponse.json(responseBody, {

@@ -7,6 +7,14 @@ export default function WhatsAppButton() {
   const [whatsappMessage, setWhatsappMessage] = useState<string>('Hello! I would like to chat with you.')
   const [mounted, setMounted] = useState(false)
   const [primaryColor, setPrimaryColor] = useState<string>('#733D26') // Default brown color
+  const [showWhatsAppButton, setShowWhatsAppButton] = useState(true) // Default true until we fetch
+
+  useEffect(() => {
+    fetch('/api/pages-settings', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setShowWhatsAppButton(data.whatsappButton !== false))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     // Set mounted immediately to show button as fast as possible
@@ -195,8 +203,11 @@ export default function WhatsAppButton() {
     }
   }, [])
 
+  // Don't show if disabled in pages settings
+  if (!showWhatsAppButton) {
+    return null
+  }
   // Always show button once mounted (prevent hydration mismatch)
-  // The button will always appear on every page
   if (!mounted) {
     return null // Prevent hydration mismatch
   }

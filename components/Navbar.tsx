@@ -6,13 +6,22 @@ import Logo from './Logo'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCart } from '@/contexts/CartContext'
 import { Currency } from '@/lib/currency-utils'
+import type { PagesSettings } from '@/app/api/pages-settings/route'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(null)
   const { currency, setCurrency } = useCurrency()
   const { getTotalItems } = useCart()
   const cartItemCount = getTotalItems()
+
+  useEffect(() => {
+    fetch('/api/pages-settings', { cache: 'no-store' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => data && setPagesSettings(data))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -147,24 +156,32 @@ export default function Navbar() {
     }
   }, [])
 
-  // Main navigation links - keep essential ones visible
-  const mainNavLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/services', label: 'Services' },
-    { href: '/booking', label: 'Booking' },
-    { href: '/blog', label: 'Blog' },
-    { href: '/labs', label: 'LashDiary Labs' },
-    { href: '/contact', label: 'Contact' },
-  ]
-  
-  // Secondary links - can be moved to footer or dropdown if needed
-  const secondaryNavLinks = [
-    { href: '/gallery', label: 'Gallery' },
-    { href: '/policies', label: 'Policies' },
-  ]
-  
-  // Use mainNavLinks for the header
+  // Derive nav links from pages settings (fallback to defaults if not loaded)
+  const mainNavLinks = pagesSettings
+    ? Object.entries(pagesSettings.pages)
+        .filter(([, p]) => p.navbar && !p.navbarSecondary)
+        .map(([, p]) => ({ href: p.href, label: p.label }))
+    : [
+        { href: '/', label: 'Home' },
+        { href: '/services', label: 'Services' },
+        { href: '/booking', label: 'Booking' },
+        { href: '/blog', label: 'Blog' },
+        { href: '/labs', label: 'LashDiary Labs' },
+        { href: '/contact', label: 'Contact' },
+      ]
+  const secondaryNavLinks = pagesSettings
+    ? Object.entries(pagesSettings.pages)
+        .filter(([, p]) => p.navbarSecondary)
+        .map(([, p]) => ({ href: p.href, label: p.label }))
+    : [
+        { href: '/gallery', label: 'Gallery' },
+        { href: '/policies', label: 'Policies' },
+      ]
   const navLinks = mainNavLinks
+  const showShopButton = pagesSettings?.shopButton !== false
+  const showLoginRegisterIcon = pagesSettings?.loginRegisterIcon !== false
+  const showCartIcon = pagesSettings?.cartIcon !== false
+  const showCurrencySelector = pagesSettings?.currencySelector !== false
 
   return (
     <nav className="bg-white shadow-soft w-full relative z-[70]" style={{ visibility: 'visible', opacity: 1 }}>
@@ -188,39 +205,44 @@ export default function Navbar() {
             ))}
             
             {/* Shop Button */}
-            <Link
-              href="/shop"
-              className="btn-fun bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 whitespace-nowrap flex-shrink-0"
-            >
-              Shop
-            </Link>
+            {showShopButton && (
+              <Link
+                href="/shop"
+                className="btn-fun bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 whitespace-nowrap flex-shrink-0"
+              >
+                Shop
+              </Link>
+            )}
             
             {/* Cart Icon */}
-            <Link
-              href="/cart"
-              className="relative p-2 text-brown-dark hover:text-brown transition-colors flex items-center justify-center flex-shrink-0"
-              aria-label="Shopping cart"
-            >
-              <svg
-                className="w-6 h-6 flex-shrink-0"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                style={{ maxWidth: '24px', maxHeight: '24px', width: '24px', height: '24px' }}
+            {showCartIcon && (
+              <Link
+                href="/cart"
+                className="relative p-2 text-brown-dark hover:text-brown transition-colors flex items-center justify-center flex-shrink-0"
+                aria-label="Shopping cart"
               >
-                <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              {cartItemCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center z-10 min-w-[20px]">
-                  {cartItemCount > 9 ? '9+' : cartItemCount}
-                </span>
-              )}
-            </Link>
+                <svg
+                  className="w-6 h-6 flex-shrink-0"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  style={{ maxWidth: '24px', maxHeight: '24px', width: '24px', height: '24px' }}
+                >
+                  <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center z-10 min-w-[20px]">
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </span>
+                )}
+              </Link>
+            )}
             
             {/* Currency Selector */}
+            {showCurrencySelector && (
             <div className="flex items-center space-x-2 border-l border-brown-light pl-4 ml-2 flex-shrink-0">
               <button
                 onClick={() => setCurrency('KES')}
@@ -248,27 +270,30 @@ export default function Navbar() {
                 USD
               </button>
             </div>
+            )}
             
             {/* Account Icon */}
-            <Link
-              href="/account/login"
-              className="relative p-2 text-brown-dark hover:text-brown transition-colors flex items-center justify-center flex-shrink-0 ml-2"
-              aria-label="Login or Register"
-              title="Login or Register"
-            >
-              <svg
-                className="w-6 h-6 flex-shrink-0"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                style={{ maxWidth: '24px', maxHeight: '24px', width: '24px', height: '24px' }}
+            {showLoginRegisterIcon && (
+              <Link
+                href="/account/login"
+                className="relative p-2 text-brown-dark hover:text-brown transition-colors flex items-center justify-center flex-shrink-0 ml-2"
+                aria-label="Login or Register"
+                title="Login or Register"
               >
-                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </Link>
+                <svg
+                  className="w-6 h-6 flex-shrink-0"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  style={{ maxWidth: '24px', maxHeight: '24px', width: '24px', height: '24px' }}
+                >
+                  <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -333,49 +358,56 @@ export default function Navbar() {
             ))}
             
             {/* Mobile Account Link */}
-            <Link
-              href="/account/login"
-              className="flex items-center gap-2 text-brown-dark hover:text-brown transition-colors duration-300 font-medium py-2"
-              onClick={() => setIsOpen(false)}
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            {showLoginRegisterIcon && (
+              <Link
+                href="/account/login"
+                className="flex items-center gap-2 text-brown-dark hover:text-brown transition-colors duration-300 font-medium py-2"
+                onClick={() => setIsOpen(false)}
               >
-                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Login / Register
-            </Link>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Login / Register
+              </Link>
+            )}
             
             {/* Mobile Shop Button */}
-            <Link
-              href="/shop"
-              className="block bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md text-center animate-bounce-subtle"
-              onClick={() => setIsOpen(false)}
-            >
-              Shop
-            </Link>
+            {showShopButton && (
+              <Link
+                href="/shop"
+                className="block bg-brown-dark hover:bg-brown text-white font-semibold px-4 py-2 rounded-lg shadow-md text-center animate-bounce-subtle"
+                onClick={() => setIsOpen(false)}
+              >
+                Shop
+              </Link>
+            )}
             
             {/* Mobile Cart Link */}
-            <Link
-              href="/cart"
-              className="flex items-center justify-between py-2 text-brown-dark hover:text-brown transition-colors border-t border-brown-light mt-2 pt-2"
-              onClick={() => setIsOpen(false)}
-            >
-              <span className="font-medium">Cart</span>
-              {cartItemCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
-                  {cartItemCount > 9 ? '9+' : cartItemCount}
-                </span>
-              )}
-            </Link>
+            {showCartIcon && (
+              <Link
+                href="/cart"
+                className="flex items-center justify-between py-2 text-brown-dark hover:text-brown transition-colors border-t border-brown-light mt-2 pt-2"
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="font-medium">Cart</span>
+                {cartItemCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-1">
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </span>
+                )}
+              </Link>
+            )}
             
             {/* Mobile Currency Selector */}
+            {showCurrencySelector && (
             <div className="flex items-center space-x-2 pt-2 border-t border-brown-light mt-2">
               <span className="text-brown-dark font-medium text-sm">Currency:</span>
               <button
@@ -410,6 +442,7 @@ export default function Navbar() {
                 USD
               </button>
             </div>
+            )}
           </div>
         )}
       </div>

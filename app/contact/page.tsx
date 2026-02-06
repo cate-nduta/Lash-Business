@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
 import EmailSubscribe from '@/components/EmailSubscribe'
 
+interface SocialLink {
+  platform: string
+  label: string
+  url: string
+}
+
 interface ContactData {
   phone: string
   email: string
@@ -22,6 +28,12 @@ interface ContactData {
   bookingTitle?: string
   bookingDescription?: string
   bookingButtonText?: string
+  showContactInfoSection?: boolean
+  showBusinessHoursSection?: boolean
+  showStayUpdatedSection?: boolean
+  showReadyToBookSection?: boolean
+  showSocialMediaSection?: boolean
+  socialLinks?: SocialLink[]
 }
 
 interface AvailabilityData {
@@ -164,7 +176,15 @@ export default function Contact() {
     bookingTitle: 'Ready to Book?',
     bookingDescription: 'Reserve your studio appointment today and let us pamper you with a luxury lash experience.',
     bookingButtonText: 'Book Appointment',
+    showContactInfoSection: true,
+    showBusinessHoursSection: true,
+    showStayUpdatedSection: true,
+    showReadyToBookSection: true,
+    showSocialMediaSection: true,
+    socialLinks: [],
   }
+
+  const hasSocialLinks = (contact.socialLinks?.length ?? 0) > 0 || (contact.showInstagram && (contact.instagram || contact.instagramUrl))
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 sm:py-12 md:py-20">
@@ -184,144 +204,100 @@ export default function Contact() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Contact Information Card */}
-          <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-4 sm:p-6 md:p-8 hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
-            <div className="mb-6 pb-4 border-b-2 border-brown-light">
-              <h2 className="text-2xl font-display text-brown font-bold">
-                Contact Information
-              </h2>
-            </div>
-            
-            <div className="space-y-5">
-              {contact.showLocation && contact.location ? (
-                <div className="bg-pink-light/40 border-2 border-brown-light rounded-lg p-4">
-                  <p className="text-brown-dark font-bold text-sm mb-1">
-                    📍 Studio Location
-                  </p>
-                  <p className="text-gray-700 text-xs">
-                    {contact.location}
-                  </p>
-                </div>
-              ) : null}
-
-              {contact.showPhone && contact.phone ? (
-                <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                  <div className="text-brown text-xl">📞</div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800 mb-1 text-sm">Phone</h3>
-                    <a 
-                      href={`tel:${contact.phone.replace(/\s/g, '')}`}
-                      className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all"
-                    >
-                      {contact.phone}
-                    </a>
-                  </div>
-                </div>
-              ) : null}
-
-              {contact.showEmail && contact.email ? (
-                <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                  <div className="text-brown text-xl">✉️</div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800 mb-1 text-sm">Email</h3>
-                    <a 
-                      href={`mailto:${contact.email}`}
-                      className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all"
-                    >
-                      {contact.email}
-                    </a>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Emails are replied to in less than 6 hours.
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-
-              {contact.showInstagram && (contact.instagram || contact.instagramUrl) ? (
-                <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
-                  <div className="text-brown text-xl">📱</div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800 mb-1 text-sm">Instagram</h3>
-                    <a 
-                      href={contact.instagramUrl || `https://instagram.com/${contact.instagram?.replace('@', '')}`}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-brown hover:text-brown-dark hover:underline font-medium"
-                    >
-                      {contact.instagram || 'Follow Us'}
-                    </a>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Business Hours Card */}
-          <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-8 hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
-            <div className="mb-6 pb-4 border-b-2 border-brown-light">
-              <h2 className="text-2xl font-display text-brown font-bold">
-                {contact.businessHoursTitle || 'Business Hours'}
-              </h2>
-            </div>
-            <div className="space-y-3">
-              {businessHours.map(({ label, status, open }) => (
-                <div
-                  key={label}
-                  className={`flex justify-between items-center p-3 rounded-lg ${
-                    open ? 'bg-pink-light/20' : 'bg-gray-100'
-                  }`}
-                >
-                  <span className="font-semibold text-gray-800 text-sm">{label}</span>
-                  <span className={`font-bold text-sm ${open ? 'text-brown' : 'text-gray-500 italic'}`}>
-                    {open ? status : 'Closed'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Social Media & Booking Card */}
-          <div className="space-y-6 md:col-span-2 lg:col-span-1">
-            {/* Social Media */}
-            {contact.showInstagram && contact.instagramUrl ? (
-              <div className="bg-gradient-to-br from-pink to-pink-dark rounded-xl shadow-soft-lg border-2 border-brown-light p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
-                <h2 className="text-2xl font-display text-white mb-3 font-bold">
-                  {contact.socialMediaTitle || 'Follow Us'}
-                </h2>
-                <p className="text-white/95 mb-6 text-sm">
-                  {contact.socialMediaDescription || 'Stay connected and see our latest work on social media'}
-                </p>
-                <a
-                  href={contact.instagramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block bg-white text-brown-dark font-bold px-6 py-3 rounded-full hover:bg-pink-light transition-all duration-300 hover:scale-105 shadow-md"
-                >
-                  Visit Our Instagram
-                </a>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 auto-rows-fr">
+          {contact.showContactInfoSection !== false && (
+            <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-4 sm:p-6 md:p-8 hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
+              <div className="mb-6 pb-4 border-b-2 border-brown-light">
+                <h2 className="text-2xl font-display text-brown font-bold">Contact Information</h2>
               </div>
-            ) : null}
+              <div className="space-y-5">
+                {contact.showLocation && contact.location ? (
+                  <div className="bg-pink-light/40 border-2 border-brown-light rounded-lg p-4">
+                    <p className="text-brown-dark font-bold text-sm mb-1">📍 Studio Location</p>
+                    <p className="text-gray-700 text-xs">{contact.location}</p>
+                  </div>
+                ) : null}
+                {contact.showPhone && contact.phone ? (
+                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
+                    <div className="text-brown text-xl">📞</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 mb-1 text-sm">Phone</h3>
+                      <a href={`tel:${contact.phone.replace(/\s/g, '')}`} className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all">{contact.phone}</a>
+                    </div>
+                  </div>
+                ) : null}
+                {contact.showEmail && contact.email ? (
+                  <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
+                    <div className="text-brown text-xl">✉️</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 mb-1 text-sm">Email</h3>
+                      <a href={`mailto:${contact.email}`} className="text-brown hover:text-brown-dark hover:underline font-medium text-sm break-all">{contact.email}</a>
+                      <p className="text-xs text-gray-500 mt-1">Emails are replied to in less than 6 hours.</p>
+                    </div>
+                  </div>
+                ) : null}
+                {((contact.socialLinks?.length ? contact.socialLinks : []) as SocialLink[]).concat(
+                  !contact.socialLinks?.length && contact.showInstagram && (contact.instagram || contact.instagramUrl)
+                    ? [{ platform: 'instagram', label: 'Instagram', url: contact.instagramUrl || `https://instagram.com/${(contact.instagram || '').replace('@', '')}` }]
+                    : []
+                ).map((link) => (
+                  <div key={link.url + link.platform} className="flex items-start gap-3 p-3 rounded-lg hover:bg-pink-light/20 transition-colors">
+                    <div className="text-brown text-xl">📱</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 mb-1 text-sm">{link.label}</h3>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-brown hover:text-brown-dark hover:underline font-medium">
+                        {link.platform === 'instagram' && contact.instagram ? contact.instagram : link.label}
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-            {/* Booking CTA */}
+          {contact.showBusinessHoursSection !== false && (
+            <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-8 hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
+              <div className="mb-6 pb-4 border-b-2 border-brown-light">
+                <h2 className="text-2xl font-display text-brown font-bold">{contact.businessHoursTitle || 'Business Hours'}</h2>
+              </div>
+              <div className="space-y-3">
+                {businessHours.map(({ label, status, open }) => (
+                  <div key={label} className={`flex justify-between items-center p-3 rounded-lg ${open ? 'bg-pink-light/20' : 'bg-gray-100'}`}>
+                    <span className="font-semibold text-gray-800 text-sm">{label}</span>
+                    <span className={`font-bold text-sm ${open ? 'text-brown' : 'text-gray-500 italic'}`}>{open ? status : 'Closed'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(contact.showSocialMediaSection !== false) && hasSocialLinks && (
+            <div className="bg-gradient-to-br from-pink to-pink-dark rounded-xl shadow-soft-lg border-2 border-brown-light p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
+              <h2 className="text-2xl font-display text-white mb-3 font-bold">{contact.socialMediaTitle || 'Follow Us'}</h2>
+              <p className="text-white/95 mb-6 text-sm">{contact.socialMediaDescription || 'Stay connected and see our latest work on social media'}</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                {(contact.socialLinks?.length ? contact.socialLinks : (contact.instagramUrl ? [{ platform: 'instagram', label: 'Instagram', url: contact.instagramUrl }] : [])).map((link) => (
+                  <a key={link.url + link.platform} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-block bg-white text-brown-dark font-bold px-6 py-3 rounded-full hover:bg-pink-light transition-all duration-300 hover:scale-105 shadow-md">
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {contact.showReadyToBookSection !== false && (
             <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown p-8 text-center hover:shadow-soft-xl transition-all duration-300 hover:scale-[1.02]">
-              <h2 className="text-2xl font-display text-brown-dark mb-3 font-bold">
-                {contact.bookingTitle || 'Ready to Book?'}
-              </h2>
-              <p className="text-gray-700 mb-6 text-sm">
-                {contact.bookingDescription || 'Reserve your studio appointment today and let us pamper you with a luxury lash experience.'}
-              </p>
-              <a
-                href="/booking"
-                className="inline-block bg-brown-dark text-white font-bold px-8 py-3 rounded-full hover:bg-brown transition-all duration-300 hover:scale-105 shadow-md"
-              >
+              <h2 className="text-2xl font-display text-brown-dark mb-3 font-bold">{contact.bookingTitle || 'Ready to Book?'}</h2>
+              <p className="text-gray-700 mb-6 text-sm">{contact.bookingDescription || 'Reserve your studio appointment today and let us pamper you with a luxury lash experience.'}</p>
+              <a href="/booking" className="inline-block bg-brown-dark text-white font-bold px-8 py-3 rounded-full hover:bg-brown transition-all duration-300 hover:scale-105 shadow-md">
                 {contact.bookingButtonText || 'Book Appointment'}
               </a>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Email Subscription Section */}
+        {(contact.showStayUpdatedSection !== false) && (
         <div className="mt-12 md:mt-16">
           <div className="bg-white rounded-xl shadow-soft-lg border-2 border-brown-light p-8 md:p-12 max-w-2xl mx-auto">
             <div className="text-center mb-6">
@@ -335,6 +311,7 @@ export default function Contact() {
             <EmailSubscribe />
           </div>
         </div>
+        )}
       </div>
     </div>
   )

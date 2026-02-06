@@ -330,6 +330,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Pages',
+      description: 'Enable or disable pages in navbar, footer, and login/register icon',
+      href: '/admin/pages',
+      icon: '📄',
+      ownerOnly: false,
+    },
+    {
       title: 'Partner Onboarding',
       description: 'Send agreements to salons, beauticians, and influencers',
       href: '/admin/partner-onboarding',

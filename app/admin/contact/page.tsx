@@ -10,6 +10,17 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
 
 export default function AdminContact() {
+  const SOCIAL_PLATFORMS = [
+    { id: 'instagram', label: 'Instagram' },
+    { id: 'facebook', label: 'Facebook' },
+    { id: 'tiktok', label: 'TikTok' },
+    { id: 'twitter', label: 'Twitter / X' },
+    { id: 'youtube', label: 'YouTube' },
+    { id: 'linkedin', label: 'LinkedIn' },
+    { id: 'pinterest', label: 'Pinterest' },
+    { id: 'other', label: 'Other' },
+  ]
+
   const defaultContactState = {
     phone: '',
     email: '',
@@ -20,6 +31,12 @@ export default function AdminContact() {
     showEmail: true,
     showInstagram: true,
     showLocation: true,
+    showContactInfoSection: true,
+    showBusinessHoursSection: true,
+    showStayUpdatedSection: true,
+    showReadyToBookSection: true,
+    showSocialMediaSection: true,
+    socialLinks: [] as { platform: string; label: string; url: string }[],
     headerTitle: 'Get In Touch',
     headerSubtitle: 'Visit us at our studio or reach out with any questions. We can\'t wait to welcome you and curate a stunning lash look.',
     businessHoursTitle: 'Business Hours',
@@ -83,6 +100,12 @@ export default function AdminContact() {
           showEmail: data.showEmail !== undefined ? Boolean(data.showEmail) : defaultContactState.showEmail,
           showInstagram: data.showInstagram !== undefined ? Boolean(data.showInstagram) : defaultContactState.showInstagram,
           showLocation: data.showLocation !== undefined ? Boolean(data.showLocation) : defaultContactState.showLocation,
+          showContactInfoSection: data.showContactInfoSection !== undefined ? Boolean(data.showContactInfoSection) : true,
+          showBusinessHoursSection: data.showBusinessHoursSection !== undefined ? Boolean(data.showBusinessHoursSection) : true,
+          showStayUpdatedSection: data.showStayUpdatedSection !== undefined ? Boolean(data.showStayUpdatedSection) : true,
+          showReadyToBookSection: data.showReadyToBookSection !== undefined ? Boolean(data.showReadyToBookSection) : true,
+          showSocialMediaSection: data.showSocialMediaSection !== undefined ? Boolean(data.showSocialMediaSection) : true,
+          socialLinks: Array.isArray(data.socialLinks) ? data.socialLinks.filter((s: { url?: string }) => s?.url?.trim()) : (data.instagramUrl || data.instagram ? [{ platform: 'instagram', label: 'Instagram', url: data.instagramUrl || `https://instagram.com/${(data.instagram || '').replace('@', '')}` }] : []),
         }
         setContact(sanitizedContact)
         setOriginalContact(sanitizedContact)
@@ -147,10 +170,14 @@ export default function AdminContact() {
     setMessage(null)
 
     try {
+      const toSave = {
+        ...contact,
+        socialLinks: (contact.socialLinks || []).filter((s) => s?.url?.trim()),
+      }
       const response = await authorizedFetch('/api/admin/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contact),
+        body: JSON.stringify(toSave),
       })
 
       if (response.ok) {
@@ -177,7 +204,7 @@ export default function AdminContact() {
         }
         
         setMessage({ type: 'success', text: 'Contact information updated successfully! The contact page will refresh automatically.' })
-        setOriginalContact({ ...contact })
+        setOriginalContact({ ...toSave })
         setShowDialog(false)
         
         // Open contact page in new tab to verify changes
@@ -245,6 +272,31 @@ export default function AdminContact() {
           <h1 className="text-4xl font-display text-brown-dark mb-8">Contact Page Settings</h1>
           
           <div className="space-y-8">
+            {/* Section Visibility */}
+            <div className="pb-8 border-b-2 border-brown-light">
+              <h2 className="text-2xl font-semibold text-brown-dark mb-4">Section Visibility</h2>
+              <p className="text-sm text-brown-dark/70 mb-4">Enable or disable entire sections on the Get In Touch page.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { key: 'showContactInfoSection', label: 'Contact Information' },
+                  { key: 'showBusinessHoursSection', label: 'Business Hours' },
+                  { key: 'showStayUpdatedSection', label: 'Stay Updated (email signup)' },
+                  { key: 'showReadyToBookSection', label: 'Ready to Book' },
+                  { key: 'showSocialMediaSection', label: 'Social Media / Follow Us' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center justify-between p-3 bg-pink-light/30 rounded-lg cursor-pointer">
+                    <span className="font-medium text-brown-dark">{label}</span>
+                    <input
+                      type="checkbox"
+                      checked={contact[key as keyof ContactState] as boolean}
+                      onChange={(e) => setContact({ ...contact, [key]: e.target.checked })}
+                      className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {/* Header Section */}
             <div className="pb-8 border-b-2 border-brown-light">
               <h2 className="text-2xl font-semibold text-brown-dark mb-4">Page Header</h2>
@@ -329,20 +381,76 @@ export default function AdminContact() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-brown-dark">
-                  Instagram Handle
-                </label>
-                    <label className="flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                Social Media Links (Instagram, Facebook, TikTok, etc.)
+              </label>
+              <p className="text-xs text-brown-dark/70 mb-3">Add multiple social media platforms. Each will appear in the Contact Information card and the Follow Us section.</p>
+              <div className="space-y-3">
+                {(contact.socialLinks || []).map((link, index) => (
+                  <div key={index} className="flex flex-wrap gap-2 items-start p-3 bg-pink-light/20 rounded-lg">
+                    <select
+                      value={link.platform}
+                      onChange={(e) => {
+                        const next = [...(contact.socialLinks || [])]
+                        const platformId = e.target.value
+                        next[index] = { ...next[index], platform: platformId, label: SOCIAL_PLATFORMS.find(p => p.id === platformId)?.label || platformId }
+                        setContact({ ...contact, socialLinks: next })
+                      }}
+                      className="flex-shrink-0 w-32 px-3 py-2 border-2 border-brown-light rounded-lg bg-white"
+                    >
+                      {SOCIAL_PLATFORMS.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                    </select>
+                    {link.platform === 'other' && (
                       <input
-                        type="checkbox"
-                        checked={contact.showInstagram}
-                        onChange={(e) => setContact({ ...contact, showInstagram: e.target.checked })}
-                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                        type="text"
+                        value={link.label}
+                        onChange={(e) => {
+                          const next = [...(contact.socialLinks || [])]
+                          next[index] = { ...next[index], label: e.target.value }
+                          setContact({ ...contact, socialLinks: next })
+                        }}
+                        placeholder="Custom label"
+                        className="w-28 px-3 py-2 border-2 border-brown-light rounded-lg bg-white"
                       />
-                      <span>Show on website</span>
-                    </label>
+                    )}
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => {
+                        const next = [...(contact.socialLinks || [])]
+                        next[index] = { ...next[index], url: e.target.value }
+                        setContact({ ...contact, socialLinks: next })
+                      }}
+                      placeholder="https://..."
+                      className="flex-1 px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setContact({ ...contact, socialLinks: (contact.socialLinks || []).filter((_, i) => i !== index) })}
+                      className="flex-shrink-0 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      aria-label="Remove"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setContact({ ...contact, socialLinks: [...(contact.socialLinks || []), { platform: 'instagram', label: 'Instagram', url: '' }] })}
+                  className="px-4 py-2 border-2 border-dashed border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/30 transition-colors"
+                >
+                  + Add social media link
+                </button>
               </div>
+              <p className="text-xs text-gray-500 mt-2">Legacy: Instagram handle below is kept for backward compatibility. Use social links above for all platforms.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                Instagram Handle (legacy)
+              </label>
               <input
                 type="text"
                 value={contact.instagram}
@@ -350,19 +458,12 @@ export default function AdminContact() {
                 placeholder="@lashdiary"
                 className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
               />
-              <p className="text-xs text-gray-500 mt-1">Include the @ symbol</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-brown-dark mb-2">
-                Instagram URL
-              </label>
               <input
                 type="url"
                 value={contact.instagramUrl}
                 onChange={(e) => setContact({ ...contact, instagramUrl: e.target.value })}
                 placeholder="https://instagram.com/lashdiary"
-                className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                className="w-full mt-2 px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
               />
             </div>
 
