@@ -10,10 +10,26 @@ export default function WhatsAppButton() {
   const [showWhatsAppButton, setShowWhatsAppButton] = useState(true) // Default true until we fetch
 
   useEffect(() => {
-    fetch('/api/pages-settings', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => data && setShowWhatsAppButton(data.whatsappButton !== false))
-      .catch(() => {})
+    const loadPagesSettings = () => {
+      fetch(`/api/pages-settings?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => data && setShowWhatsAppButton(data.whatsappButton !== false))
+        .catch(() => {})
+    }
+    loadPagesSettings()
+    const onPagesSettingsChanged = () => loadPagesSettings()
+    window.addEventListener('pages-settings-changed', onPagesSettingsChanged)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'pages-settings-changed') loadPagesSettings()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('pages-settings-changed', onPagesSettingsChanged)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   useEffect(() => {
@@ -60,8 +76,9 @@ export default function WhatsAppButton() {
 
         const fetchTheme = async () => {
           try {
-            const response = await fetch('/api/theme/current', { 
+            const response = await fetch(`/api/theme/current?t=${Date.now()}`, {
               cache: 'no-store',
+              headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
             })
             return response
           } catch (err: any) {

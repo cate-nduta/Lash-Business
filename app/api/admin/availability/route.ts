@@ -23,18 +23,39 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const availability = await request.json()
-    
-    // Ensure bookingWindow structure is preserved even if current/next are empty
-    if (availability.bookingWindow) {
-      if (!availability.bookingWindow.current || Object.keys(availability.bookingWindow.current).length === 0) {
-        availability.bookingWindow.current = {}
-      }
-      if (!availability.bookingWindow.next || Object.keys(availability.bookingWindow.next).length === 0) {
-        availability.bookingWindow.next = {}
-      }
+    const incoming = await request.json()
+    const existing = await readDataFile<Record<string, unknown>>('availability.json', {})
+
+    // Merge so admin panel (partial payload) does not wipe fullyBookedDates, minimumBookingDate, etc.
+    const availability: Record<string, unknown> = {
+      ...existing,
+      businessHours: incoming.businessHours ?? existing.businessHours,
+      timeSlots: incoming.timeSlots ?? existing.timeSlots,
+      bookingWindow: incoming.bookingWindow ?? existing.bookingWindow,
+      homeCalls: incoming.homeCalls !== undefined ? incoming.homeCalls : existing.homeCalls,
+      fullyBookedDates: Array.isArray(incoming.fullyBookedDates)
+        ? incoming.fullyBookedDates
+        : Array.isArray(existing.fullyBookedDates)
+          ? existing.fullyBookedDates
+          : [],
+      minimumBookingDate:
+        incoming.minimumBookingDate !== undefined
+          ? incoming.minimumBookingDate
+          : existing.minimumBookingDate ?? null,
     }
-    
+
+    // Ensure bookingWindow structure is preserved even if current/next are empty
+    const bw = availability.bookingWindow as Record<string, unknown> | undefined
+    if (bw && typeof bw === 'object') {
+      if (!bw.current || typeof bw.current !== 'object' || Object.keys(bw.current as object).length === 0) {
+        bw.current = {}
+      }
+      if (!bw.next || typeof bw.next !== 'object' || Object.keys(bw.next as object).length === 0) {
+        bw.next = {}
+      }
+      availability.bookingWindow = bw
+    }
+
     await writeDataFile('availability.json', availability)
     revalidatePath('/api/availability')
     revalidatePath('/api/calendar/available-slots')

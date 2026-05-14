@@ -7,7 +7,7 @@ export const revalidate = 0
 export async function POST(request: NextRequest) {
   try {
     // Revalidate all major paths
-    revalidatePath('/')
+    revalidatePath('/', 'layout')
     revalidatePath('/booking')
     revalidatePath('/services')
     revalidatePath('/gallery')
@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/gallery')
     revalidatePath('/api/policies')
     revalidatePath('/api/terms')
+    revalidatePath('/api/pages-settings')
+    revalidatePath('/api/theme/current')
     
     return NextResponse.json(
       { 

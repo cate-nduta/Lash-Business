@@ -100,6 +100,15 @@ export default function AdminPages() {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Page settings saved successfully!' })
         setTimeout(() => setMessage(null), 3000)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('pages-settings-changed'))
+          try {
+            localStorage.setItem('pages-settings-changed', String(Date.now()))
+          } catch {
+            /* ignore */
+          }
+        }
+        router.refresh()
       } else {
         const err = await response.json()
         setMessage({ type: 'error', text: err?.error || 'Failed to save' })

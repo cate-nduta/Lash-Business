@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 
 export const runtime = 'nodejs'
-export const revalidate = 60
+/** Must stay fresh: navbar/footer read this on every visit; edge caching caused stale links. */
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate, max-age=0',
+  Pragma: 'no-cache',
+  Expires: '0',
+} as const
 
 export interface PageVisibility {
   href: string
@@ -60,11 +68,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { pages, loginRegisterIcon, shopButton, cartIcon, currencySelector, whatsappButton },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-        },
-      }
+      { headers: NO_STORE_HEADERS }
     )
   } catch (error) {
     console.error('Error loading pages settings:', error)
@@ -77,11 +81,7 @@ export async function GET(request: NextRequest) {
         currencySelector: true,
         whatsappButton: true,
       },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=60',
-        },
-      }
+      { headers: NO_STORE_HEADERS }
     )
   }
 }

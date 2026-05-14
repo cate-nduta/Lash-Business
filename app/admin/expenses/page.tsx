@@ -71,6 +71,7 @@ export default function AdminExpenses() {
     status: 'Paid' as 'Pending' | 'Paid' | 'Reimbursed',
     isRecurring: false,
     recurringFrequency: 'Monthly' as 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly',
+    receiptUrl: '' as string,
   })
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
@@ -111,7 +112,7 @@ export default function AdminExpenses() {
 
   const loadExpenses = async () => {
     try {
-      const response = await fetch('/api/admin/expenses')
+      const response = await fetch('/api/admin/expenses', { credentials: 'include' })
       if (response.ok) {
         const data = await response.json()
         setExpenses(data.expenses || [])
@@ -130,25 +131,47 @@ export default function AdminExpenses() {
     setHasUnsavedChanges(true)
   }
 
+  const buildExpensePayload = () => {
+    const amount = parseFloat(formData.amount)
+    if (Number.isNaN(amount)) {
+      return null
+    }
+    return {
+      category: formData.category,
+      description: formData.description,
+      amount,
+      date: new Date(`${formData.date}T12:00:00`).toISOString(),
+      paymentMethod: formData.paymentMethod || undefined,
+      vendor: formData.vendor || undefined,
+      status: formData.status,
+      isRecurring: formData.isRecurring,
+      recurringFrequency: formData.isRecurring ? formData.recurringFrequency : undefined,
+      ...(formData.receiptUrl ? { receiptUrl: formData.receiptUrl } : {}),
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
 
     try {
-      const expenseData = {
-        ...formData,
-        amount: parseFloat(formData.amount),
+      const expensePayload = buildExpensePayload()
+      if (!expensePayload) {
+        setMessage({ type: 'error', text: 'Please enter a valid amount.' })
+        setSaving(false)
+        return
       }
 
       if (editingId) {
-        // Update existing expense
         const response = await fetch('/api/admin/expenses', {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
+            action: 'update',
             id: editingId,
-            ...expenseData,
+            updates: expensePayload,
           }),
         })
 
@@ -162,11 +185,14 @@ export default function AdminExpenses() {
           setMessage({ type: 'error', text: data.error || 'Failed to update expense' })
         }
       } else {
-        // Create new expense
         const response = await fetch('/api/admin/expenses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(expenseData),
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'add',
+            expense: expensePayload,
+          }),
         })
 
         const data = await response.json()
@@ -200,6 +226,7 @@ export default function AdminExpenses() {
       status: expense.status || 'Paid',
       isRecurring: expense.isRecurring || false,
       recurringFrequency: expense.recurringFrequency || 'Monthly',
+      receiptUrl: expense.receiptUrl || '',
     })
     setHasUnsavedChanges(false)
     // Scroll to form
@@ -217,6 +244,7 @@ export default function AdminExpenses() {
       const response = await fetch('/api/admin/expenses', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ id: deleteTarget.id }),
       })
 
@@ -251,6 +279,7 @@ export default function AdminExpenses() {
       status: 'Paid',
       isRecurring: false,
       recurringFrequency: 'Monthly',
+      receiptUrl: '',
     })
     setEditingId(null)
     setReceiptFile(null)
@@ -740,6 +769,7 @@ export default function AdminExpenses() {
                     try {
                       const response = await fetch('/api/admin/expenses/upload-receipt', {
                         method: 'POST',
+                        credentials: 'include',
                         body: formData,
                       })
                       const data = await response.json()
@@ -1221,6 +1251,7 @@ export default function AdminExpenses() {
                     const response = await fetch('/api/admin/expenses/budgets', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
                       body: JSON.stringify({ budgets }),
                     })
                     

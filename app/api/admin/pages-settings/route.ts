@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     await writeDataFile('pages-settings.json', updated)
 
-    revalidatePath('/')
+    revalidatePath('/', 'layout')
     revalidatePath('/api/pages-settings')
     revalidatePath('/admin/pages')
 

@@ -42,10 +42,26 @@ export default function Footer() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/pages-settings', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => data && setPagesSettings(data))
-      .catch(() => {})
+    const loadPagesSettings = () => {
+      fetch(`/api/pages-settings?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => data && setPagesSettings(data))
+        .catch(() => {})
+    }
+    loadPagesSettings()
+    const onPagesSettingsChanged = () => loadPagesSettings()
+    window.addEventListener('pages-settings-changed', onPagesSettingsChanged)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'pages-settings-changed') loadPagesSettings()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('pages-settings-changed', onPagesSettingsChanged)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   const footerLinks = pagesSettings

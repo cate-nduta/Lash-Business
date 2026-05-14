@@ -83,35 +83,22 @@ export default function GlobalThemeLoader() {
       
       try {
         // Fetch current theme from public API (no auth required for reading)
-        const response = await fetch('/api/theme/current', {
+        const response = await fetch(`/api/theme/current?t=${Date.now()}`, {
           cache: 'no-store',
           credentials: 'include',
+          headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
         })
         
         if (response.ok) {
           const data = await response.json()
           if (data.colors) {
             applyThemeColors(data.colors, useTransition && !isInitialMount)
-            // Save to localStorage for faster future loads
-            try {
-              localStorage.setItem('current-theme-colors', JSON.stringify(data.colors))
-            } catch (e) {
-              // Ignore localStorage errors
-            }
           }
         }
       } catch (error) {
         console.error('Error loading theme:', error)
-        // Fallback: Try to read from localStorage if it was previously saved
-        try {
-          const savedTheme = localStorage.getItem('current-theme-colors')
-          if (savedTheme) {
-            const colors = JSON.parse(savedTheme)
-            applyThemeColors(colors, useTransition && !isInitialMount)
-          }
-        } catch (e) {
-          // Ignore localStorage errors
-        }
+        // Do not fall back to localStorage — stale colors are worse than keeping
+        // SSR/hydrated CSS variables from ThemeProvider until the next successful fetch.
       }
     }
 

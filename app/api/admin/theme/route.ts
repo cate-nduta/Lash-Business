@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
 
     await writeDataFile('theme.json', updatedData)
     // Revalidate all pages to ensure theme is applied everywhere
+    revalidatePath('/api/theme/current')
     revalidatePath('/', 'layout')
     revalidatePath('/admin')
     revalidatePath('/labs')

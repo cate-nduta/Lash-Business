@@ -246,17 +246,43 @@ export async function POST(request: NextRequest) {
       skipEmail, // Flag to skip sending emails (for showcase bookings, etc.)
       clientTimezone: rawClientTimezone,
       clientCountry: rawClientCountry,
+      visitType: rawVisitType,
+      residentialArea: rawResidentialArea,
+      homeAddressDetails: rawHomeAddressDetails,
     } = body
-    
-    // Fetch location from contact settings if not provided
-    let bookingLocationInput = rawLocation
-    if (!bookingLocationInput) {
-      try {
-        const contact = await readDataFile<{ location?: string | null }>('contact.json', {})
-        bookingLocationInput = contact?.location || STUDIO_LOCATION
-      } catch (error) {
-        console.error('Error loading location from contact settings:', error)
-        bookingLocationInput = STUDIO_LOCATION
+
+    const availabilityForHome = await readDataFile<{ homeCalls?: { enabled?: boolean } }>('availability.json', {})
+    const homeCallsEnabled = availabilityForHome?.homeCalls?.enabled === true
+    const requestVisitHome =
+      typeof rawVisitType === 'string' && rawVisitType.toLowerCase() === 'home'
+    const isHomeVisit = homeCallsEnabled && requestVisitHome
+
+    // Resolve studio / default location (home visits set location inside validation block)
+    let resolvedLocationInput: string | undefined =
+      typeof rawLocation === 'string' && rawLocation.trim() ? rawLocation.trim() : undefined
+    if (!isHomeVisit) {
+      if (!resolvedLocationInput) {
+        try {
+          const contact = await readDataFile<{ location?: string | null }>('contact.json', {})
+          resolvedLocationInput = contact?.location?.trim() || STUDIO_LOCATION
+        } catch (error) {
+          console.error('Error loading location from contact settings:', error)
+          resolvedLocationInput = STUDIO_LOCATION
+        }
+      }
+    }
+
+    if (isHomeVisit) {
+      const ra = typeof rawResidentialArea === 'string' ? rawResidentialArea.trim() : ''
+      const hd = typeof rawHomeAddressDetails === 'string' ? rawHomeAddressDetails.trim() : ''
+      if (!ra || !hd) {
+        return NextResponse.json(
+          {
+            error:
+              'Please enter your residential area and full home address (building, apartment, directions) for a home visit.',
+          },
+          { status: 400 },
+        )
       }
     }
 
@@ -285,6 +311,10 @@ export async function POST(request: NextRequest) {
     let lastFullSetDate: string
     let serviceDetails: Array<{ name?: string; categoryName?: string; duration?: number }>
 
+    let visitTypeForBooking: 'studio' | 'home' = 'studio'
+    let residentialAreaForBooking: string | undefined
+    let homeAddressDetailsForBooking: string | undefined
+
     try {
       name = sanitizeText(rawName, { fieldName: 'Name', maxLength: 80 })
       email = sanitizeEmail(rawEmail)
@@ -293,9 +323,33 @@ export async function POST(request: NextRequest) {
       date = sanitizeOptionalText(rawDate, { fieldName: 'Booking date', maxLength: 32, optional: true })
       service = sanitizeOptionalText(rawService, { fieldName: 'Service', maxLength: 120, optional: true })
       services = sanitizeStringArray(rawServices, { fieldName: 'Service', maxLength: 120, maxItems: 8 })
-      bookingLocation =
-        sanitizeOptionalText(bookingLocationInput, { fieldName: 'Location', maxLength: 160, optional: true }) ||
-        STUDIO_LOCATION
+      if (isHomeVisit) {
+        visitTypeForBooking = 'home'
+        residentialAreaForBooking = sanitizeText(rawResidentialArea, {
+          fieldName: 'Residential area',
+          maxLength: 200,
+          minLength: 2,
+          allowSymbols: true,
+        })
+        homeAddressDetailsForBooking = sanitizeText(rawHomeAddressDetails, {
+          fieldName: 'Home address details',
+          maxLength: 1500,
+          minLength: 5,
+          allowNewLines: true,
+          allowSymbols: true,
+        })
+        const composedHomeLocation = `Home visit — Area: ${residentialAreaForBooking}. Address: ${homeAddressDetailsForBooking}`
+        bookingLocation =
+          sanitizeOptionalText(composedHomeLocation, { fieldName: 'Location', maxLength: 2000, optional: true }) ||
+          STUDIO_LOCATION
+      } else {
+        visitTypeForBooking = 'studio'
+        residentialAreaForBooking = undefined
+        homeAddressDetailsForBooking = undefined
+        bookingLocation =
+          sanitizeOptionalText(resolvedLocationInput, { fieldName: 'Location', maxLength: 2000, optional: true }) ||
+          STUDIO_LOCATION
+      }
       notes = sanitizeNotes(rawNotes, 'Notes', 1500)
       appointmentPreference = sanitizeOptionalText(rawAppointmentPreference, {
         fieldName: 'Appointment preference',
@@ -659,6 +713,9 @@ export async function POST(request: NextRequest) {
         date,
         timeSlot,
         location: bookingLocation,
+        visitType: visitTypeForBooking,
+        residentialArea: residentialAreaForBooking ?? null,
+        homeAddressDetails: homeAddressDetailsForBooking ?? null,
         clientTimezone: typeof rawClientTimezone === 'string' && rawClientTimezone.trim() ? rawClientTimezone.trim() : 'Africa/Nairobi',
         clientCountry: typeof rawClientCountry === 'string' && rawClientCountry.trim() ? rawClientCountry.trim() : 'Unknown',
         desiredLook: desiredLookLabel,
@@ -747,6 +804,9 @@ export async function POST(request: NextRequest) {
         date,
         timeSlot,
         location: bookingLocation,
+        visitType: visitTypeForBooking,
+        residentialArea: residentialAreaForBooking ?? null,
+        homeAddressDetails: homeAddressDetailsForBooking ?? null,
         clientTimezone: typeof rawClientTimezone === 'string' && rawClientTimezone.trim() ? rawClientTimezone.trim() : 'Africa/Nairobi',
         clientCountry: typeof rawClientCountry === 'string' && rawClientCountry.trim() ? rawClientCountry.trim() : 'Unknown',
         desiredLook: desiredLookLabel,

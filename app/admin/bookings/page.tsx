@@ -74,6 +74,20 @@ interface Booking {
   walkInFee?: number
   clientTimezone?: string
   clientCountry?: string
+  visitType?: 'studio' | 'home'
+  residentialArea?: string | null
+  homeAddressDetails?: string | null
+}
+
+function isHomeVisitBooking(
+  b: Pick<Booking, 'visitType' | 'residentialArea' | 'homeAddressDetails' | 'location'>,
+): boolean {
+  if (b.visitType === 'home') return true
+  const area = typeof b.residentialArea === 'string' ? b.residentialArea.trim() : ''
+  const details = typeof b.homeAddressDetails === 'string' ? b.homeAddressDetails.trim() : ''
+  if (area && details) return true
+  const loc = typeof b.location === 'string' ? b.location.trim() : ''
+  return loc.startsWith('Home visit —')
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -1711,6 +1725,13 @@ export default function AdminBookings() {
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-brown-dark text-base mb-1">{booking.name}</div>
                           <div className="text-sm text-brown-dark/70">{booking.service || 'N/A'}</div>
+                          {isHomeVisitBooking(booking) && (
+                            <div className="mt-1.5">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-semibold border border-emerald-300">
+                                Home visit — open for address
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="ml-2">
                           {renderStatusBadge(booking.status)}
@@ -1756,6 +1777,7 @@ export default function AdminBookings() {
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Client Name</th>
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Service</th>
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Date & Time</th>
+                      <th className="text-left py-3 px-3 text-brown-dark font-semibold text-sm whitespace-nowrap">Visit</th>
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Final Price ({currency})</th>
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Deposit</th>
                       <th className="text-left py-3 px-4 text-brown-dark font-semibold text-sm">Balance</th>
@@ -1783,6 +1805,15 @@ export default function AdminBookings() {
                         <td className="py-3 px-4 text-brown">
                           <div className="font-medium">{formatDate(booking.date)}</div>
                           <div className="text-sm text-gray-600">{formatTime(booking.timeSlot)}</div>
+                        </td>
+                        <td className="py-3 px-3 text-brown whitespace-nowrap">
+                          {isHomeVisitBooking(booking) ? (
+                            <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-semibold border border-emerald-300">
+                              Home
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">Studio</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-brown">
                           <span className="font-semibold">{formatCurrencyContext(convertBookingPrice(booking.finalPrice))}</span>
@@ -1857,6 +1888,51 @@ export default function AdminBookings() {
                     <p className="text-brown-dark font-semibold">{selectedBooking.phone}</p>
                   </div>
                 </div>
+
+                {isHomeVisitBooking(selectedBooking) && (
+                  <div className="mt-4 p-4 bg-emerald-50 border-l-4 border-emerald-600 rounded">
+                    <p className="text-sm font-semibold text-emerald-900 mb-3 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-emerald-700 px-2.5 py-0.5 text-xs font-semibold text-white">
+                        Home visit
+                      </span>
+                      <span>Client location</span>
+                    </p>
+                    {selectedBooking.residentialArea?.trim() || selectedBooking.homeAddressDetails?.trim() ? (
+                      <div className="space-y-3 text-sm text-emerald-950">
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">
+                            Residential area
+                          </p>
+                          <p className="whitespace-pre-wrap font-medium">
+                            {selectedBooking.residentialArea?.trim() || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">
+                            Address, apartment & directions
+                          </p>
+                          <p className="whitespace-pre-wrap">{selectedBooking.homeAddressDetails?.trim() || '—'}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">
+                          Location on file
+                        </p>
+                        <p className="text-sm text-emerald-950 whitespace-pre-wrap">
+                          {selectedBooking.location?.trim() || '—'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isHomeVisitBooking(selectedBooking) && selectedBooking.location?.trim() && (
+                  <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Location</p>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedBooking.location}</p>
+                  </div>
+                )}
                 
                 {/* Special Notes */}
                 {selectedBooking.notes && (

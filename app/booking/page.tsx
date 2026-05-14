@@ -148,6 +148,9 @@ export default function Booking() {
     timeSlot: '',
     notes: '',
     appointmentPreference: '',
+    visitType: 'studio' as 'studio' | 'home',
+    residentialArea: '',
+    homeAddressDetails: '',
   })
   const [clientData, setClientData] = useState<any>(null)
   const [loadingClientData, setLoadingClientData] = useState(true)
@@ -594,6 +597,10 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         // Process availability
         if (availabilityData) {
           const normalized = {
+            minimumBookingDate: availabilityData?.minimumBookingDate,
+            fullyBookedDates: Array.isArray(availabilityData?.fullyBookedDates)
+              ? availabilityData.fullyBookedDates
+              : [],
             businessHours: availabilityData?.businessHours || {},
             timeSlots: availabilityData?.timeSlots || {},
             bookingWindow: {
@@ -602,6 +609,20 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               bookingLink: availabilityData?.bookingWindow?.bookingLink ?? '',
               note: availabilityData?.bookingWindow?.note ?? '',
               bannerMessage: availabilityData?.bookingWindow?.bannerMessage ?? '',
+              bannerEnabled: availabilityData?.bookingWindow?.bannerEnabled,
+            },
+            homeCalls: {
+              enabled: Boolean(availabilityData?.homeCalls?.enabled),
+              sectionTitle:
+                typeof availabilityData?.homeCalls?.sectionTitle === 'string' &&
+                availabilityData.homeCalls.sectionTitle.trim()
+                  ? availabilityData.homeCalls.sectionTitle.trim()
+                  : 'Home visit',
+              sectionDescription:
+                typeof availabilityData?.homeCalls?.sectionDescription === 'string' &&
+                availabilityData.homeCalls.sectionDescription.trim()
+                  ? availabilityData.homeCalls.sectionDescription.trim()
+                  : 'Choose studio or home visit. For home visits, share your residential area and full address (building, apartment, gate codes, landmarks).',
             },
           }
           setAvailabilityData(normalized)
@@ -610,6 +631,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             businessHours: {},
             timeSlots: {},
             bookingWindow: {},
+            fullyBookedDates: [],
+            homeCalls: {
+              enabled: false,
+              sectionTitle: 'Home visit',
+              sectionDescription:
+                'Choose studio or home visit. For home visits, share your residential area and full address.',
+            },
           })
         }
         
@@ -1368,6 +1396,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   const [fullyBookedDates, setFullyBookedDates] = useState<string[]>([])
   const [availabilityData, setAvailabilityData] = useState<{
     minimumBookingDate?: string
+    fullyBookedDates?: string[]
     businessHours?: {
       [key: string]: { open: string; close: string; enabled: boolean }
     }
@@ -1384,6 +1413,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       note?: string
       bannerMessage?: string
       bannerEnabled?: boolean | null
+    }
+    homeCalls?: {
+      enabled: boolean
+      sectionTitle: string
+      sectionDescription: string
     }
   } | null>(null)
   const bookingWindow = availabilityData?.bookingWindow
@@ -2081,6 +2115,28 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         return
       }
 
+      const homeCallsEnabled = availabilityData?.homeCalls?.enabled === true
+      const effectiveVisitType =
+        homeCallsEnabled && formData.visitType === 'home' ? 'home' : 'studio'
+      if (homeCallsEnabled && effectiveVisitType === 'home') {
+        if (!formData.residentialArea?.trim() || !formData.homeAddressDetails?.trim()) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message:
+              'Please enter your residential area and full home address (building, apartment, directions) for a home visit.',
+          })
+          setTimeout(() => {
+            document.getElementById('home-visit-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 100)
+          return
+        }
+      }
+      const bookingLocationSubmit =
+        effectiveVisitType === 'home'
+          ? `Home visit — Area: ${formData.residentialArea.trim()}. Address: ${formData.homeAddressDetails.trim()}`
+          : STUDIO_LOCATION
+
       if (hasFillServiceSelected) {
         if (!formData.lastFullSetDate) {
           setLoading(false)
@@ -2225,7 +2281,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               categoryId: item.categoryId,
               categoryName: item.categoryName,
             })),
-            location: STUDIO_LOCATION,
+            location: bookingLocationSubmit,
+            visitType: effectiveVisitType,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
             discount: pricingDetails.discount,
@@ -2441,7 +2498,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               categoryId: item.categoryId,
               categoryName: item.categoryName,
             })),
-            location: STUDIO_LOCATION,
+            location: bookingLocationSubmit,
+            visitType: effectiveVisitType,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
             discount: pricingDetails.discount,
@@ -2784,6 +2842,100 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 Let us know your preference for conversation during your appointment.
               </p>
             </div>
+
+            {/* Home visit (optional, admin-controlled) */}
+            {availabilityData?.homeCalls?.enabled && (
+              <div
+                id="home-visit-section"
+                className="rounded-xl border-2 border-brown-light bg-pink-light/30 p-4 sm:p-5 space-y-4"
+              >
+                <h3 className="text-base sm:text-lg font-display font-semibold text-brown-dark">
+                  {availabilityData.homeCalls.sectionTitle}
+                </h3>
+                <p className="text-sm text-brown-dark/80">{availabilityData.homeCalls.sectionDescription}</p>
+                <fieldset className="space-y-3">
+                  <legend className="sr-only">Appointment location</legend>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="visitType"
+                      value="studio"
+                      checked={formData.visitType === 'studio'}
+                      onChange={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          visitType: 'studio',
+                          residentialArea: '',
+                          homeAddressDetails: '',
+                        }))
+                        if (submitStatus.type === 'error') {
+                          setSubmitStatus({ type: null, message: '' })
+                        }
+                      }}
+                      className="mt-1 h-4 w-4 text-brown-dark border-brown-light"
+                    />
+                    <span>
+                      <span className="font-semibold text-brown-dark block">Studio appointment</span>
+                      <span className="text-sm text-brown-dark/70">Visit us at the studio (default).</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="visitType"
+                      value="home"
+                      checked={formData.visitType === 'home'}
+                      onChange={() => {
+                        setFormData((prev) => ({ ...prev, visitType: 'home' }))
+                        if (submitStatus.type === 'error') {
+                          setSubmitStatus({ type: null, message: '' })
+                        }
+                      }}
+                      className="mt-1 h-4 w-4 text-brown-dark border-brown-light"
+                    />
+                    <span>
+                      <span className="font-semibold text-brown-dark block">Home visit</span>
+                      <span className="text-sm text-brown-dark/70">We come to you — please share your area and full address below.</span>
+                    </span>
+                  </label>
+                </fieldset>
+                {formData.visitType === 'home' && (
+                  <div className="space-y-4 pt-2 border-t border-brown-light/60">
+                    <div>
+                      <label htmlFor="residentialArea" className="block text-sm font-semibold text-brown-dark mb-2">
+                        Residential area / neighbourhood *
+                      </label>
+                      <input
+                        type="text"
+                        id="residentialArea"
+                        name="residentialArea"
+                        required={formData.visitType === 'home'}
+                        value={formData.residentialArea}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark min-h-[48px]"
+                        placeholder="e.g. Kilimani, Westlands, Karen"
+                        autoComplete="address-level2"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="homeAddressDetails" className="block text-sm font-semibold text-brown-dark mb-2">
+                        Full address & directions *
+                      </label>
+                      <textarea
+                        id="homeAddressDetails"
+                        name="homeAddressDetails"
+                        rows={4}
+                        required={formData.visitType === 'home'}
+                        value={formData.homeAddressDetails}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark resize-y min-h-[120px]"
+                        placeholder="Building name, apartment / house number, estate, gate codes, nearest landmark, parking notes…"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Notes Field */}
             <div>

@@ -65,13 +65,10 @@ export default function AdminTheme() {
     root.style.setProperty('--color-on-primary', colors.onPrimary || '#ffffff')
     root.style.setProperty('--color-on-secondary', colors.onSecondary || colors.text)
 
-    // Save to localStorage so other pages/tabs can pick it up immediately
+    // Signal other tabs to refetch theme from API (no cached color blob in localStorage).
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.setItem('current-theme-colors', JSON.stringify(colors))
         localStorage.setItem('theme-changed', Date.now().toString())
-        // Trigger storage event for other tabs
-        window.dispatchEvent(new Event('storage'))
       } catch (error) {
         console.error('Error saving theme to localStorage:', error)
       }

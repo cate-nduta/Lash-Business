@@ -37,19 +37,33 @@ interface BookingWindowState {
   bannerEnabled?: boolean | null
 }
 
+interface HomeCallsSettings {
+  enabled: boolean
+  sectionTitle: string
+  sectionDescription: string
+}
+
 interface AvailabilityData {
   businessHours: BusinessHours
   timeSlots: {
-    weekdays?: TimeSlot[] // Monday-Thursday shared time slots
+    weekdays?: TimeSlot[]
     friday?: TimeSlot[]
     saturday?: TimeSlot[]
     sunday: TimeSlot[]
   }
   bookingWindow: BookingWindowState
+  homeCalls: HomeCallsSettings
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
+
+const defaultHomeCalls = (): HomeCallsSettings => ({
+  enabled: false,
+  sectionTitle: 'Home visit',
+  sectionDescription:
+    'Choose studio or home visit. For home visits, clients enter their residential area and full address (building, apartment, directions).',
+})
 
 export default function AdminAvailability() {
   const createDefaultBookingWindow = (): BookingWindowState => ({
@@ -64,11 +78,13 @@ export default function AdminAvailability() {
     businessHours: {},
     timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
+    homeCalls: defaultHomeCalls(),
   })
   const [originalAvailability, setOriginalAvailability] = useState<AvailabilityData>({
     businessHours: {},
     timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
+    homeCalls: defaultHomeCalls(),
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -145,6 +161,17 @@ export default function AdminAvailability() {
           businessHours,
           timeSlots,
           bookingWindow,
+          homeCalls: {
+            enabled: Boolean(data?.homeCalls?.enabled),
+            sectionTitle:
+              typeof data?.homeCalls?.sectionTitle === 'string' && data.homeCalls.sectionTitle.trim()
+                ? data.homeCalls.sectionTitle.trim()
+                : defaultHomeCalls().sectionTitle,
+            sectionDescription:
+              typeof data?.homeCalls?.sectionDescription === 'string' && data.homeCalls.sectionDescription.trim()
+                ? data.homeCalls.sectionDescription.trim()
+                : defaultHomeCalls().sectionDescription,
+          },
         }
 
         setAvailability(normalized)
@@ -420,6 +447,58 @@ export default function AdminAvailability() {
             onClose={() => setMessage(null)}
           />
         )}
+
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-6 border-2 border-brown-light">
+          <h2 className="text-2xl font-display text-brown-dark mb-2">Home visits on booking page</h2>
+          <p className="text-sm text-brown-dark/70 mb-4">
+            When enabled, clients can choose a home visit and must enter their residential area and full address.
+            When disabled, everyone books a normal studio appointment.
+          </p>
+          <label className="flex items-center gap-3 cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={availability.homeCalls.enabled}
+              onChange={(e) =>
+                setAvailability((prev) => ({
+                  ...prev,
+                  homeCalls: { ...prev.homeCalls, enabled: e.target.checked },
+                }))
+              }
+              className="w-5 h-5 text-brown-dark rounded border-brown-light"
+            />
+            <span className="font-semibold text-brown-dark">Enable home visit section on the booking page</span>
+          </label>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-1">Section title</label>
+              <input
+                type="text"
+                value={availability.homeCalls.sectionTitle}
+                onChange={(e) =>
+                  setAvailability((prev) => ({
+                    ...prev,
+                    homeCalls: { ...prev.homeCalls, sectionTitle: e.target.value },
+                  }))
+                }
+                className="w-full px-3 py-2 border border-brown-light rounded-lg bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-brown-dark mb-1">Section description (shown to clients)</label>
+              <textarea
+                rows={3}
+                value={availability.homeCalls.sectionDescription}
+                onChange={(e) =>
+                  setAvailability((prev) => ({
+                    ...prev,
+                    homeCalls: { ...prev.homeCalls, sectionDescription: e.target.value },
+                  }))
+                }
+                className="w-full px-3 py-2 border border-brown-light rounded-lg bg-white"
+              />
+            </div>
+          </div>
+        </div>
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
           <h1 className="text-4xl font-display text-brown-dark mb-8">Monthly Booking Window</h1>
