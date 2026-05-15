@@ -77,6 +77,12 @@ interface Booking {
   visitType?: 'studio' | 'home'
   residentialArea?: string | null
   homeAddressDetails?: string | null
+  serviceSubtotal?: number | null
+  homeVisitFee?: number | null
+}
+
+function visitTypeLabel(booking: Booking): string {
+  return isHomeVisitBooking(booking) ? 'Home visit' : 'Studio visit'
 }
 
 function isHomeVisitBooking(
@@ -1968,6 +1974,20 @@ export default function AdminBookings() {
                     <p className="text-brown-dark font-semibold">{selectedBooking.service || 'N/A'}</p>
                   </div>
                   <div>
+                    <p className="text-sm text-gray-600">Visit type</p>
+                    <p className="text-brown-dark font-semibold">
+                      {isHomeVisitBooking(selectedBooking) ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-xs font-semibold border border-emerald-300">
+                          {visitTypeLabel(selectedBooking)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2.5 py-0.5 text-xs font-semibold border border-gray-300">
+                          {visitTypeLabel(selectedBooking)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-600">Status</p>
                     <div className="flex items-center gap-2 flex-wrap">
                       {renderStatusBadge(selectedBooking.status)}
@@ -2050,10 +2070,42 @@ export default function AdminBookings() {
                   </div>
                 )}
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Original Price:</span>
-                    <span className="text-brown-dark font-semibold">{formatCurrencyContext(convertBookingPrice(selectedBooking.originalPrice))}</span>
-                  </div>
+                  {(selectedBooking.serviceSubtotal != null && selectedBooking.serviceSubtotal > 0) ||
+                  (selectedBooking.homeVisitFee != null && selectedBooking.homeVisitFee > 0) ? (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Service price:</span>
+                        <span className="text-brown-dark font-semibold">
+                          {formatCurrencyContext(
+                            convertBookingPrice(
+                              selectedBooking.serviceSubtotal ??
+                                Math.max(
+                                  0,
+                                  selectedBooking.originalPrice - (selectedBooking.homeVisitFee ?? 0),
+                                ),
+                            ),
+                          )}
+                        </span>
+                      </div>
+                      {isHomeVisitBooking(selectedBooking) && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Home visit charge:</span>
+                          <span className="text-emerald-800 font-semibold">
+                            {(selectedBooking.homeVisitFee ?? 0) > 0
+                              ? `+${formatCurrencyContext(convertBookingPrice(selectedBooking.homeVisitFee ?? 0))}`
+                              : 'Waived (100% service discount)'}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Original Price:</span>
+                      <span className="text-brown-dark font-semibold">
+                        {formatCurrencyContext(convertBookingPrice(selectedBooking.originalPrice))}
+                      </span>
+                    </div>
+                  )}
                   {selectedBooking.isWalkIn && selectedBooking.walkInFee && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Walk-In Fee:</span>

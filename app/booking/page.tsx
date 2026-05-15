@@ -8,6 +8,10 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import PaystackInlinePayment from '@/components/PaystackInlinePayment'
+import {
+  computeBookingTotalsKES,
+  computeHomeVisitFeeKES,
+} from '@/lib/home-visit-pricing'
 
 // Lazy load CalendarPicker for faster initial page load
 const CalendarPicker = lazy(() => import('@/components/CalendarPicker'))
@@ -623,6 +627,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 availabilityData.homeCalls.sectionDescription.trim()
                   ? availabilityData.homeCalls.sectionDescription.trim()
                   : 'Choose studio or home visit. For home visits, share your residential area and full address (building, apartment, gate codes, landmarks).',
+              feeKES: Math.max(
+                0,
+                Math.round(
+                  Number.isFinite(Number(availabilityData?.homeCalls?.feeKES))
+                    ? Number(availabilityData.homeCalls.feeKES)
+                    : 0,
+                ),
+              ),
             },
           }
           setAvailabilityData(normalized)
@@ -637,6 +649,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               sectionTitle: 'Home visit',
               sectionDescription:
                 'Choose studio or home visit. For home visits, share your residential area and full address.',
+              feeKES: 0,
             },
           })
         }
@@ -1418,6 +1431,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       enabled: boolean
       sectionTitle: string
       sectionDescription: string
+      feeKES: number
     }
   } | null>(null)
   const bookingWindow = availabilityData?.bookingWindow
@@ -1464,9 +1478,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }, 0)
     }
 
-    const originalPrice = getTotalServicePrice()
-    if (serviceList.length === 0 || originalPrice === 0) {
+    const serviceSubtotal = getTotalServicePrice()
+    if (serviceList.length === 0 || serviceSubtotal === 0) {
       return {
+        serviceSubtotal: 0,
+        homeVisitFee: 0,
         originalPrice: 0,
         discount: 0,
         finalPrice: 0,
@@ -1474,6 +1490,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         discountType: null as 'first-time' | 'promo' | 'returning' | null,
         isFridayNight: false,
         depositPercentage: depositPercentage,
+        isHomeVisit: false,
       }
     }
     
@@ -1515,7 +1532,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     let discountType: 'first-time' | 'promo' | 'returning' | null = null
 
     if (firstTimeEligible) {
-      discount = Math.round(originalPrice * (firstTimeDiscountPercentage / 100))
+      discount = Math.round(serviceSubtotal * (firstTimeDiscountPercentage / 100))
       discountType = 'first-time'
     } else if (promoEligible && promoCodeData) {
       let discountValue = promoCodeData.discountValue
@@ -1523,7 +1540,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         discountValue = promoCodeData.clientDiscountPercent
       }
       if (promoCodeData.discountType === 'percentage') {
-        discount = Math.round(originalPrice * (discountValue / 100))
+        discount = Math.round(serviceSubtotal * (discountValue / 100))
         if (promoCodeData.maxDiscount && discount > promoCodeData.maxDiscount) {
           discount = promoCodeData.maxDiscount
         }
@@ -1532,11 +1549,26 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }
       discountType = 'promo'
     } else if (returningEligible) {
-      discount = Math.round(originalPrice * (appliedReturningDiscountPercent / 100))
+      discount = Math.round(serviceSubtotal * (appliedReturningDiscountPercent / 100))
       discountType = 'returning'
     }
 
-    const finalPrice = Math.max(0, originalPrice - discount)
+    const homeCallsEnabled = availabilityData?.homeCalls?.enabled === true
+    const isHomeVisit = homeCallsEnabled && formData.visitType === 'home'
+    const homeVisitFee = computeHomeVisitFeeKES({
+      isHomeVisit,
+      homeCalls: availabilityData?.homeCalls,
+      serviceSubtotalKES: serviceSubtotal,
+      discountKES: discount,
+    })
+    const totals = computeBookingTotalsKES({
+      serviceSubtotalKES: serviceSubtotal,
+      discountKES: discount,
+      homeVisitFeeKES: homeVisitFee,
+    })
+    const originalPrice = totals.originalPriceKES
+    const finalPrice = totals.finalPriceKES
+    discount = totals.discountKES
     
     // Friday night bookings require configurable deposit percentage
     const isFridayNight = isFridayNightBooking()
@@ -1577,6 +1609,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
 
     return {
+      serviceSubtotal,
+      homeVisitFee,
       originalPrice,
       discount,
       finalPrice,
@@ -1584,6 +1618,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       discountType,
       isFridayNight,
       depositPercentage: effectiveDepositPercentage,
+      isHomeVisit,
     }
   }
   
@@ -1606,6 +1641,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   // Create pricing object with converted values for display
   const pricingInCurrency = {
     ...pricing,
+    serviceSubtotal: getPriceInCurrency(pricing.serviceSubtotal),
+    homeVisitFee: getPriceInCurrency(pricing.homeVisitFee),
     originalPrice: getPriceInCurrency(pricing.originalPrice),
     discount: getPriceInCurrency(pricing.discount),
     finalPrice: getPriceInCurrency(pricing.finalPrice),
@@ -2238,7 +2275,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             clientDiscountPercent: promoCodeData.clientDiscountPercent ?? promoCodeData.discountValue ?? 0,
             salonCommissionPercent: promoCodeData.salonCommissionPercent ?? 0,
             commissionAmount: Math.round(
-              pricingDetails.originalPrice * ((promoCodeData.salonCommissionPercent ?? 0) / 100),
+              pricingDetails.serviceSubtotal * ((promoCodeData.salonCommissionPercent ?? 0) / 100),
             ),
           }
         : null
@@ -2285,9 +2322,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             visitType: effectiveVisitType,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
+            serviceSubtotal: pricingDetails.serviceSubtotal,
+            homeVisitFee: pricingDetails.homeVisitFee,
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
-          deposit: pricingDetails.deposit, // Deposit amount in KES (40% by default, configurable)
+            deposit: pricingDetails.deposit, // Deposit amount in KES (40% by default, configurable)
             paymentType: 'deposit',
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
@@ -2502,6 +2541,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             visitType: effectiveVisitType,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
+            serviceSubtotal: pricingDetails.serviceSubtotal,
+            homeVisitFee: pricingDetails.homeVisitFee,
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
             deposit: pricingDetails.deposit, // M-Pesa = deposit
@@ -3315,7 +3356,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                         })}
                         <div className="flex justify-between items-center text-xs font-semibold text-brown-dark mt-2 pt-2 border-t border-brown-light/30">
                           <span>Subtotal:</span>
-                          <span>{formatCurrencyContext(pricingInCurrency.originalPrice)}</span>
+                          <span>{formatCurrencyContext(pricingInCurrency.serviceSubtotal)}</span>
                         </div>
                       </div>
                     )}
@@ -3323,8 +3364,18 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       <span className="text-brown-dark font-semibold text-sm sm:text-base break-words pr-2">
                         {cartItems.length > 1 ? 'Total Service Price:' : 'Service Price:'}
                       </span>
-                      <span className="text-brown-dark font-bold text-sm sm:text-base whitespace-nowrap">{formatCurrencyContext(pricingInCurrency.originalPrice)}</span>
+                      <span className="text-brown-dark font-bold text-sm sm:text-base whitespace-nowrap">{formatCurrencyContext(pricingInCurrency.serviceSubtotal)}</span>
                     </div>
+                    {pricing.isHomeVisit && (availabilityData?.homeCalls?.feeKES ?? 0) > 0 && (
+                      <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 text-emerald-800">
+                        <span className="font-semibold text-xs sm:text-sm break-words pr-2">Home visit charge:</span>
+                        <span className="font-bold text-xs sm:text-sm whitespace-nowrap">
+                          {pricing.homeVisitFee > 0
+                            ? formatCurrencyContext(pricingInCurrency.homeVisitFee)
+                            : 'Waived (100% service discount)'}
+                        </span>
+                      </div>
+                    )}
                     {pricing.discountType === 'first-time' && (
                       <div className="flex justify-between items-start sm:items-center flex-wrap gap-2 text-green-700">
                         <span className="font-semibold text-xs sm:text-sm break-words pr-2">First-Time Client Discount ({firstTimeDiscountPercentage}%):</span>

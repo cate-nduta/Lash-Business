@@ -41,6 +41,8 @@ interface HomeCallsSettings {
   enabled: boolean
   sectionTitle: string
   sectionDescription: string
+  /** Extra charge in KES for home visits (added to service total; waived if services are 100% off) */
+  feeKES: number
 }
 
 interface AvailabilityData {
@@ -63,6 +65,7 @@ const defaultHomeCalls = (): HomeCallsSettings => ({
   sectionTitle: 'Home visit',
   sectionDescription:
     'Choose studio or home visit. For home visits, clients enter their residential area and full address (building, apartment, directions).',
+  feeKES: 0,
 })
 
 export default function AdminAvailability() {
@@ -171,6 +174,10 @@ export default function AdminAvailability() {
               typeof data?.homeCalls?.sectionDescription === 'string' && data.homeCalls.sectionDescription.trim()
                 ? data.homeCalls.sectionDescription.trim()
                 : defaultHomeCalls().sectionDescription,
+            feeKES: Math.max(
+              0,
+              Math.round(Number.isFinite(Number(data?.homeCalls?.feeKES)) ? Number(data.homeCalls.feeKES) : 0),
+            ),
           },
         }
 
@@ -468,6 +475,33 @@ export default function AdminAvailability() {
             />
             <span className="font-semibold text-brown-dark">Enable home visit section on the booking page</span>
           </label>
+          {availability.homeCalls.enabled && (
+            <div className="mb-4 p-4 bg-emerald-50/80 border border-emerald-200 rounded-lg">
+              <label className="block text-sm font-medium text-brown-dark mb-1">
+                Home visit charge (KES)
+              </label>
+              <p className="text-xs text-brown-dark/70 mb-2">
+                Added on top of the service price when a client books a home visit. If they have a 100% discount on
+                services, this charge is not applied.
+              </p>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={availability.homeCalls.feeKES}
+                onChange={(e) =>
+                  setAvailability((prev) => ({
+                    ...prev,
+                    homeCalls: {
+                      ...prev.homeCalls,
+                      feeKES: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                    },
+                  }))
+                }
+                className="w-full max-w-xs px-3 py-2 border border-brown-light rounded-lg bg-white"
+              />
+            </div>
+          )}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-brown-dark mb-1">Section title</label>

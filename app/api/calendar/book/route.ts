@@ -20,6 +20,11 @@ import {
   ValidationError,
 } from '@/lib/input-validation'
 import type { ClientData, ClientUsersData, ClientProfile, LashHistory } from '@/types/client'
+import {
+  computeBookingTotalsKES,
+  computeHomeVisitFeeKES,
+  sumServiceDetailsSubtotalKES,
+} from '@/lib/home-visit-pricing'
 
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
@@ -251,7 +256,9 @@ export async function POST(request: NextRequest) {
       homeAddressDetails: rawHomeAddressDetails,
     } = body
 
-    const availabilityForHome = await readDataFile<{ homeCalls?: { enabled?: boolean } }>('availability.json', {})
+    const availabilityForHome = await readDataFile<{
+      homeCalls?: { enabled?: boolean; feeKES?: number }
+    }>('availability.json', {})
     const homeCallsEnabled = availabilityForHome?.homeCalls?.enabled === true
     const requestVisitHome =
       typeof rawVisitType === 'string' && rawVisitType.toLowerCase() === 'home'
@@ -309,7 +316,7 @@ export async function POST(request: NextRequest) {
     let desiredLook: string
     let mpesaCheckoutRequestID: string
     let lastFullSetDate: string
-    let serviceDetails: Array<{ name?: string; categoryName?: string; duration?: number }>
+    let serviceDetails: Array<{ name?: string; categoryName?: string; duration?: number; price?: number }>
 
     let visitTypeForBooking: 'studio' | 'home' = 'studio'
     let residentialAreaForBooking: string | undefined
@@ -389,6 +396,10 @@ export async function POST(request: NextRequest) {
               optional: true,
             }),
             duration: typeof detail?.duration === 'number' && detail.duration > 0 ? detail.duration : 0,
+            price:
+              typeof detail?.price === 'number' && detail.price > 0
+                ? Math.round(detail.price)
+                : undefined,
           }))
         : []
     } catch (error) {
@@ -397,6 +408,38 @@ export async function POST(request: NextRequest) {
       }
       throw error
     }
+
+    let serviceSubtotalKES = sumServiceDetailsSubtotalKES(serviceDetails)
+    if (serviceSubtotalKES === 0) {
+      const fromBody = Number(body.serviceSubtotal)
+      if (Number.isFinite(fromBody) && fromBody > 0) {
+        serviceSubtotalKES = Math.round(fromBody)
+      } else {
+        const orig = Number(originalPrice) || 0
+        const feeSent = Number(body.homeVisitFee) || 0
+        serviceSubtotalKES = Math.max(0, Math.round(orig - feeSent))
+      }
+    }
+    let discountKES = Math.min(
+      Math.max(0, Math.round(Number(discount) || 0)),
+      serviceSubtotalKES,
+    )
+    const homeVisitFeeKES = computeHomeVisitFeeKES({
+      isHomeVisit,
+      homeCalls: availabilityForHome?.homeCalls,
+      serviceSubtotalKES,
+      discountKES,
+    })
+    const pricingTotals = computeBookingTotalsKES({
+      serviceSubtotalKES,
+      discountKES,
+      homeVisitFeeKES,
+    })
+    const bookingOriginalPrice = pricingTotals.originalPriceKES
+    const bookingDiscount = pricingTotals.discountKES
+    const bookingFinalPrice = pricingTotals.finalPriceKES
+    const bookingHomeVisitFee = pricingTotals.homeVisitFeeKES
+    const bookingServiceSubtotal = pricingTotals.serviceSubtotalKES
 
     const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
     const desiredLookNormalized = desiredLook || 'Custom'
@@ -616,7 +659,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if booking is free (0 KSH) - if so, create immediately without payment
-    const finalPriceAmount = Number(finalPrice || originalPrice || 0)
+    const finalPriceAmount = Number(bookingFinalPrice || bookingOriginalPrice || 0)
     const depositAmount = Number(deposit || 0)
     const isFree = finalPriceAmount === 0 && depositAmount === 0
 
@@ -637,9 +680,9 @@ export async function POST(request: NextRequest) {
         timeSlot,
         location: bookingLocation,
         isFirstTimeClient: isFirstTimeClient === true,
-        originalPrice: originalPrice || 0,
-        discount: discount || 0,
-        finalPrice: finalPrice || originalPrice || 0,
+        originalPrice: bookingOriginalPrice,
+        discount: bookingDiscount,
+        finalPrice: bookingFinalPrice,
         deposit: deposit || 0,
         bookingId,
         manageToken,
@@ -724,9 +767,11 @@ export async function POST(request: NextRequest) {
         desiredLookMatchesRecommendation,
         notes: notes || '',
         appointmentPreference: appointmentPreference || '',
-        originalPrice: originalPrice || 0,
-        discount: discount || 0,
-        finalPrice: finalPrice || originalPrice || 0,
+        originalPrice: bookingOriginalPrice,
+        serviceSubtotal: bookingServiceSubtotal,
+        homeVisitFee: bookingHomeVisitFee,
+        discount: bookingDiscount,
+        finalPrice: bookingFinalPrice,
         deposit: deposit || 0,
         discountType: body.discountType || null,
         promoCode: promoCode || null,
@@ -780,7 +825,7 @@ export async function POST(request: NextRequest) {
       const bookings = bookingsData.bookings || []
       const hasDeposit = (deposit || 0) > 0
       const createdAt = new Date().toISOString()
-      const originalServicePrice = Number(originalPrice || finalPrice || 0)
+      const originalServicePrice = Number(bookingServiceSubtotal || bookingFinalPrice || 0)
       const salonCommissionTotal = Math.round(
         originalServicePrice * (salonCommissionSettings.totalPercentage / 100),
       )
@@ -815,9 +860,11 @@ export async function POST(request: NextRequest) {
         desiredLookMatchesRecommendation,
         notes: notes || '',
         appointmentPreference: appointmentPreference || '',
-        originalPrice: originalPrice || 0,
-        discount: discount || 0,
-        finalPrice: finalPrice || originalPrice || 0,
+        originalPrice: bookingOriginalPrice,
+        serviceSubtotal: bookingServiceSubtotal,
+        homeVisitFee: bookingHomeVisitFee,
+        discount: bookingDiscount,
+        finalPrice: bookingFinalPrice,
         deposit: deposit || 0,
         discountType: body.discountType || null,
         promoCode: promoCode || null,

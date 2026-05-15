@@ -150,6 +150,8 @@ export async function POST(request: NextRequest) {
       visitType: bookingData.visitType || 'studio',
       residentialArea: bookingData.residentialArea ?? null,
       homeAddressDetails: bookingData.homeAddressDetails ?? null,
+      serviceSubtotal: bookingData.serviceSubtotal ?? null,
+      homeVisitFee: bookingData.homeVisitFee ?? null,
       originalPrice: bookingData.originalPrice || 0,
       discount: bookingData.discount || 0,
       finalPrice: bookingData.finalPrice || 0,
