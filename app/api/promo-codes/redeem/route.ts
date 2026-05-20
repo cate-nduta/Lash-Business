@@ -93,7 +93,7 @@ async function sendSalonReferralEmail({
   clientName,
   service,
   commissionAmount,
-  commissionPercent,
+  commissionLabel,
   usageSummary,
   bookingLink,
 }: {
@@ -102,7 +102,7 @@ async function sendSalonReferralEmail({
   clientName: string
   service: string
   commissionAmount: number
-  commissionPercent: number
+  commissionLabel: string
   usageSummary: string
   bookingLink: string
 }) {
@@ -113,9 +113,9 @@ async function sendSalonReferralEmail({
       <h2 style="margin-top: 0; color: #733D26;">One of your referrals just booked!</h2>
       <p>Hi ${salonName || 'Beauty Partner'},</p>
       <p><strong>${clientName || 'A client'}</strong> booked <em>${service || 'a LashDiary service'}</em> using your personal salon referral code.</p>
-      <p>You've earned <strong>KSH ${commissionAmount.toLocaleString()}</strong> (${commissionPercent}% of the service price).</p>
+      <p>Your expected commission is <strong>KSH ${commissionAmount.toLocaleString()}</strong> (${commissionLabel}). This becomes payable after the client completes their appointment.</p>
       <p style="margin: 16px 0; padding: 14px; background: #FDF3D7; border-left: 4px solid #F7B500; border-radius: 6px;">${usageSummary}</p>
-      <p>We’ll reach out when commissions are paid. Contact us anytime if you have questions.</p>
+      <p>Eligible commissions are paid at the end of the month after the code validity period closes. We’ll email you again when this commission is marked paid.</p>
       <p style="margin-top: 24px;">🤎 With gratitude,<br />The LashDiary Team</p>
       <p style="font-size: 12px; color: #7a7a7a; margin-top: 24px;">Track all referrals at <a href="${bookingLink}" style="color: #7A6CFF;">${bookingLink.replace(/^https?:\/\//, '')}</a></p>
     </div>
@@ -124,7 +124,7 @@ async function sendSalonReferralEmail({
   await zohoTransporter.sendMail({
     from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
     to: salonEmail,
-    subject: 'Commission Earned from Your Referral 🤎',
+    subject: 'Referral Booking Received 🤎',
     html,
   })
 }
@@ -190,13 +190,31 @@ export async function POST(request: NextRequest) {
       const originalPrice = Number(body?.originalPrice) || 0
       const finalPrice = Number(body?.finalPrice) || originalPrice
       const commissionSettings = await getSalonCommissionSettings()
-      const commissionPercent = commissionSettings.totalPercentage
-      const clientDiscountPercent = typeof promo.clientDiscountPercent === 'number' ? promo.clientDiscountPercent : Number(body?.clientDiscountPercent) || 0
-      const commissionFinalAmount = Math.round(
-        originalPrice * (commissionSettings.totalPercentage / 100),
-      )
+      const commissionType = promo.salonCommissionType === 'fixed' ? 'fixed' : 'percentage'
+      const commissionPercent =
+        commissionType === 'percentage'
+          ? typeof promo.salonCommissionPercent === 'number'
+            ? promo.salonCommissionPercent
+            : commissionSettings.totalPercentage
+          : 0
+      const fixedCommissionAmount =
+        commissionType === 'fixed' && typeof promo.salonCommissionAmount === 'number'
+          ? promo.salonCommissionAmount
+          : 0
+      const clientDiscountPercent =
+        typeof promo.clientDiscountPercent === 'number' ? promo.clientDiscountPercent : Number(body?.clientDiscountPercent) || 0
+      const clientDiscountAmount =
+        typeof promo.clientDiscountAmount === 'number' ? promo.clientDiscountAmount : Number(body?.clientDiscountAmount) || 0
+      const commissionFinalAmount =
+        commissionType === 'fixed'
+          ? Math.round(fixedCommissionAmount)
+          : Math.round(originalPrice * (commissionPercent / 100))
       const commissionEarlyAmount = 0
       salonCommissionAmount = commissionFinalAmount
+      const commissionLabel =
+        commissionType === 'fixed'
+          ? `KSH ${Math.round(fixedCommissionAmount).toLocaleString()} fixed commission`
+          : `${commissionPercent}% of the service price`
 
       trackEmailUsage(promo, email)
 
@@ -238,10 +256,13 @@ export async function POST(request: NextRequest) {
         finalPrice,
         discountApplied: Number(body?.discount) || 0,
         clientDiscountPercent,
+        clientDiscountAmount,
         commissionPercent,
+        commissionType,
+        commissionFixedAmount: commissionType === 'fixed' ? fixedCommissionAmount : null,
         commissionTotalAmount: salonCommissionAmount,
         commissionEarlyPercent: commissionSettings.earlyPercentage,
-        commissionFinalPercent: commissionSettings.finalPercentage,
+        commissionFinalPercent: commissionPercent,
         commissionEarlyAmount,
         commissionFinalAmount,
         commissionEarlyStatus: 'pending',
@@ -266,7 +287,7 @@ export async function POST(request: NextRequest) {
             clientName: body?.clientName || '',
             service: body?.service || 'LashDiary service',
             commissionAmount: salonCommissionAmount,
-            commissionPercent,
+            commissionLabel,
             usageSummary,
             bookingLink: `${BASE_URL}/booking`,
           })

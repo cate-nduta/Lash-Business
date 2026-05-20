@@ -11,20 +11,19 @@ interface HomepageData {
   }
 }
 
-const DEFAULT_FOOTER_LINKS = [
-  { href: '/services', label: 'Services' },
-  { href: '/gallery', label: 'Gallery' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/booking', label: 'Book Appointment' },
-  { href: '/before-your-appointment', label: 'Pre-Appointment Guidelines' },
-  { href: '/policies', label: 'Booking Policies' },
-  { href: '/terms', label: 'Terms & Conditions' },
-  { href: '/contact', label: 'Contact Us' },
-]
+const readStoredPagesSettings = (): PagesSettings | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem('pages-settings')
+    return raw ? (JSON.parse(raw) as PagesSettings) : null
+  } catch {
+    return null
+  }
+}
 
 export default function Footer() {
   const [modelSignupEnabled, setModelSignupEnabled] = useState(false)
-  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(null)
+  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(() => readStoredPagesSettings())
 
   useEffect(() => {
     const checkModelSignup = async () => {
@@ -48,7 +47,15 @@ export default function Footer() {
         headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
       })
         .then((res) => (res.ok ? res.json() : null))
-        .then((data) => data && setPagesSettings(data))
+        .then((data) => {
+          if (!data) return
+          setPagesSettings(data)
+          try {
+            window.localStorage.setItem('pages-settings', JSON.stringify(data))
+          } catch {
+            /* ignore storage failures */
+          }
+        })
         .catch(() => {})
     }
     loadPagesSettings()
@@ -68,7 +75,7 @@ export default function Footer() {
     ? Object.entries(pagesSettings.pages)
         .filter(([, p]) => p.footer)
         .map(([, p]) => ({ href: p.href, label: p.label }))
-    : DEFAULT_FOOTER_LINKS
+    : []
 
   // Normalize label for footer display (some pages use different labels)
   const getFooterLabel = (href: string, label: string) => {

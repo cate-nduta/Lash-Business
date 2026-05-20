@@ -912,6 +912,7 @@ export default function AdminEmailMarketing() {
                       <div key={attachment.url} className="flex items-center gap-2 border border-brown-light px-3 py-2 rounded-full text-xs text-brown-dark bg-white">
                         <span>{attachment.name}</span>
                         <button
+                          type="button"
                           onClick={() => handleRemoveAttachment(attachment)}
                           className="text-red-600 hover:text-red-700 font-bold"
                         >
@@ -920,6 +921,7 @@ export default function AdminEmailMarketing() {
                       </div>
                     ))}
                     <button
+                      type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="px-3 py-2 text-xs border border-brown-light rounded-full text-brown-dark font-semibold hover:text-brown hover:border-brown hover:underline transition-colors"
                     >

@@ -13,8 +13,13 @@ type OverridesFormState = {
   detailsSubject: string
   detailsBodyHtml: string
   detailsBodyText: string
+  commissionType: 'percentage' | 'fixed'
   commissionPercent: string
+  commissionAmount: string
+  clientDiscountEnabled: boolean
+  clientDiscountType: 'percentage' | 'fixed'
   clientDiscountPercent: string
+  clientDiscountAmount: string
   codeValidDays: string
   redeemLimit: string
   payoutScheduleNote: string
@@ -33,9 +38,9 @@ const DEFAULT_ONBOARDING_HTML = `
     <p>{{intro}}</p>
     <h3 style="margin: 24px 0 12px; color: #7C4B31;">Commission &amp; timing</h3>
     <ul style="padding-left: 20px; line-height: 1.6;">
-      <li>You’ll earn <strong>{{commissionPercent}}% of the completed service price</strong> for every referral that books with your code.</li>
+      <li>You’ll earn <strong>{{commissionLabel}}</strong> for every referral that books with your code.</li>
       <li>{{payoutScheduleNote}}</li>
-      <li>Every client who redeems your code receives an <strong>{{clientDiscountPercent}}% discount</strong> on the service they choose.</li>
+      {{clientDiscountHtmlLine}}
       <li>Your promo code will be active for <strong>{{codeValidDays}} days</strong> and can be redeemed by up to <strong>{{redeemLimit}} new clients</strong>. We refresh or extend codes as your referrals grow.</li>
       <li>Commission statements and referral status updates are emailed automatically, so you always know what’s pending.</li>
     </ul>
@@ -56,9 +61,9 @@ const DEFAULT_ONBOARDING_TEXT = [
   '{{intro}}',
   '',
   'Commission & timing',
-  '• Earn {{commissionPercent}}% of every completed referral.',
+  '• Earn {{commissionLabel}} for every completed referral.',
   '• {{payoutScheduleNote}}',
-  '• Each client gets {{clientDiscountPercent}}% off when they use your code.',
+  '{{clientDiscountTextLine}}',
   '• Codes stay active for {{codeValidDays}} days with {{redeemLimit}} redemptions.',
   '',
   'When you’re ready, tap agree and we’ll send your full toolkit:',
@@ -71,28 +76,29 @@ const DEFAULT_ONBOARDING_TEXT = [
   '{{studioEmail}}',
 ].join('\n')
 
-const DEFAULT_DETAILS_SUBJECT = 'Welcome to the Partner Referral Program'
+const DEFAULT_DETAILS_SUBJECT = 'Welcome to the Partner Referral Program 🤎'
 const DEFAULT_DETAILS_HTML = `
   <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; background: #FDF9F4; color: #3E2A20;">
-    <h2 style="margin-top: 0; color: #7C4B31;">Welcome to the Partner Referral Program</h2>
+    <h2 style="margin-top: 0; color: #7C4B31;">Welcome to the Partner Referral Program 🤎</h2>
     <p>Hi {{firstName}},</p>
     <p>We’re thrilled to have you as part of our referral family! Here’s how your exclusive code works:</p>
     <h3 style="color:#7C4B31;">Commission</h3>
-    <p>You’ll earn <strong>{{commissionPercent}}% of the total service price</strong> for every client who books using your promo code — once the service is completed.</p>
+    <p>You’ll earn <strong>{{commissionLabel}}</strong> for every client who books using your promo code, once the client has completed their appointment.</p>
     <h3 style="color:#7C4B31;">Payment</h3>
-    <p>Commissions are processed and paid every two weeks via {{paymentMethod}}.</p>
+    <p>{{payoutScheduleNote}}</p>
+    <p>Approved commissions are paid via {{paymentMethod}}.</p>
     <h3 style="color:#7C4B31;">Your Promo Code</h3>
     <div style="background:#FFFFFF;border-radius:12px;padding:16px 24px;border:1px dashed #7C4B31;display:inline-block;font-size:26px;font-weight:700;letter-spacing:4px;color:#7C4B31;">
       {{promoCode}}
     </div>
     <p style="margin-top:16px;">Each code comes with <strong>{{redeemLimit}} available slots</strong> and will remain active for <strong>{{codeValidDays}} days</strong> from the issue date (until {{validUntil}}). We’ll refresh or extend it based on your performance and engagement.</p>
-    <p style="margin-top:12px;">Every client who uses your code automatically enjoys <strong>{{clientDiscountPercent}}% off</strong> their service total.</p>
+    {{clientDiscountHtml}}
     <h3 style="color:#7C4B31;">Important Details</h3>
     <ul style="line-height:1.6;">
-      <li>Your referred clients receive an automatic {{clientDiscountPercent}}% discount on the service they choose.</li>
-      <li>Commissions apply only to completed appointments.</li>
+      {{clientDiscountListItem}}
+      <li>Commissions apply only after the referred client completes their appointment.</li>
       <li>If a client cancels or reschedules outside our policy window, no commission applies.</li>
-      <li>You’ll receive updates via email whenever a client books, completes a service, or your code is close to expiring.</li>
+      <li>You’ll receive an email when a client uses your code and another email when an eligible commission is marked paid.</li>
       <li>Your referral dashboard keeps a live view of pending and completed referrals.</li>
     </ul>
     <p>We reserve the right to pause or terminate a promo code if there’s misuse, false advertising, unprofessional conduct, sharing client information without consent, or any fraudulent activity.</p>
@@ -105,29 +111,28 @@ const DEFAULT_DETAILS_HTML = `
 `.replace(/\n\s+/g, '\n')
 
 const DEFAULT_DETAILS_TEXT = [
-  'Welcome to the Partner Referral Program',
+  'Welcome to the Partner Referral Program 🤎',
   '',
   'Hi {{firstName}},',
   '',
   'We’re thrilled to have you as part of our referral family! Here’s how your exclusive code works:',
   '',
   'Commission:',
-  '• You’ll earn {{commissionPercent}}% of the total service price for every client who books using your promo code — once the service is completed.',
+  '• You’ll earn {{commissionLabel}} for every client who books using your promo code, once the client has completed their appointment.',
   '',
   'Payment:',
-  '• Commissions are processed and paid every two weeks via {{paymentMethod}}.',
+  '• {{payoutScheduleNote}}',
+  '• Approved commissions are paid via {{paymentMethod}}.',
   '',
   'Your promo code:',
   '• {{promoCode}}',
   '• Active for {{codeValidDays}} days (until {{validUntil}}) with {{redeemLimit}} available slots.',
-  '',
-  'Client perks:',
-  '• Every client who uses your code unlocks a {{clientDiscountPercent}}% discount on their service.',
+  '{{clientDiscountText}}',
   '',
   'Important details:',
-  '• Commissions apply only to completed appointments.',
+  '• Commissions apply only after the referred client completes their appointment.',
   '• If a client cancels outside our policy window, no commission applies.',
-  '• You’ll receive updates when someone books, completes a service, or your code is close to expiring.',
+  '• You’ll receive an email when a client uses your code and another email when an eligible commission is marked paid.',
   '• Check your referral dashboard anytime for pending and completed referrals.',
   '',
   'Program guidelines:',
@@ -144,11 +149,16 @@ const DEFAULT_DETAILS_TEXT = [
 
 const DEFAULT_REFERRAL_NUMBERS = {
   commissionPercent: '3.5',
+  commissionAmount: '',
+  commissionType: 'percentage' as const,
+  clientDiscountEnabled: true,
+  clientDiscountType: 'percentage' as const,
   clientDiscountPercent: '8',
+  clientDiscountAmount: '',
   codeValidDays: '35',
   redeemLimit: '10',
   payoutScheduleNote:
-    'Your commission is paid in full once the referred client completes their service. No partial payouts or deposits apply.',
+    'Commissions become eligible only after the referred client completes their appointment, then they are paid at the end of the month after the code validity period closes.',
   paymentMethod: 'M-Pesa or bank transfer',
 }
 
@@ -159,8 +169,13 @@ const DEFAULT_FORM: OverridesFormState = {
   detailsSubject: DEFAULT_DETAILS_SUBJECT,
   detailsBodyHtml: DEFAULT_DETAILS_HTML,
   detailsBodyText: DEFAULT_DETAILS_TEXT,
+  commissionType: DEFAULT_REFERRAL_NUMBERS.commissionType,
   commissionPercent: DEFAULT_REFERRAL_NUMBERS.commissionPercent,
+  commissionAmount: DEFAULT_REFERRAL_NUMBERS.commissionAmount,
+  clientDiscountEnabled: DEFAULT_REFERRAL_NUMBERS.clientDiscountEnabled,
+  clientDiscountType: DEFAULT_REFERRAL_NUMBERS.clientDiscountType,
   clientDiscountPercent: DEFAULT_REFERRAL_NUMBERS.clientDiscountPercent,
+  clientDiscountAmount: DEFAULT_REFERRAL_NUMBERS.clientDiscountAmount,
   codeValidDays: DEFAULT_REFERRAL_NUMBERS.codeValidDays,
   redeemLimit: DEFAULT_REFERRAL_NUMBERS.redeemLimit,
   payoutScheduleNote: DEFAULT_REFERRAL_NUMBERS.payoutScheduleNote,
@@ -225,14 +240,28 @@ export default function PartnerReferralEmails() {
       detailsSubject: emailOverrides.detailsSubject ?? DEFAULT_DETAILS_SUBJECT,
       detailsBodyHtml: emailOverrides.detailsBodyHtml ?? DEFAULT_DETAILS_HTML,
       detailsBodyText: emailOverrides.detailsBodyText ?? DEFAULT_DETAILS_TEXT,
+      commissionType: referralOverrides.commissionType ?? DEFAULT_REFERRAL_NUMBERS.commissionType,
       commissionPercent:
         referralOverrides.commissionPercent !== undefined
           ? String(referralOverrides.commissionPercent)
           : DEFAULT_REFERRAL_NUMBERS.commissionPercent,
+      commissionAmount:
+        referralOverrides.commissionAmount !== undefined
+          ? String(referralOverrides.commissionAmount)
+          : DEFAULT_REFERRAL_NUMBERS.commissionAmount,
+      clientDiscountEnabled:
+        referralOverrides.clientDiscountEnabled !== undefined
+          ? referralOverrides.clientDiscountEnabled
+          : DEFAULT_REFERRAL_NUMBERS.clientDiscountEnabled,
+      clientDiscountType: referralOverrides.clientDiscountType ?? DEFAULT_REFERRAL_NUMBERS.clientDiscountType,
       clientDiscountPercent:
         referralOverrides.clientDiscountPercent !== undefined
           ? String(referralOverrides.clientDiscountPercent)
           : DEFAULT_REFERRAL_NUMBERS.clientDiscountPercent,
+      clientDiscountAmount:
+        referralOverrides.clientDiscountAmount !== undefined
+          ? String(referralOverrides.clientDiscountAmount)
+          : DEFAULT_REFERRAL_NUMBERS.clientDiscountAmount,
       codeValidDays:
         referralOverrides.codeValidDays !== undefined
           ? String(referralOverrides.codeValidDays)
@@ -254,7 +283,7 @@ export default function PartnerReferralEmails() {
     }
   }, [records, partnerIdQuery, selectedId])
 
-  const handleChange = (field: keyof OverridesFormState, value: string) => {
+  const handleChange = (field: keyof OverridesFormState, value: string | boolean) => {
     setForm((prev) => ({
       ...prev,
       [field]: value,
@@ -292,13 +321,31 @@ export default function PartnerReferralEmails() {
     }
 
     const referralOverrides = {
+      commissionType:
+        form.commissionType !== DEFAULT_REFERRAL_NUMBERS.commissionType ? form.commissionType : undefined,
       commissionPercent:
         form.commissionPercent && form.commissionPercent !== DEFAULT_REFERRAL_NUMBERS.commissionPercent
           ? Number(form.commissionPercent)
           : undefined,
+      commissionAmount:
+        form.commissionAmount && form.commissionAmount !== DEFAULT_REFERRAL_NUMBERS.commissionAmount
+          ? Number(form.commissionAmount)
+          : undefined,
+      clientDiscountEnabled:
+        form.clientDiscountEnabled !== DEFAULT_REFERRAL_NUMBERS.clientDiscountEnabled
+          ? form.clientDiscountEnabled
+          : undefined,
+      clientDiscountType:
+        form.clientDiscountType !== DEFAULT_REFERRAL_NUMBERS.clientDiscountType
+          ? form.clientDiscountType
+          : undefined,
       clientDiscountPercent:
         form.clientDiscountPercent && form.clientDiscountPercent !== DEFAULT_REFERRAL_NUMBERS.clientDiscountPercent
           ? Number(form.clientDiscountPercent)
+          : undefined,
+      clientDiscountAmount:
+        form.clientDiscountAmount && form.clientDiscountAmount !== DEFAULT_REFERRAL_NUMBERS.clientDiscountAmount
+          ? Number(form.clientDiscountAmount)
           : undefined,
       codeValidDays:
         form.codeValidDays && form.codeValidDays !== DEFAULT_REFERRAL_NUMBERS.codeValidDays
@@ -411,7 +458,16 @@ export default function PartnerReferralEmails() {
     '{{promoCode}}',
     '{{validUntil}}',
     '{{commissionPercent}}',
+    '{{commissionAmount}}',
+    '{{commissionLabel}}',
     '{{clientDiscountPercent}}',
+    '{{clientDiscountAmount}}',
+    '{{clientDiscountLabel}}',
+    '{{clientDiscountHtmlLine}}',
+    '{{clientDiscountTextLine}}',
+    '{{clientDiscountHtml}}',
+    '{{clientDiscountListItem}}',
+    '{{clientDiscountText}}',
     '{{codeValidDays}}',
     '{{redeemLimit}}',
     '{{paymentMethod}}',
@@ -632,35 +688,103 @@ export default function PartnerReferralEmails() {
 
                   <section className="space-y-4">
                     <h3 className="text-xl font-semibold text-brown-dark">Referral Settings Overrides</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-semibold text-brown-dark" htmlFor="commissionPercent">
-                          Commission %
-                        </label>
+                        <label className="text-sm font-semibold text-brown-dark">Commission paid to partner</label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleChange('commissionType', 'percentage')}
+                            className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              form.commissionType === 'percentage'
+                                ? 'bg-brown-dark text-white border-brown-dark'
+                                : 'bg-white text-brown-dark border-brown-light'
+                            }`}
+                          >
+                            Percentage
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleChange('commissionType', 'fixed')}
+                            className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
+                              form.commissionType === 'fixed'
+                                ? 'bg-brown-dark text-white border-brown-dark'
+                                : 'bg-white text-brown-dark border-brown-light'
+                            }`}
+                          >
+                            Fixed KES
+                          </button>
+                        </div>
                         <input
                           id="commissionPercent"
                           type="number"
-                          step="0.01"
-                          value={form.commissionPercent}
-                          onChange={(e) => handleChange('commissionPercent', e.target.value)}
+                          step={form.commissionType === 'fixed' ? '1' : '0.01'}
+                          value={form.commissionType === 'fixed' ? form.commissionAmount : form.commissionPercent}
+                          onChange={(e) =>
+                            handleChange(
+                              form.commissionType === 'fixed' ? 'commissionAmount' : 'commissionPercent',
+                              e.target.value,
+                            )
+                          }
                           className="w-full px-3 py-2 rounded-lg border-2 border-brown-light bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="text-sm font-semibold text-brown-dark">Client discount</label>
+                          <label className="inline-flex items-center gap-2 text-xs text-brown-dark">
+                            <input
+                              type="checkbox"
+                              checked={form.clientDiscountEnabled}
+                              onChange={(e) => handleChange('clientDiscountEnabled', e.target.checked)}
+                              className="h-4 w-4 accent-brown-dark"
+                            />
+                            Enable
+                          </label>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleChange('clientDiscountType', 'percentage')}
+                            disabled={!form.clientDiscountEnabled}
+                            className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-50 ${
+                              form.clientDiscountType === 'percentage'
+                                ? 'bg-brown-dark text-white border-brown-dark'
+                                : 'bg-white text-brown-dark border-brown-light'
+                            }`}
+                          >
+                            Percentage
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleChange('clientDiscountType', 'fixed')}
+                            disabled={!form.clientDiscountEnabled}
+                            className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-50 ${
+                              form.clientDiscountType === 'fixed'
+                                ? 'bg-brown-dark text-white border-brown-dark'
+                                : 'bg-white text-brown-dark border-brown-light'
+                            }`}
+                          >
+                            Fixed KES
+                          </button>
+                        </div>
+                        <input
+                          id="clientDiscountPercent"
+                          type="number"
+                          step={form.clientDiscountType === 'fixed' ? '1' : '0.1'}
+                          disabled={!form.clientDiscountEnabled}
+                          value={form.clientDiscountType === 'fixed' ? form.clientDiscountAmount : form.clientDiscountPercent}
+                          onChange={(e) =>
+                            handleChange(
+                              form.clientDiscountType === 'fixed' ? 'clientDiscountAmount' : 'clientDiscountPercent',
+                              e.target.value,
+                            )
+                          }
+                          className="w-full px-3 py-2 rounded-lg border-2 border-brown-light bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm disabled:opacity-60"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-brown-dark" htmlFor="clientDiscountPercent">
-                          Client discount %
-                        </label>
-                        <input
-                          id="clientDiscountPercent"
-                          type="number"
-                          step="0.1"
-                          value={form.clientDiscountPercent}
-                          onChange={(e) => handleChange('clientDiscountPercent', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-brown-light bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark text-sm"
-                        />
-                      </div>
                       <div className="space-y-2">
                         <label className="text-sm font-semibold text-brown-dark" htmlFor="codeValidDays">
                           Code validity (days)

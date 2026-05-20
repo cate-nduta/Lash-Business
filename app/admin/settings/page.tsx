@@ -32,6 +32,7 @@ interface Settings {
   newsletter?: {
     discountPercentage?: number
     enabled?: boolean
+    discountEnabled?: boolean
   }
   exchangeRates?: {
     usdToKes?: number
@@ -64,6 +65,7 @@ export default function AdminSettings() {
     newsletter: {
       discountPercentage: 10,
       enabled: true,
+      discountEnabled: true,
     },
     exchangeRates: {
       usdToKes: 130,
@@ -150,13 +152,16 @@ export default function AdminSettings() {
         }
         // Ensure newsletter settings exist
         if (!loaded.newsletter) {
-          loaded.newsletter = { discountPercentage: 10, enabled: true }
+          loaded.newsletter = { discountPercentage: 10, enabled: true, discountEnabled: true }
         } else {
           if (typeof loaded.newsletter.discountPercentage !== 'number') {
             loaded.newsletter.discountPercentage = 10
           }
           if (typeof loaded.newsletter.enabled !== 'boolean') {
             loaded.newsletter.enabled = true
+          }
+          if (typeof loaded.newsletter.discountEnabled !== 'boolean') {
+            loaded.newsletter.discountEnabled = true
           }
         }
         // Ensure exchange rates exist
@@ -927,6 +932,37 @@ export default function AdminSettings() {
                   </label>
                 </div>
               </div>
+              <div className="flex items-center justify-between p-4 bg-white rounded-lg border-2 border-brown-light">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">
+                    Include Welcome Discount
+                  </label>
+                  <p className="text-xs text-gray-700">
+                    When enabled, the popup advertises a first-appointment discount and new subscribers receive the
+                    welcome promo code by email. When disabled, the popup is a simple newsletter signup with no discount.
+                  </p>
+                </div>
+                <div className="ml-4">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.newsletter?.discountEnabled !== false}
+                      onChange={(e) => {
+                        setSettings(prev => ({
+                          ...prev,
+                          newsletter: {
+                            ...prev.newsletter,
+                            discountEnabled: e.target.checked,
+                          }
+                        }))
+                        setHasUnsavedChanges(true)
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brown-dark rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brown-dark"></div>
+                  </label>
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-semibold text-brown-dark mb-2">
                   Welcome Discount Percentage
@@ -938,6 +974,7 @@ export default function AdminSettings() {
                     max="100"
                     step="1"
                     value={settings.newsletter?.discountPercentage ?? 10}
+                    disabled={settings.newsletter?.discountEnabled === false}
                     onChange={(e) => {
                       const value = Math.max(0, Math.min(100, Number(e.target.value)))
                       setSettings(prev => ({
@@ -949,14 +986,14 @@ export default function AdminSettings() {
                       }))
                       setHasUnsavedChanges(true)
                     }}
-                    className="w-24 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                    className="w-24 px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark disabled:bg-gray-100 disabled:text-gray-500"
                   />
                   <span className="text-brown-dark font-semibold">%</span>
                 </div>
                 <p className="text-xs text-gray-600 mt-2">
-                  The discount percentage shown in the newsletter popup that appears on your homepage when clients first visit. 
-                  New subscribers receive this discount code via email, which applies to their first lash appointment only. 
-                  (Current: {settings.newsletter?.discountPercentage ?? 10}%)
+                  {settings.newsletter?.discountEnabled === false
+                    ? 'Welcome discounts are currently disabled. The popup will still collect newsletter subscribers without offering a promo code.'
+                    : `The discount percentage shown in the newsletter popup. New subscribers receive this discount code via email for their first lash appointment only. (Current: ${settings.newsletter?.discountPercentage ?? 10}%)`}
                 </p>
               </div>
             </div>

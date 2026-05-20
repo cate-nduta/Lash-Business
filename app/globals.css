@@ -6,6 +6,8 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Keep the site at normal browser magnification by default. */
+    zoom: 1;
     /* Prevent horizontal scroll on mobile */
     overflow-x: hidden;
     /* Improve text rendering */
@@ -19,6 +21,8 @@
   body {
     /* Prevent horizontal scroll */
     overflow-x: hidden;
+    zoom: 1;
+    transform: none;
     /* Ensure body takes full width but doesn't overflow */
     width: 100%;
     max-width: 100vw;

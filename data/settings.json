@@ -19,6 +19,8 @@
     "twitter": ""
   },
   "newsletter": {
-    "discountPercentage": 5
+    "discountPercentage": 5,
+    "enabled": true,
+    "discountEnabled": true
   }
 }

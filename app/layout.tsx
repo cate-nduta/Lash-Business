@@ -10,6 +10,7 @@ import ClientAuthMonitor from '@/components/ClientAuthMonitor'
 import ThemeProvider from './theme-provider'
 import GlobalThemeLoader from '@/components/GlobalThemeLoader'
 import WhatsAppButton from '@/components/WhatsAppButton'
+import CookieConsent from '@/components/CookieConsent'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { CartProvider } from '@/contexts/CartContext'
 import { ServiceCartProvider } from '@/contexts/ServiceCartContext'
@@ -64,7 +65,7 @@ export async function generateMetadata(): Promise<Metadata> {
       : undefined
     
     return {
-      title: 'LashDiary Labs – Custom Websites & Business Systems',
+      title: 'LashDiary - Lash extensions in Buruburu',
       description: settings?.business?.description || 'Premium lash extensions and beauty services',
       icons: absoluteFaviconUrl
         ? {
@@ -96,7 +97,7 @@ export async function generateMetadata(): Promise<Metadata> {
   } catch {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'https://lashdiary.co.ke'
     return {
-      title: 'LashDiary Labs – Custom Websites & Business Systems',
+      title: 'LashDiary - Lash extensions in Buruburu',
       description: 'Premium lash extensions and beauty services',
       icons: undefined,
       verification: {
@@ -194,7 +195,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -230,25 +231,6 @@ export default async function RootLayout({
       <body className={`${inter.variable} ${playfair.variable} ${monsieurLaDoulaise.variable} font-body antialiased`} suppressHydrationWarning>
         <StructuredDataScript id="structured-data-organization" data={organizationSchema} />
         <StructuredDataScript id="structured-data-localbusiness" data={localBusinessSchema} />
-        {/* Google Analytics */}
-        {gaId && (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-              strategy="afterInteractive"
-            />
-            <Script id="google-analytics" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${gaId}', {
-                  page_path: window.location.pathname,
-                });
-              `}
-            </Script>
-          </>
-        )}
         <ThemeProvider colors={colors}>
           <GlobalThemeLoader />
           <CurrencyProvider>
@@ -276,6 +258,7 @@ export default async function RootLayout({
                 </main>
                 <Footer />
                 <WhatsAppButton />
+                <CookieConsent gaId={gaId} />
               </ServiceCartProvider>
             </CartProvider>
           </CurrencyProvider>

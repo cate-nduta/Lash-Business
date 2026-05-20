@@ -15,8 +15,13 @@ export interface PartnerEmailOverrides {
 }
 
 export interface PartnerReferralOverrides {
+  commissionType?: 'percentage' | 'fixed'
   commissionPercent?: number
+  commissionAmount?: number
+  clientDiscountEnabled?: boolean
+  clientDiscountType?: 'percentage' | 'fixed'
   clientDiscountPercent?: number
+  clientDiscountAmount?: number
   codeValidDays?: number
   redeemLimit?: number
   payoutScheduleNote?: string
@@ -49,8 +54,15 @@ export interface PartnerOnboardingRecord {
 }
 
 export interface PartnerReferralResolvedConfig {
+  commissionType: 'percentage' | 'fixed'
   commissionPercent: number
+  commissionAmount: number
+  commissionLabel: string
+  clientDiscountEnabled: boolean
+  clientDiscountType: 'percentage' | 'fixed'
   clientDiscountPercent: number
+  clientDiscountAmount: number
+  clientDiscountLabel: string
   codeValidDays: number
   redeemLimit: number
   payoutScheduleNote: string
@@ -146,6 +158,7 @@ export async function addPartnerOnboardingRecord(input: {
   email: string
   phone?: string
   notes?: string
+  referralOverrides?: PartnerReferralOverrides
 }): Promise<PartnerOnboardingRecord> {
   const existing = await getStoredRecords()
   const agreementId = createId(input.partnerType.slice(0, 3).toUpperCase())
@@ -170,6 +183,7 @@ export async function addPartnerOnboardingRecord(input: {
     detailsEmailStatus: null,
     detailsEmailError: null,
     updatedAt: null,
+    referralOverrides: input.referralOverrides,
   }
 
   const records = [record, ...existing]
@@ -247,6 +261,7 @@ export function resolvePartnerReferralConfig(
 ): PartnerReferralResolvedConfig {
   const vars = policies?.variables ?? {}
   const overrides = record.referralOverrides ?? {}
+  const commissionType = overrides.commissionType === 'fixed' ? 'fixed' : 'percentage'
 
   const commissionPercent =
     typeof overrides.commissionPercent === 'number' && !Number.isNaN(overrides.commissionPercent)
@@ -254,6 +269,17 @@ export function resolvePartnerReferralConfig(
       : typeof vars.salonCommissionTotalPercent === 'number' && !Number.isNaN(vars.salonCommissionTotalPercent)
         ? vars.salonCommissionTotalPercent
         : 3.5
+  const commissionAmount =
+    typeof overrides.commissionAmount === 'number' && !Number.isNaN(overrides.commissionAmount)
+      ? overrides.commissionAmount
+      : 0
+  const commissionLabel =
+    commissionType === 'fixed'
+      ? `KSH ${Math.max(0, commissionAmount).toLocaleString()} per completed appointment`
+      : `${Math.max(0, commissionPercent)}% of the completed service price`
+
+  const requestedClientDiscountEnabled = overrides.clientDiscountEnabled !== false
+  const clientDiscountType = overrides.clientDiscountType === 'fixed' ? 'fixed' : 'percentage'
 
   const clientDiscountPercent =
     typeof overrides.clientDiscountPercent === 'number' && !Number.isNaN(overrides.clientDiscountPercent)
@@ -261,6 +287,18 @@ export function resolvePartnerReferralConfig(
       : typeof vars.referralDiscountPercent === 'number'
         ? vars.referralDiscountPercent
         : 8
+  const clientDiscountAmount =
+    typeof overrides.clientDiscountAmount === 'number' && !Number.isNaN(overrides.clientDiscountAmount)
+      ? overrides.clientDiscountAmount
+      : 0
+  const clientDiscountEnabled =
+    requestedClientDiscountEnabled &&
+    (clientDiscountType === 'fixed' ? clientDiscountAmount > 0 : clientDiscountPercent > 0)
+  const clientDiscountLabel = clientDiscountEnabled
+    ? clientDiscountType === 'fixed'
+      ? `KSH ${Math.max(0, clientDiscountAmount).toLocaleString()} off`
+      : `${Math.max(0, clientDiscountPercent)}% off`
+    : ''
 
   const codeValidDays =
     typeof overrides.codeValidDays === 'number' && !Number.isNaN(overrides.codeValidDays)
@@ -275,7 +313,7 @@ export function resolvePartnerReferralConfig(
   const payoutScheduleNote =
     typeof overrides.payoutScheduleNote === 'string' && overrides.payoutScheduleNote.trim().length > 0
       ? overrides.payoutScheduleNote.trim()
-      : 'Commissions unlock once the client has been serviced and are added to the next bi-weekly payout.'
+      : 'Commissions become eligible only after the referred client completes their appointment, then they are paid at the end of the month after the code validity period closes.'
 
   const paymentMethod =
     typeof overrides.paymentMethod === 'string' && overrides.paymentMethod.trim().length > 0
@@ -283,8 +321,15 @@ export function resolvePartnerReferralConfig(
       : 'M-Pesa or bank transfer'
 
   return {
+    commissionType,
     commissionPercent,
+    commissionAmount,
+    commissionLabel,
+    clientDiscountEnabled,
+    clientDiscountType,
     clientDiscountPercent,
+    clientDiscountAmount,
+    clientDiscountLabel,
     codeValidDays,
     redeemLimit,
     payoutScheduleNote,

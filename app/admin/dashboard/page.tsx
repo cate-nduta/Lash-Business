@@ -100,10 +100,10 @@ export default function AdminDashboard() {
   const allMenuItems = [
     {
       title: 'Analytics & Reports',
-      description: 'View revenue, services, and performance metrics (Owner Only)',
+      description: 'View revenue, expenses, profit, and performance metrics (PIN required)',
       href: '/admin/analytics',
       icon: '📊',
-      ownerOnly: true,
+      ownerOnly: false,
     },
     {
       title: 'Availability & Hours',

@@ -62,12 +62,19 @@ interface CampaignAttachment {
   url: string
   type: string
   size: number
+  contentBase64?: string
 }
 
 function buildAttachmentPayload(attachments?: CampaignAttachment[]) {
   if (!attachments || attachments.length === 0) return undefined
   return attachments
     .map((attachment) => {
+      if (attachment.contentBase64) {
+        return {
+          filename: attachment.name,
+          content: attachment.contentBase64,
+        }
+      }
       const filePath = path.join(process.cwd(), 'public', attachment.url.replace(/^[\\\/]+/, ''))
       if (!existsSync(filePath)) {
         return null

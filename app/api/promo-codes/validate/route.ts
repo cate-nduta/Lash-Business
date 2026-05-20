@@ -193,13 +193,6 @@ export async function POST(request: NextRequest) {
           code: 'SALON_USE_REQUIRED',
         }, { status: 400 })
       }
-      if (isFirstTimeClient === false && promoCode.clientDiscountPercent === null) {
-        return NextResponse.json({
-          valid: false,
-          error: 'This salon referral code can only be used by new clients.',
-          code: 'SALON_FIRST_TIME_BLOCKED',
-        }, { status: 400 })
-      }
     }
 
     if (!isReferral && !isSalonReferral && allowsFirstTime === false && isFirstTimeClient === true) {
@@ -228,8 +221,12 @@ export async function POST(request: NextRequest) {
       salonName: promoCode.salonName ?? null,
       salonEmail: promoCode.salonEmail ?? null,
       salonPartnerType: promoCode.salonPartnerType ?? 'salon',
+      clientDiscountEnabled: promoCode.clientDiscountEnabled !== false,
       clientDiscountPercent: promoCode.clientDiscountPercent ?? null,
+      clientDiscountAmount: promoCode.clientDiscountAmount ?? null,
+      salonCommissionType: promoCode.salonCommissionType ?? 'percentage',
       salonCommissionPercent: promoCode.salonCommissionPercent ?? null,
+      salonCommissionAmount: promoCode.salonCommissionAmount ?? null,
       salonUsageLimit: promoCode.salonUsageLimit ?? null,
       salonUsedCount: promoCode.salonUsedCount ?? 0,
     }

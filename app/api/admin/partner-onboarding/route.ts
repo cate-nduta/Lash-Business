@@ -52,6 +52,16 @@ function renderWithTokens(template: string, context: TemplateContext) {
   })
 }
 
+function buildClientDiscountHtmlLine(referralConfig: ReturnType<typeof resolvePartnerReferralConfig>) {
+  if (!referralConfig.clientDiscountEnabled) return ''
+  return `<li>Every client who redeems your code receives <strong>${referralConfig.clientDiscountLabel}</strong> on the service they choose.</li>`
+}
+
+function buildClientDiscountTextLine(referralConfig: ReturnType<typeof resolvePartnerReferralConfig>) {
+  if (!referralConfig.clientDiscountEnabled) return ''
+  return `• Each client gets ${referralConfig.clientDiscountLabel} when they use your code.`
+}
+
 function buildOnboardingEmail({
   record,
   intro,
@@ -77,7 +87,13 @@ function buildOnboardingEmail({
     agreeUrl,
     studioEmail,
     commissionPercent: referralConfig.commissionPercent,
+    commissionAmount: referralConfig.commissionAmount,
+    commissionLabel: referralConfig.commissionLabel,
     clientDiscountPercent: referralConfig.clientDiscountPercent,
+    clientDiscountAmount: referralConfig.clientDiscountAmount,
+    clientDiscountLabel: referralConfig.clientDiscountLabel,
+    clientDiscountHtmlLine: buildClientDiscountHtmlLine(referralConfig),
+    clientDiscountTextLine: buildClientDiscountTextLine(referralConfig),
     codeValidDays: referralConfig.codeValidDays,
     redeemLimit: referralConfig.redeemLimit,
     payoutScheduleNote: referralConfig.payoutScheduleNote,
@@ -94,9 +110,9 @@ function buildOnboardingEmail({
       <p>{{intro}}</p>
       <h3 style="margin: 24px 0 12px; color: #7C4B31;">Commission &amp; timing</h3>
       <ul style="padding-left: 20px; line-height: 1.6;">
-      <li>You’ll earn <strong>{{commissionPercent}}% of the completed service price</strong> for every referral that books with your code.</li>
+        <li>You’ll earn <strong>{{commissionLabel}}</strong> for every referral after the client completes their appointment.</li>
         <li>{{payoutScheduleNote}}</li>
-        <li>Every client who redeems your code receives an <strong>{{clientDiscountPercent}}% discount</strong> on the service they choose.</li>
+        {{clientDiscountHtmlLine}}
         <li>Your promo code will be active for <strong>{{codeValidDays}} days</strong> and can be redeemed by up to <strong>{{redeemLimit}} new clients</strong>. We refresh or extend codes as your referrals grow.</li>
         <li>Commission statements and referral status updates are emailed automatically, so you always know what’s pending.</li>
       </ul>
@@ -117,9 +133,9 @@ function buildOnboardingEmail({
     '{{intro}}',
     '',
     'Commission & timing',
-    `• Earn {{commissionPercent}}% of every completed referral.`,
+    `• Earn {{commissionLabel}} for every completed referral after the client completes their appointment.`,
     `• {{payoutScheduleNote}}`,
-    `• Each client gets {{clientDiscountPercent}}% off when they use your code.`,
+    `{{clientDiscountTextLine}}`,
     `• Codes stay active for {{codeValidDays}} days with {{redeemLimit}} redemptions.`,
     '',
     'When you’re ready, tap agree and we’ll send your full toolkit:',
@@ -162,11 +178,26 @@ function sanitiseReferralOverrides(input: any): PartnerReferralOverrides | undef
     return undefined
   }
   const result: PartnerReferralOverrides = {}
+  if (input.commissionType === 'fixed' || input.commissionType === 'percentage') {
+    result.commissionType = input.commissionType
+  }
   if (input.commissionPercent !== undefined && !Number.isNaN(Number(input.commissionPercent))) {
     result.commissionPercent = Number(input.commissionPercent)
   }
+  if (input.commissionAmount !== undefined && !Number.isNaN(Number(input.commissionAmount))) {
+    result.commissionAmount = Number(input.commissionAmount)
+  }
+  if (typeof input.clientDiscountEnabled === 'boolean') {
+    result.clientDiscountEnabled = input.clientDiscountEnabled
+  }
+  if (input.clientDiscountType === 'fixed' || input.clientDiscountType === 'percentage') {
+    result.clientDiscountType = input.clientDiscountType
+  }
   if (input.clientDiscountPercent !== undefined && !Number.isNaN(Number(input.clientDiscountPercent))) {
     result.clientDiscountPercent = Number(input.clientDiscountPercent)
+  }
+  if (input.clientDiscountAmount !== undefined && !Number.isNaN(Number(input.clientDiscountAmount))) {
+    result.clientDiscountAmount = Number(input.clientDiscountAmount)
   }
   if (input.codeValidDays !== undefined && !Number.isNaN(Number(input.codeValidDays))) {
     result.codeValidDays = Number(input.codeValidDays)
@@ -205,6 +236,7 @@ function validateBody(payload: any) {
     typeof payload?.email === 'string' && payload.email.includes('@') ? payload.email.trim().toLowerCase() : ''
   const phone = typeof payload?.phone === 'string' ? payload.phone.trim() : ''
   const notes = typeof payload?.notes === 'string' ? payload.notes.trim() : ''
+  const referralOverrides = sanitiseReferralOverrides(payload?.referralOverrides)
 
   if (!partnerType) {
     throw new Error('Partner type is required.')
@@ -226,6 +258,7 @@ function validateBody(payload: any) {
     email,
     phone,
     notes,
+    referralOverrides,
   }
 }
 
@@ -258,6 +291,7 @@ export async function POST(request: NextRequest) {
       email: data.email,
       phone: data.phone || undefined,
       notes: data.notes || undefined,
+      referralOverrides: data.referralOverrides,
     })
 
     const policies = await loadPolicies()

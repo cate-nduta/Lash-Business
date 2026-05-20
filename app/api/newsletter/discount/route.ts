@@ -15,8 +15,11 @@ export async function GET() {
     const enabled = typeof settings?.newsletter?.enabled === 'boolean' 
       ? settings.newsletter.enabled 
       : true // Default to enabled if not set
+    const discountEnabled = typeof settings?.newsletter?.discountEnabled === 'boolean'
+      ? settings.newsletter.discountEnabled
+      : true
     
-    const response = NextResponse.json({ discountPercentage, enabled })
+    const response = NextResponse.json({ discountPercentage, enabled, discountEnabled })
     // Set headers to prevent caching
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
     response.headers.set('Pragma', 'no-cache')
@@ -26,7 +29,7 @@ export async function GET() {
   } catch (error) {
     console.error('Error fetching newsletter discount:', error)
     // Return default on error
-    const response = NextResponse.json({ discountPercentage: 5, enabled: true })
+    const response = NextResponse.json({ discountPercentage: 5, enabled: true, discountEnabled: true })
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
     return response
   }

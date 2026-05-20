@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/availability')
     revalidatePath('/api/calendar/available-slots')
     revalidatePath('/booking')
+    revalidatePath('/api/booking/manage')
     return NextResponse.json({ success: true })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

@@ -8,6 +8,7 @@ export const revalidate = 0
 import { sendEmailNotification } from '../../booking/email/utils'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
+import { getMinimumNoticeHours } from '@/lib/booking-notice-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
 import { redeemGiftCard } from '@/lib/gift-card-utils'
 import {
@@ -420,7 +421,7 @@ export async function POST(request: NextRequest) {
         serviceSubtotalKES = Math.max(0, Math.round(orig - feeSent))
       }
     }
-    let discountKES = Math.min(
+    const discountKES = Math.min(
       Math.max(0, Math.round(Number(discount) || 0)),
       serviceSubtotalKES,
     )
@@ -489,16 +490,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Enforce 24-hour advance booking requirement
     const now = new Date()
     const hoursUntilAppointment = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-    const MIN_ADVANCE_BOOKING_HOURS = 24
+    const minAdvanceBookingHours = getMinimumNoticeHours(appointmentDateStr, availability.bookingWindow)
     
-    if (hoursUntilAppointment < MIN_ADVANCE_BOOKING_HOURS) {
+    if (hoursUntilAppointment < minAdvanceBookingHours) {
       return NextResponse.json(
         { 
-          error: `All appointments must be booked at least ${MIN_ADVANCE_BOOKING_HOURS} hours in advance. Please select a later date and time.`,
-          details: `The selected appointment time is only ${Math.round(hoursUntilAppointment * 10) / 10} hours away. Bookings must be made at least ${MIN_ADVANCE_BOOKING_HOURS} hours before the appointment time.`
+          error: `All appointments must be booked at least ${minAdvanceBookingHours} hours in advance. Please select a later date and time.`,
+          details: `The selected appointment time is only ${Math.round(hoursUntilAppointment * 10) / 10} hours away. Bookings must be made at least ${minAdvanceBookingHours} hours before the appointment time.`
         },
         { status: 400 },
       )
@@ -826,9 +826,22 @@ export async function POST(request: NextRequest) {
       const hasDeposit = (deposit || 0) > 0
       const createdAt = new Date().toISOString()
       const originalServicePrice = Number(bookingServiceSubtotal || bookingFinalPrice || 0)
-      const salonCommissionTotal = Math.round(
-        originalServicePrice * (salonCommissionSettings.totalPercentage / 100),
-      )
+      const promoCodeData = body.promoCodeData || null
+      const salonCommissionType = promoCodeData?.salonCommissionType === 'fixed' ? 'fixed' : 'percentage'
+      const salonCommissionPercent =
+        salonCommissionType === 'percentage'
+          ? typeof promoCodeData?.salonCommissionPercent === 'number'
+            ? promoCodeData.salonCommissionPercent
+            : salonCommissionSettings.totalPercentage
+          : 0
+      const salonFixedCommission =
+        salonCommissionType === 'fixed' && typeof promoCodeData?.salonCommissionAmount === 'number'
+          ? promoCodeData.salonCommissionAmount
+          : 0
+      const salonCommissionTotal =
+        salonCommissionType === 'fixed'
+          ? Math.round(salonFixedCommission)
+          : Math.round(originalServicePrice * (salonCommissionPercent / 100))
       const salonEarlyAmount = 0
       const salonFinalAmount = salonCommissionTotal
 
@@ -907,11 +920,15 @@ export async function POST(request: NextRequest) {
                 salonEmail: body.promoCodeData.salonEmail,
                 salonName: body.promoCodeData.salonName,
                 clientDiscountPercent: body.promoCodeData.clientDiscountPercent,
-                salonCommissionPercent: salonCommissionSettings.totalPercentage,
+                clientDiscountAmount: body.promoCodeData.clientDiscountAmount,
+                discountType: body.promoCodeData.discountType,
+                salonCommissionType,
+                salonCommissionPercent,
+                salonCommissionAmount: salonFixedCommission,
                 commissionAmount: salonCommissionTotal,
                 commissionTotalAmount: salonCommissionTotal,
                 commissionEarlyPercent: 0,
-                commissionFinalPercent: salonCommissionSettings.totalPercentage,
+                commissionFinalPercent: salonCommissionPercent,
                 commissionEarlyAmount: salonEarlyAmount,
                 commissionFinalAmount: salonFinalAmount,
                 commissionEarlyStatus: 'pending',

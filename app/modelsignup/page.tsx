@@ -3,8 +3,28 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
+type ModelQuestionType = 'single' | 'multiple' | 'text'
+
+interface ModelApplicationQuestion {
+  id: string
+  label: string
+  type: ModelQuestionType
+  required: boolean
+  options: string[]
+}
+
+const DEFAULT_MODEL_QUESTIONS: ModelApplicationQuestion[] = [
+  { id: 'availability', label: 'Availability (Afternoon)', type: 'multiple', required: true, options: ['Monday (afternoon)', 'Tuesday (afternoon)', 'Wednesday (afternoon)', 'Thursday (afternoon)', 'Friday (afternoon)'] },
+  { id: 'hasLashExtensions', label: 'Have you had lash extensions before?', type: 'single', required: true, options: ['Yes', 'No'] },
+  { id: 'hasAppointmentBefore', label: 'Have you been a client at LashDiary before?', type: 'single', required: true, options: ['Yes', 'No'] },
+  { id: 'allergies', label: 'Do you have any known allergies, sensitivities or eye conditions?', type: 'text', required: false, options: [] },
+  { id: 'comfortableLongSessions', label: 'Are you comfortable with long sessions? (3-4 hours)', type: 'single', required: true, options: ['Yes', 'No'] },
+]
+
 export default function ModelSignupPage() {
   const [modelSignupEnabled, setModelSignupEnabled] = useState<boolean | null>(null)
+  const [modelQuestions, setModelQuestions] = useState<ModelApplicationQuestion[]>(DEFAULT_MODEL_QUESTIONS)
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string | string[]>>({})
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -16,13 +36,6 @@ export default function ModelSignupPage() {
     hasAppointmentBefore: '',
     allergies: '',
     comfortableLongSessions: '',
-  })
-  const [availabilityDays, setAvailabilityDays] = useState({
-    monday: false,
-    tuesday: false,
-    wednesday: false,
-    thursday: false,
-    friday: false,
   })
   const [consent, setConsent] = useState({
     freeModelSet: false,
@@ -39,12 +52,21 @@ export default function ModelSignupPage() {
   useEffect(() => {
     const checkModelSignup = async () => {
       try {
-        const response = await fetch('/api/homepage')
-        if (response.ok) {
-          const data = await response.json()
+        const [homepageResponse, questionsResponse] = await Promise.all([
+          fetch('/api/homepage'),
+          fetch('/api/model-application-settings'),
+        ])
+        if (homepageResponse.ok) {
+          const data = await homepageResponse.json()
           setModelSignupEnabled(data.modelSignup?.enabled || false)
         } else {
           setModelSignupEnabled(false)
+        }
+        if (questionsResponse.ok) {
+          const settings = await questionsResponse.json()
+          if (Array.isArray(settings.questions) && settings.questions.length > 0) {
+            setModelQuestions(settings.questions)
+          }
         }
       } catch (error) {
         console.error('Error checking model signup status:', error)
@@ -59,12 +81,22 @@ export default function ModelSignupPage() {
     setFormData({ ...formData, [name]: value })
   }
 
-  const handleAvailabilityChange = (day: keyof typeof availabilityDays) => {
-    setAvailabilityDays({ ...availabilityDays, [day]: !availabilityDays[day] })
-  }
-
   const handleConsentChange = (field: keyof typeof consent) => {
     setConsent({ ...consent, [field]: !consent[field] })
+  }
+
+  const handleQuestionAnswer = (question: ModelApplicationQuestion, optionOrValue: string, checked?: boolean) => {
+    setCustomAnswers((prev) => {
+      if (question.type === 'multiple') {
+        const current = Array.isArray(prev[question.id]) ? (prev[question.id] as string[]) : []
+        const next = checked
+          ? Array.from(new Set([...current, optionOrValue]))
+          : current.filter((item) => item !== optionOrValue)
+        return { ...prev, [question.id]: next }
+      }
+
+      return { ...prev, [question.id]: optionOrValue }
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,16 +109,14 @@ export default function ModelSignupPage() {
       return
     }
 
-    // Validate at least one availability day is selected
-    const hasAvailability = Object.values(availabilityDays).some(day => day === true)
-    if (!hasAvailability) {
-      setError('Please select at least one day you are available in the afternoon')
-      return
-    }
-
-    // Validate lash experience questions
-    if (!formData.hasLashExtensions || !formData.hasAppointmentBefore || !formData.comfortableLongSessions) {
-      setError('Please answer all lash experience questions')
+    const missingQuestion = modelQuestions.find((question) => {
+      if (!question.required) return false
+      const answer = customAnswers[question.id]
+      if (Array.isArray(answer)) return answer.length === 0
+      return typeof answer !== 'string' || answer.trim().length === 0
+    })
+    if (missingQuestion) {
+      setError(`Please answer: ${missingQuestion.label}`)
       return
     }
 
@@ -100,14 +130,10 @@ export default function ModelSignupPage() {
     setLoading(true)
 
     try {
-      // Build availability string from selected days
-      const selectedDays = Object.entries(availabilityDays)
-        .filter(([_, selected]) => selected)
-        .map(([day, _]) => {
-          const dayName = day.charAt(0).toUpperCase() + day.slice(1)
-          return `${dayName} (afternoon)`
-        })
-        .join(', ')
+      const answerString = (id: string) => {
+        const answer = customAnswers[id]
+        return Array.isArray(answer) ? answer.join(', ') : answer || ''
+      }
       
       const formDataToSend = new FormData()
       formDataToSend.append('firstName', formData.firstName)
@@ -115,11 +141,13 @@ export default function ModelSignupPage() {
       formDataToSend.append('email', formData.email)
       formDataToSend.append('phone', formData.phone || '')
       formDataToSend.append('instagram', formData.instagram || '')
-      formDataToSend.append('availability', selectedDays)
-      formDataToSend.append('hasLashExtensions', formData.hasLashExtensions)
-      formDataToSend.append('hasAppointmentBefore', formData.hasAppointmentBefore)
-      formDataToSend.append('allergies', formData.allergies)
-      formDataToSend.append('comfortableLongSessions', formData.comfortableLongSessions)
+      formDataToSend.append('availability', answerString('availability'))
+      formDataToSend.append('hasLashExtensions', answerString('hasLashExtensions'))
+      formDataToSend.append('hasAppointmentBefore', answerString('hasAppointmentBefore'))
+      formDataToSend.append('allergies', answerString('allergies'))
+      formDataToSend.append('comfortableLongSessions', answerString('comfortableLongSessions'))
+      formDataToSend.append('customAnswers', JSON.stringify(customAnswers))
+      formDataToSend.append('modelQuestions', JSON.stringify(modelQuestions))
 
       const response = await fetch('/api/model-application', {
         method: 'POST',
@@ -207,13 +235,7 @@ export default function ModelSignupPage() {
                     allergies: '',
                     comfortableLongSessions: '',
                   })
-                  setAvailabilityDays({
-                    monday: false,
-                    tuesday: false,
-                    wednesday: false,
-                    thursday: false,
-                    friday: false,
-                  })
+                  setCustomAnswers({})
                   setConsent({
                     freeModelSet: false,
                     longSessions: false,
@@ -351,171 +373,46 @@ export default function ModelSignupPage() {
               />
             </div>
 
-            {/* Availability */}
-            <div>
-              <label className="block text-sm font-medium text-brown-dark mb-3">
-                Availability (Afternoon) <span className="text-red-500">*</span>
-              </label>
-              <p className="text-xs text-brown/60 mb-3">
-                Please select all days you are available in the afternoon. We are currently not taking weekend availability.
-              </p>
-              <div className="space-y-2">
-                <label className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDays.monday}
-                    onChange={() => handleAvailabilityChange('monday')}
-                    className="mr-3 w-4 h-4 text-brown-dark border-brown/30 rounded focus:ring-brown/30"
-                  />
-                  <span className="text-sm text-brown/80">Monday (afternoon)</span>
-                </label>
-                <label className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDays.tuesday}
-                    onChange={() => handleAvailabilityChange('tuesday')}
-                    className="mr-3 w-4 h-4 text-brown-dark border-brown/30 rounded focus:ring-brown/30"
-                  />
-                  <span className="text-sm text-brown/80">Tuesday (afternoon)</span>
-                </label>
-                <label className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDays.wednesday}
-                    onChange={() => handleAvailabilityChange('wednesday')}
-                    className="mr-3 w-4 h-4 text-brown-dark border-brown/30 rounded focus:ring-brown/30"
-                  />
-                  <span className="text-sm text-brown/80">Wednesday (afternoon)</span>
-                </label>
-                <label className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDays.thursday}
-                    onChange={() => handleAvailabilityChange('thursday')}
-                    className="mr-3 w-4 h-4 text-brown-dark border-brown/30 rounded focus:ring-brown/30"
-                  />
-                  <span className="text-sm text-brown/80">Thursday (afternoon)</span>
-                </label>
-                <label className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDays.friday}
-                    onChange={() => handleAvailabilityChange('friday')}
-                    className="mr-3 w-4 h-4 text-brown-dark border-brown/30 rounded focus:ring-brown/30"
-                  />
-                  <span className="text-sm text-brown/80">Friday (afternoon)</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Lash Experience Questions */}
+            {/* Model Application Questions */}
             <div className="space-y-4 border-t border-brown/20 pt-6">
-              <h3 className="text-lg font-semibold text-brown-dark mb-4">Lash Experience Questions</h3>
-
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">
-                  Have you had lash extensions before? <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="hasLashExtensions"
-                      value="yes"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-brown/80">Yes</span>
+              <h3 className="text-lg font-semibold text-brown-dark mb-4">Application Questions</h3>
+              {modelQuestions.map((question) => (
+                <div key={question.id}>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">
+                    {question.label} {question.required && <span className="text-red-500">*</span>}
                   </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="hasLashExtensions"
-                      value="no"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
+                  {question.type === 'text' ? (
+                    <textarea
+                      value={(customAnswers[question.id] as string) || ''}
+                      onChange={(event) => handleQuestionAnswer(question, event.target.value)}
+                      rows={3}
+                      required={question.required}
+                      className="w-full px-4 py-3 border border-brown/20 rounded-lg focus:ring-2 focus:ring-brown/30 focus:border-brown transition-all bg-white/50"
                     />
-                    <span className="text-sm text-brown/80">No</span>
-                  </label>
+                  ) : (
+                    <div className="space-y-2">
+                      {question.options.map((option) => (
+                        <label key={option} className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
+                          <input
+                            type={question.type === 'multiple' ? 'checkbox' : 'radio'}
+                            name={question.id}
+                            value={option}
+                            checked={
+                              question.type === 'multiple'
+                                ? Array.isArray(customAnswers[question.id]) && (customAnswers[question.id] as string[]).includes(option)
+                                : customAnswers[question.id] === option
+                            }
+                            onChange={(event) => handleQuestionAnswer(question, option, event.target.checked)}
+                            required={question.required && question.type === 'single' && !customAnswers[question.id]}
+                            className="mr-3 w-4 h-4 text-brown-dark border-brown/30 focus:ring-brown/30"
+                          />
+                          <span className="text-sm text-brown/80">{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">
-                  Have you been a client at LashDiary before? <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="hasAppointmentBefore"
-                      value="yes"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-brown/80">Yes</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="hasAppointmentBefore"
-                      value="no"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-brown/80">No</span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="allergies" className="block text-sm font-medium text-brown-dark mb-2">
-                  Do you have any known allergies, sensitivities or eye conditions?
-                </label>
-                <textarea
-                  id="allergies"
-                  name="allergies"
-                  value={formData.allergies}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-brown/20 rounded-lg focus:ring-2 focus:ring-brown/30 focus:border-brown transition-all bg-white/50"
-                  placeholder="Please list any allergies, sensitivities, or eye conditions (or write 'None')"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-brown-dark mb-2">
-                  Are you comfortable with long sessions? (3–4 hours) <span className="text-red-500">*</span>
-                </label>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="comfortableLongSessions"
-                      value="yes"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-brown/80">Yes</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="comfortableLongSessions"
-                      value="no"
-                      onChange={handleChange}
-                      required
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-brown/80">No</span>
-                  </label>
-                </div>
-              </div>
+              ))}
             </div>
 
             {/* Consent & Agreement */}

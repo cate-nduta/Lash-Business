@@ -11,5 +11,6 @@
     "tier45Percentage": 6
   },
   "depositPercentage": 35,
+  "depositNotice": "A {deposit}% deposit is required to secure your booking. Deposits are strictly for securing your appointment and cannot be refunded under any circumstance.",
   "paymentRequirement": "deposit"
 }

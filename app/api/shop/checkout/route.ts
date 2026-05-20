@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       ? data.pickupDays
       : ['Monday', 'Wednesday', 'Friday']
 
-    let checkoutItems: Array<{ product: Product; quantity: number }> = []
+    const checkoutItems: Array<{ product: Product; quantity: number }> = []
     let subtotal = 0
     let hasDigitalProducts = false
     let hasPhysicalProducts = false

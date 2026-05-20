@@ -10,6 +10,7 @@ export default function NewsletterPopup() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [discountPercentage, setDiscountPercentage] = useState(5) // Default to 5%
   const [enabled, setEnabled] = useState(true) // Default to enabled
+  const [discountEnabled, setDiscountEnabled] = useState(true)
 
   useEffect(() => {
     // Load discount percentage and enabled status from public API
@@ -29,6 +30,9 @@ export default function NewsletterPopup() {
         }
         if (typeof data?.enabled === 'boolean') {
           setEnabled(data.enabled)
+        }
+        if (typeof data?.discountEnabled === 'boolean') {
+          setDiscountEnabled(data.discountEnabled)
         }
       })
       .catch(() => {
@@ -94,7 +98,12 @@ export default function NewsletterPopup() {
         }, 2000)
       } else {
         // New subscriber - success!
-        setMessage({ type: 'success', text: 'Welcome! Check your email for your special discount code! 🎉' })
+        setMessage({
+          type: 'success',
+          text: discountEnabled
+            ? 'Welcome! Check your email for your special discount code!'
+            : 'Welcome! You are subscribed to LashDiary updates.',
+        })
         setTimeout(() => {
           handleClose()
         }, 2000)
@@ -113,7 +122,7 @@ export default function NewsletterPopup() {
   if (!enabled || !isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -121,7 +130,7 @@ export default function NewsletterPopup() {
       />
       
       {/* Popup */}
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-scale-in">
+      <div className="relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl animate-scale-in">
         {/* Close button */}
         <button
           onClick={handleClose}
@@ -133,28 +142,41 @@ export default function NewsletterPopup() {
           </svg>
         </button>
 
-        {/* Gradient Header */}
-        <div className="relative bg-gradient-to-br from-[var(--color-primary)] via-[var(--color-primary)] to-[var(--color-primary-dark)] p-8 sm:p-10 text-center overflow-hidden">
+        {/* Header */}
+        <div className="relative shrink-0 bg-[#733D26] p-5 text-center overflow-hidden sm:p-8 md:p-10">
           <div className="absolute inset-0 opacity-20">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2 blur-3xl" />
           </div>
           
-          <div className="relative z-10">
-            <h2 className="text-3xl sm:text-4xl font-display font-bold text-white mb-3">
+          <div className="newsletter-popup-white-text relative z-10 text-white" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold mb-3 drop-shadow-sm" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
               Welcome to The LashDiary Community
             </h2>
-            <p className="text-lg sm:text-xl text-white/95 mb-2">
-              Get <span className="font-bold text-white">{discountPercentage}% OFF</span> your first lash appointment
+            {discountEnabled ? (
+              <p className="text-base sm:text-lg md:text-xl mb-2" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
+                Get <span className="font-bold" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>{discountPercentage}% OFF</span> your first lash appointment
+              </p>
+            ) : (
+              <p className="text-base sm:text-lg md:text-xl mb-2" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
+                Be first to hear about openings, new services, and LashDiary updates
+              </p>
+            )}
+            <p className="text-sm sm:text-base" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
+              {discountEnabled
+                ? 'Join our newsletter and unlock your exclusive discount code'
+                : 'Join the newsletter for studio news and client-only announcements'}
             </p>
-            <p className="text-sm sm:text-base text-white/85">
-              Join our newsletter and unlock your exclusive discount code
-            </p>
+            {discountEnabled && (
+              <p className="mt-3 text-xs sm:text-sm" style={{ color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF' }}>
+                Discount codes are only sent to emails that have not been used before on the LashDiary website.
+              </p>
+            )}
           </div>
         </div>
 
         {/* Form Section */}
-        <div className="p-6 sm:p-8 bg-white">
+        <div className="overflow-y-auto bg-white p-5 sm:p-6 md:p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="popup-name" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -202,16 +224,18 @@ export default function NewsletterPopup() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Getting your code...
+                  {discountEnabled ? 'Getting your code...' : 'Subscribing...'}
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  Claim My {discountPercentage}% Off!
+                  {discountEnabled ? `Claim My ${discountPercentage}% Off!` : 'Subscribe to Updates'}
                 </span>
               )}
             </button>
             <p className="text-xs text-gray-500 text-center">
-              We'll send you your discount code via email. Unsubscribe anytime.
+              {discountEnabled
+                ? "We'll send your discount code if this email has not been used before on the LashDiary website. Unsubscribe anytime."
+                : 'No spam. Unsubscribe anytime.'}
             </p>
           </form>
         </div>
@@ -257,6 +281,16 @@ export default function NewsletterPopup() {
 
         .animate-bounce-gentle {
           animation: bounce-gentle 2s ease-in-out infinite;
+        }
+
+        .newsletter-popup-white-text,
+        .newsletter-popup-white-text *,
+        .newsletter-popup-white-text h2,
+        .newsletter-popup-white-text p,
+        .newsletter-popup-white-text span {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
         }
       `}</style>
     </div>

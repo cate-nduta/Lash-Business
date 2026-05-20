@@ -19,7 +19,27 @@ interface ModelApplication {
   comfortableLongSessions: string
   submittedAt: string
   status: 'pending' | 'selected' | 'rejected'
+  customAnswers?: Record<string, string | string[]>
+  modelQuestions?: ModelApplicationQuestion[]
 }
+
+type ModelQuestionType = 'single' | 'multiple' | 'text'
+
+interface ModelApplicationQuestion {
+  id: string
+  label: string
+  type: ModelQuestionType
+  required: boolean
+  options: string[]
+}
+
+const defaultModelQuestions: ModelApplicationQuestion[] = [
+  { id: 'availability', label: 'Availability (Afternoon)', type: 'multiple', required: true, options: ['Monday (afternoon)', 'Tuesday (afternoon)', 'Wednesday (afternoon)', 'Thursday (afternoon)', 'Friday (afternoon)'] },
+  { id: 'hasLashExtensions', label: 'Have you had lash extensions before?', type: 'single', required: true, options: ['Yes', 'No'] },
+  { id: 'hasAppointmentBefore', label: 'Have you been a client at LashDiary before?', type: 'single', required: true, options: ['Yes', 'No'] },
+  { id: 'allergies', label: 'Do you have any known allergies, sensitivities or eye conditions?', type: 'text', required: false, options: [] },
+  { id: 'comfortableLongSessions', label: 'Are you comfortable with long sessions? (3-4 hours)', type: 'single', required: true, options: ['Yes', 'No'] },
+]
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
@@ -40,6 +60,8 @@ export default function AdminModels() {
   const [sendingRejection, setSendingRejection] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'selected' | 'rejected'>('all')
+  const [modelQuestions, setModelQuestions] = useState<ModelApplicationQuestion[]>(defaultModelQuestions)
+  const [savingQuestions, setSavingQuestions] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -78,12 +100,70 @@ export default function AdminModels() {
       if (response.ok) {
         const data = await response.json()
         setApplications(data.applications || [])
+        if (Array.isArray(data.settings?.questions) && data.settings.questions.length > 0) {
+          setModelQuestions(data.settings.questions)
+        }
       }
     } catch (error) {
       console.error('Error loading applications:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const updateQuestion = (id: string, updates: Partial<ModelApplicationQuestion>) => {
+    setModelQuestions((questions) =>
+      questions.map((question) => {
+        if (question.id !== id) return question
+        const next = { ...question, ...updates }
+        return next.type === 'text' ? { ...next, options: [] } : next
+      })
+    )
+  }
+
+  const addQuestion = () => {
+    setModelQuestions((questions) => [
+      ...questions,
+      {
+        id: `question-${Date.now()}`,
+        label: 'New question',
+        type: 'single',
+        required: true,
+        options: ['Option 1', 'Option 2'],
+      },
+    ])
+  }
+
+  const removeQuestion = (id: string) => {
+    setModelQuestions((questions) => questions.filter((question) => question.id !== id))
+  }
+
+  const saveQuestionSettings = async () => {
+    setSavingQuestions(true)
+    try {
+      const response = await authorizedFetch('/api/admin/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateSettings', questions: modelQuestions }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save model questions')
+      }
+      if (Array.isArray(data.settings?.questions)) {
+        setModelQuestions(data.settings.questions)
+      }
+      setMessage({ type: 'success', text: 'Model application questions saved.' })
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to save model questions' })
+    } finally {
+      setSavingQuestions(false)
+    }
+  }
+
+  const formatAnswer = (answer?: string | string[]) => {
+    if (Array.isArray(answer)) return answer.join(', ') || 'Not specified'
+    return answer || 'Not specified'
   }
 
   const updateStatus = async (applicationId: string, status: 'pending' | 'selected' | 'rejected', personalNote?: string) => {
@@ -237,6 +317,84 @@ export default function AdminModels() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-4xl font-display text-brown-dark mb-6">Model Applications Management</h1>
 
+          <div className="mb-8 rounded-lg border-2 border-brown-light bg-pink-light/30 p-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-brown-dark">Application Questions</h2>
+                <p className="text-sm text-brown/70">Edit the questions clients answer on the model signup page. Use single answer, multiple answer, or text response.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={addQuestion}
+                  className="px-4 py-2 border-2 border-brown-light rounded-lg text-brown-dark font-semibold hover:bg-white transition-colors"
+                >
+                  Add Question
+                </button>
+                <button
+                  type="button"
+                  onClick={saveQuestionSettings}
+                  disabled={savingQuestions}
+                  className="px-4 py-2 bg-brown-dark hover:bg-brown text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+                >
+                  {savingQuestions ? 'Saving...' : 'Save Questions'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {modelQuestions.map((question, index) => (
+                <div key={question.id} className="bg-white rounded-lg border border-brown-light p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-brown-dark">Question {index + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() => removeQuestion(question.id)}
+                      className="text-sm text-red-600 hover:text-red-700 font-semibold"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    value={question.label}
+                    onChange={(event) => updateQuestion(question.id, { label: event.target.value })}
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg"
+                    placeholder="Question text"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <select
+                      value={question.type}
+                      onChange={(event) => updateQuestion(question.id, { type: event.target.value as ModelQuestionType })}
+                      className="px-3 py-2 border-2 border-brown-light rounded-lg"
+                    >
+                      <option value="single">One answer</option>
+                      <option value="multiple">Multiple answers</option>
+                      <option value="text">Text answer</option>
+                    </select>
+                    <label className="flex items-center gap-2 text-sm text-brown-dark">
+                      <input
+                        type="checkbox"
+                        checked={question.required}
+                        onChange={(event) => updateQuestion(question.id, { required: event.target.checked })}
+                        className="w-4 h-4"
+                      />
+                      Required
+                    </label>
+                    {question.type !== 'text' && (
+                      <textarea
+                        value={question.options.join('\n')}
+                        onChange={(event) => updateQuestion(question.id, { options: event.target.value.split('\n').map((option) => option.trim()).filter(Boolean) })}
+                        rows={3}
+                        className="px-3 py-2 border-2 border-brown-light rounded-lg"
+                        placeholder="One option per line"
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Filter Tabs */}
           <div className="flex gap-4 mb-6 border-b border-brown-light">
             <span
@@ -383,6 +541,18 @@ export default function AdminModels() {
                         <p className="font-semibold text-brown-dark mb-1">Allergies/Sensitivities:</p>
                         <p className="text-brown/80 whitespace-pre-wrap">{app.allergies || 'None specified'}</p>
                       </div>
+                      {app.customAnswers && (
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-brown-dark mb-1">Application Answers:</p>
+                          <div className="space-y-1 text-brown/80">
+                            {(app.modelQuestions || modelQuestions).map((question) => (
+                              <p key={question.id}>
+                                <strong>{question.label}:</strong> {formatAnswer(app.customAnswers?.[question.id])}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

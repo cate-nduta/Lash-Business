@@ -21,8 +21,12 @@ export type PromoCode = {
   salonName?: string | null
   salonEmail?: string | null
   salonPartnerType?: 'salon' | 'beautician' | 'influencer'
+  clientDiscountEnabled?: boolean
   clientDiscountPercent?: number | null
+  clientDiscountAmount?: number | null
+  salonCommissionType?: 'percentage' | 'fixed'
   salonCommissionPercent?: number | null
+  salonCommissionAmount?: number | null
   salonUsageLimit?: number | null
   salonUsedCount?: number
   commissionTotal?: number
@@ -90,17 +94,42 @@ export const normalizePromoCatalog = (raw: any): { catalog: PromoCatalog; change
           ? promo.salonEmail.trim().toLowerCase()
           : null,
       salonPartnerType: isSalonReferral ? partnerType : undefined,
+      clientDiscountEnabled:
+        isSalonReferral && promo?.clientDiscountEnabled === false
+          ? false
+          : isSalonReferral
+          ? coerceNumber(promo?.clientDiscountPercent, 0) > 0 ||
+            coerceNumber(promo?.clientDiscountAmount, 0) > 0 ||
+            coerceNumber(promo?.discountValue, 0) > 0
+          : undefined,
       clientDiscountPercent:
         isSalonReferral && promo?.clientDiscountPercent !== null && promo?.clientDiscountPercent !== undefined
           ? coerceNumber(promo.clientDiscountPercent, 0)
-          : isSalonReferral
-          ? 8
+          : isSalonReferral &&
+            promo?.discountType !== 'fixed' &&
+            promo?.clientDiscountEnabled !== false &&
+            coerceNumber(promo?.discountValue, 0) > 0
+          ? coerceNumber(promo.discountValue, 0)
           : null,
+      clientDiscountAmount:
+        isSalonReferral && promo?.clientDiscountAmount !== null && promo?.clientDiscountAmount !== undefined
+          ? coerceNumber(promo.clientDiscountAmount, 0)
+          : isSalonReferral &&
+            promo?.discountType === 'fixed' &&
+            promo?.clientDiscountEnabled !== false &&
+            coerceNumber(promo?.discountValue, 0) > 0
+          ? coerceNumber(promo.discountValue, 0)
+          : null,
+      salonCommissionType: isSalonReferral && promo?.salonCommissionType === 'fixed' ? 'fixed' : 'percentage',
       salonCommissionPercent:
         isSalonReferral && promo?.salonCommissionPercent !== null && promo?.salonCommissionPercent !== undefined
           ? coerceNumber(promo.salonCommissionPercent, 0)
-          : isSalonReferral
+          : isSalonReferral && promo?.salonCommissionType !== 'fixed'
           ? 4
+          : null,
+      salonCommissionAmount:
+        isSalonReferral && promo?.salonCommissionAmount !== null && promo?.salonCommissionAmount !== undefined
+          ? coerceNumber(promo.salonCommissionAmount, 0)
           : null,
       salonUsageLimit:
         isSalonReferral && promo?.salonUsageLimit !== null && promo?.salonUsageLimit !== undefined

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
+import { normalizeDepositNotice } from '@/lib/deposit-notice-utils'
 
 export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
     const discounts = await readDataFile('discounts.json', {})
-    return NextResponse.json(discounts, {
+    return NextResponse.json({
+      ...discounts,
+      depositNotice: normalizeDepositNotice((discounts as any)?.depositNotice),
+    }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
         'Pragma': 'no-cache',

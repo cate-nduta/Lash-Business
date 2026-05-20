@@ -66,9 +66,9 @@
       "title": "Partner Referrals",
       "description": "",
       "items": [
-        "Partners enjoy a commission of {{salonCommissionTotalPercent}}% on each referral after the service is completed and paid in full.",
-        "Payouts are processed during the next bi-weekly cycle once the client has been successfully serviced.",
-        "You’ll receive automatic updates whenever a client books, completes a service, or when your code needs refreshing."
+        "Partners earn the commission set on their onboarding record for each referral after the service is completed and paid in full.",
+        "Payouts are processed at the end of the month after the code validity period closes, once the client has been successfully serviced.",
+        "You’ll receive automatic updates when a client uses your code and when an eligible commission is marked paid."
       ]
     }
   ]

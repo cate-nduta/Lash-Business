@@ -6,12 +6,19 @@ import {
   normalizeSlotForComparison,
 } from '@/lib/availability-utils'
 import { sendEmailNotification } from '../../email/utils'
+import {
+  getMinimumNoticeHours,
+  getRescheduleCutoffHours,
+  isWithinRescheduleCutoff,
+} from '@/lib/booking-notice-utils'
+import { getCalendarClient } from '@/lib/google-calendar-client'
 
 const CLIENT_MANAGE_WINDOW_HOURS = Math.max(Number(process.env.CLIENT_MANAGE_WINDOW_HOURS || 72) || 72, 1)
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary'
 
 type ManageAction = 'reschedule' | 'change-service'
 
-function computePolicyState(booking: any) {
+function computePolicyState(booking: any, rescheduleCutoffHours: number) {
   const now = new Date()
   const start = new Date(booking.timeSlot)
   const hoursUntil = (start.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -20,9 +27,7 @@ function computePolicyState(booking: any) {
       ? booking.cancellationWindowHours
       : CLIENT_MANAGE_WINDOW_HOURS
   const withinWindow = hoursUntil < windowHours
-  // Rescheduling must be done at least 12 hours before the appointment
-  const RESCHEDULE_WINDOW_HOURS = 12
-  const withinRescheduleWindow = hoursUntil <= RESCHEDULE_WINDOW_HOURS
+  const withinRescheduleWindow = isWithinRescheduleCutoff(hoursUntil, rescheduleCutoffHours)
 
   return {
     now,
@@ -31,16 +36,16 @@ function computePolicyState(booking: any) {
     windowHours,
     withinWindow,
     withinRescheduleWindow,
+    rescheduleCutoffHours,
     isPast: start.getTime() <= now.getTime(),
   }
 }
 
-function sanitizeBooking(booking: any) {
-  const policy = computePolicyState(booking)
+function sanitizeBooking(booking: any, rescheduleCutoffHours: number) {
+  const policy = computePolicyState(booking, rescheduleCutoffHours)
   const status = booking.status || 'confirmed'
   const canManage =
     status === 'confirmed' && !policy.isPast && booking.clientManageDisabled !== true && booking.cancelledAt == null
-  // Rescheduling must be done at least 12 hours before the appointment
   const canAct = canManage && !policy.isPast && !policy.withinRescheduleWindow
 
   return {
@@ -57,6 +62,7 @@ function sanitizeBooking(booking: any) {
     finalPrice: booking.finalPrice,
     deposit: booking.deposit,
     cancellationPolicyHours: policy.windowHours,
+    rescheduleCutoffHours: policy.rescheduleCutoffHours,
     cancellationCutoffAt:
       typeof booking.cancellationCutoffAt === 'string'
         ? booking.cancellationCutoffAt
@@ -84,6 +90,51 @@ function sanitizeBooking(booking: any) {
   }
 }
 
+async function loadShowcaseBookings(): Promise<any[]> {
+  try {
+    const showcaseData = await readDataFile<Array<{ appointmentDate?: string; status?: string }>>(
+      'labs-showcase-bookings.json',
+      [],
+    )
+    return Array.isArray(showcaseData)
+      ? showcaseData.map((booking) => ({
+          timeSlot: booking.appointmentDate,
+          status: booking.status,
+        }))
+      : []
+  } catch {
+    return []
+  }
+}
+
+async function getCalendarSlotStatus(
+  dateStr: string,
+  normalizedRequestedSlot: string,
+): Promise<'clear' | 'conflict' | 'unknown'> {
+  try {
+    const calendar = await getCalendarClient()
+    if (!calendar) return 'clear'
+
+    const response = await calendar.events.list({
+      calendarId: CALENDAR_ID,
+      timeMin: new Date(`${dateStr}T00:00:00+03:00`).toISOString(),
+      timeMax: new Date(`${dateStr}T23:59:59.999+03:00`).toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    })
+
+    const events = response.data.items || []
+    const hasConflict = events.some((event: { start?: { dateTime?: string | null } | null }) => {
+      if (!event.start?.dateTime) return false
+      return normalizeSlotForComparison(event.start.dateTime) === normalizedRequestedSlot
+    })
+    return hasConflict ? 'conflict' : 'clear'
+  } catch (error) {
+    console.warn('Google Calendar conflict check failed during reschedule:', error)
+    return 'unknown'
+  }
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { token: string } },
@@ -107,8 +158,11 @@ export async function GET(
     return NextResponse.json({ error: 'Self-service actions disabled for this booking.' }, { status: 403 })
   }
 
+  const availability = await readDataFile<any>('availability.json', {})
+  const rescheduleCutoffHours = getRescheduleCutoffHours(availability?.bookingWindow)
+
   return NextResponse.json({
-    booking: sanitizeBooking(booking),
+    booking: sanitizeBooking(booking, rescheduleCutoffHours),
   })
 }
 
@@ -148,19 +202,19 @@ export async function POST(
     return NextResponse.json({ error: 'Booking already cancelled.' }, { status: 410 })
   }
 
-  const policy = computePolicyState(booking)
+  const availability = await readDataFile<any>('availability.json', {})
+  const rescheduleCutoffHours = getRescheduleCutoffHours(availability?.bookingWindow)
+  const policy = computePolicyState(booking, rescheduleCutoffHours)
   const canManage =
     booking.status === 'confirmed' && !policy.isPast && booking.clientManageDisabled !== true && booking.cancelledAt == null
   const canAct = canManage && !policy.withinRescheduleWindow
 
-  // Check policy for reschedule action - must be at least 12 hours before appointment
   if (!canAct) {
-    const RESCHEDULE_WINDOW_HOURS = 12
     return NextResponse.json(
       {
         error:
           policy.withinRescheduleWindow || policy.isPast
-            ? `You may reschedule your appointment up to ${RESCHEDULE_WINDOW_HOURS} hours before your scheduled time. Please contact the studio for assistance.`
+            ? `You may reschedule your appointment up to ${rescheduleCutoffHours} hours before your scheduled time. Please contact the studio for assistance.`
             : policy.withinWindow
             ? `Online changes are only available more than ${policy.windowHours} hours before your appointment. Please contact the studio so we can assist.`
             : 'This booking cannot be modified online.',
@@ -268,7 +322,7 @@ export async function POST(
     }
 
     return NextResponse.json({
-      booking: sanitizeBooking(booking),
+      booking: sanitizeBooking(booking, rescheduleCutoffHours),
       status: 'service-changed',
       newServicePrice,
     })
@@ -310,22 +364,21 @@ export async function POST(
   }
 
   if (!isSameSlot) {
-    // Enforce 24-hour advance booking requirement for rescheduled appointments
     const now = new Date()
     const hoursUntilNewAppointment = (newStart.getTime() - now.getTime()) / (1000 * 60 * 60)
-    const MIN_ADVANCE_BOOKING_HOURS = 24
+    const availability = await readDataFile<any>('availability.json', { fullyBookedDates: [] })
+    const minAdvanceBookingHours = getMinimumNoticeHours(targetDate, availability.bookingWindow)
     
-    if (hoursUntilNewAppointment < MIN_ADVANCE_BOOKING_HOURS) {
+    if (hoursUntilNewAppointment < minAdvanceBookingHours) {
       return NextResponse.json(
         { 
-          error: `All appointments must be booked at least ${MIN_ADVANCE_BOOKING_HOURS} hours in advance. Please select a later date and time.`,
-          details: `The selected appointment time is only ${Math.round(hoursUntilNewAppointment * 10) / 10} hours away. Bookings must be made at least ${MIN_ADVANCE_BOOKING_HOURS} hours before the appointment time.`
+          error: `All appointments must be booked at least ${minAdvanceBookingHours} hours in advance. Please select a later date and time.`,
+          details: `The selected appointment time is only ${Math.round(hoursUntilNewAppointment * 10) / 10} hours away. Bookings must be made at least ${minAdvanceBookingHours} hours before the appointment time.`
         },
         { status: 400 },
       )
     }
     
-    const availability = await readDataFile<any>('availability.json', { fullyBookedDates: [] })
     const allowedSlots = generateTimeSlotsForDateLocal(targetDate, availability)
     const normalizedRequestedSlot = normalizeSlotForComparison(newStart.toISOString())
 
@@ -333,7 +386,8 @@ export async function POST(
       return NextResponse.json({ error: 'Selected time is not available for booking.' }, { status: 400 })
     }
 
-    const conflict = bookings.some((b, index) => {
+    const showcaseBookings = await loadShowcaseBookings()
+    const conflict = [...bookings, ...showcaseBookings].some((b, index) => {
       if (index === bookingIndex) return false
       if (b.status === 'cancelled') return false
       if (!b.timeSlot) return false
@@ -342,6 +396,17 @@ export async function POST(
 
     if (conflict) {
       return NextResponse.json({ error: 'That slot was just taken. Please choose another.' }, { status: 409 })
+    }
+
+    const calendarSlotStatus = await getCalendarSlotStatus(targetDate, normalizedRequestedSlot)
+    if (calendarSlotStatus === 'conflict') {
+      return NextResponse.json({ error: 'That slot is already booked on the studio calendar. Please choose another.' }, { status: 409 })
+    }
+    if (calendarSlotStatus === 'unknown') {
+      return NextResponse.json(
+        { error: 'We could not verify the studio calendar for that slot. Please try again in a moment.' },
+        { status: 503 },
+      )
     }
   }
 
@@ -416,7 +481,7 @@ export async function POST(
   }
 
   const responsePayload: Record<string, unknown> = {
-    booking: sanitizeBooking(booking),
+    booking: sanitizeBooking(booking, rescheduleCutoffHours),
     status: 'rescheduled',
   }
 

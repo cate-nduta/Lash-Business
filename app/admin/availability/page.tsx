@@ -35,6 +35,10 @@ interface BookingWindowState {
   note?: string
   bannerMessage?: string
   bannerEnabled?: boolean | null
+  minimumNoticeHours?: number
+  minimumNoticeByDay?: Record<string, number | '' | undefined>
+  /** Latest time (hours before appointment) clients can still reschedule online */
+  rescheduleCutoffHours?: number
 }
 
 interface HomeCallsSettings {
@@ -76,6 +80,9 @@ export default function AdminAvailability() {
     note: '',
     bannerMessage: '',
   bannerEnabled: null,
+    minimumNoticeHours: 12,
+    minimumNoticeByDay: {},
+    rescheduleCutoffHours: 12,
   })
   const [availability, setAvailability] = useState<AvailabilityData>({
     businessHours: {},
@@ -158,6 +165,22 @@ export default function AdminAvailability() {
             typeof data?.bookingWindow?.bannerEnabled === 'boolean'
               ? data.bookingWindow.bannerEnabled
               : null,
+          minimumNoticeHours: Math.max(
+            0,
+            Number.isFinite(Number(data?.bookingWindow?.minimumNoticeHours))
+              ? Number(data.bookingWindow.minimumNoticeHours)
+              : 12,
+          ),
+          minimumNoticeByDay:
+            data?.bookingWindow?.minimumNoticeByDay && typeof data.bookingWindow.minimumNoticeByDay === 'object'
+              ? { ...data.bookingWindow.minimumNoticeByDay }
+              : {},
+          rescheduleCutoffHours: Math.max(
+            0,
+            Number.isFinite(Number(data?.bookingWindow?.rescheduleCutoffHours))
+              ? Number(data.bookingWindow.rescheduleCutoffHours)
+              : 12,
+          ),
         }
 
         const normalized: AvailabilityData = {
@@ -328,6 +351,9 @@ export default function AdminAvailability() {
         bookingLink: prev.bookingWindow?.bookingLink ?? '',
         note: prev.bookingWindow?.note ?? '',
         bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
         bannerEnabled:
           typeof prev.bookingWindow?.bannerEnabled === 'boolean'
             ? prev.bookingWindow.bannerEnabled
@@ -357,6 +383,9 @@ export default function AdminAvailability() {
         bookingLink: value,
         note: prev.bookingWindow?.note ?? '',
         bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
         bannerEnabled:
           typeof prev.bookingWindow?.bannerEnabled === 'boolean'
             ? prev.bookingWindow.bannerEnabled
@@ -374,6 +403,9 @@ export default function AdminAvailability() {
         bookingLink: prev.bookingWindow?.bookingLink ?? '',
         note: value,
         bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
         bannerEnabled:
           typeof prev.bookingWindow?.bannerEnabled === 'boolean'
             ? prev.bookingWindow.bannerEnabled
@@ -391,6 +423,9 @@ export default function AdminAvailability() {
         bookingLink: prev.bookingWindow?.bookingLink ?? '',
         note: prev.bookingWindow?.note ?? '',
         bannerMessage: value,
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
         bannerEnabled:
           typeof prev.bookingWindow?.bannerEnabled === 'boolean'
             ? prev.bookingWindow.bannerEnabled
@@ -408,9 +443,81 @@ export default function AdminAvailability() {
         bookingLink: prev.bookingWindow?.bookingLink ?? '',
         note: prev.bookingWindow?.note ?? '',
         bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
         bannerEnabled: value === 'enabled' ? true : value === 'disabled' ? false : null,
       },
     }))
+  }
+
+  const updateRescheduleCutoffHours = (value: number) => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+        minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: Math.max(0, value),
+      },
+    }))
+  }
+
+  const updateMinimumNoticeHours = (value: number) => {
+    setAvailability((prev) => ({
+      ...prev,
+      bookingWindow: {
+        current: { ...(prev.bookingWindow?.current ?? {}) },
+        next: { ...(prev.bookingWindow?.next ?? {}) },
+        bookingLink: prev.bookingWindow?.bookingLink ?? '',
+        note: prev.bookingWindow?.note ?? '',
+        bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+        bannerEnabled:
+          typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+            ? prev.bookingWindow.bannerEnabled
+            : null,
+        minimumNoticeHours: Math.max(0, value),
+        minimumNoticeByDay: { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) },
+        rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
+      },
+    }))
+  }
+
+  const updateMinimumNoticeForDay = (day: string, value: string) => {
+    setAvailability((prev) => {
+      const nextByDay = { ...(prev.bookingWindow?.minimumNoticeByDay ?? {}) }
+      if (value.trim() === '') {
+        delete nextByDay[day]
+      } else {
+        nextByDay[day] = Math.max(0, Number(value) || 0)
+      }
+
+      return {
+        ...prev,
+        bookingWindow: {
+          current: { ...(prev.bookingWindow?.current ?? {}) },
+          next: { ...(prev.bookingWindow?.next ?? {}) },
+          bookingLink: prev.bookingWindow?.bookingLink ?? '',
+          note: prev.bookingWindow?.note ?? '',
+          bannerMessage: prev.bookingWindow?.bannerMessage ?? '',
+          bannerEnabled:
+            typeof prev.bookingWindow?.bannerEnabled === 'boolean'
+              ? prev.bookingWindow.bannerEnabled
+              : null,
+          minimumNoticeHours: prev.bookingWindow?.minimumNoticeHours ?? 12,
+          minimumNoticeByDay: nextByDay,
+          rescheduleCutoffHours: prev.bookingWindow?.rescheduleCutoffHours ?? 12,
+        },
+      }
+    })
   }
 
   if (loading) {
@@ -640,6 +747,71 @@ export default function AdminAvailability() {
             <p className="text-xs text-brown-dark/60 mt-3">
               This URL is sent in your “Bookings are open” email. If left blank, we’ll use your default booking page.
             </p>
+          </div>
+          <div className="mt-6 p-5 bg-amber-50 rounded-lg border border-amber-200">
+            <h3 className="text-lg font-semibold text-brown-dark mb-2">Minimum notice before booking</h3>
+            <p className="text-sm text-brown-dark/70 mb-4">
+              Control how many hours ahead clients must book. Use the default for most days, then add day-specific
+              overrides when you want shorter notice like 6 hours.
+            </p>
+            <div className="max-w-xs mb-5">
+              <label className="block text-sm font-medium text-brown-dark mb-2">Default minimum notice (hours)</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={availability.bookingWindow.minimumNoticeHours ?? 12}
+                onChange={(event) => updateMinimumNoticeHours(Number(event.target.value) || 0)}
+                className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+              />
+              <p className="text-xs text-brown-dark/60 mt-2">
+                Example: set this to 12 so clients must book at least 12 hours before their appointment.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {days.map((day) => (
+                <div key={day}>
+                  <label className="block text-xs font-semibold text-brown-dark mb-1 capitalize">{day}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={availability.bookingWindow.minimumNoticeByDay?.[day] ?? ''}
+                    onChange={(event) => updateMinimumNoticeForDay(day, event.target.value)}
+                    placeholder={`${availability.bookingWindow.minimumNoticeHours ?? 12} hrs`}
+                    className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-brown-dark/60 mt-3">
+              Leave a day blank to use the default. Enter 6 for any day where same-day/short-notice bookings can open
+              6 hours before the slot.
+            </p>
+          </div>
+          <div className="mt-6 p-5 bg-blue-50 rounded-lg border border-blue-200">
+            <h3 className="text-lg font-semibold text-brown-dark mb-2">Reschedule cutoff (existing appointments)</h3>
+            <p className="text-sm text-brown-dark/70 mb-4">
+              How close to the appointment clients can still reschedule online from their booking link. This is
+              separate from minimum notice for picking a new slot (above).
+            </p>
+            <div className="max-w-xs">
+              <label className="block text-sm font-medium text-brown-dark mb-2">
+                Latest reschedule window (hours before appointment)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={availability.bookingWindow.rescheduleCutoffHours ?? 12}
+                onChange={(event) => updateRescheduleCutoffHours(Number(event.target.value) || 0)}
+                className="w-full px-3 py-2 border border-brown-light rounded bg-white"
+              />
+              <p className="text-xs text-brown-dark/60 mt-2">
+                Example: 12 means clients cannot reschedule online once they are within 12 hours of their appointment.
+                Set 24 to require rescheduling at least a day ahead.
+              </p>
+            </div>
           </div>
           <div className="mt-6">
             <label className="block text-sm font-medium text-brown-dark mb-2">Banner note (optional)</label>

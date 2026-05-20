@@ -141,9 +141,9 @@ export const DEFAULT_POLICIES: PolicyData = {
       title: 'Partner Referrals',
       description: '',
       items: [
-        'Partners enjoy a total commission of {{salonCommissionTotalPercent}}% ({{salonCommissionEarlyPercent}}% early payout + {{salonCommissionFinalPercent}}% final payout) on each completed referral.',
-        'Early payouts unlock once the {{cancellationWindowHours}}-hour cancellation window closes; final payouts are released after the booked service is completed.',
-        'Commission statements and referral status updates are delivered automatically by email, so you always know what is pending. More information will be communicated through the onboarding process.',
+        'Partners earn the commission set on their onboarding record for each referral after the service is completed and paid in full.',
+        'Payouts are processed at the end of the month after the code validity period closes, once the client has been successfully serviced.',
+        'Referral status updates are delivered by email when a client uses a code and when an eligible commission is marked paid.',
       ],
     },
   ],

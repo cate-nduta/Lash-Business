@@ -103,6 +103,7 @@ export default function AdminPages() {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('pages-settings-changed'))
           try {
+            localStorage.setItem('pages-settings', JSON.stringify(settings))
             localStorage.setItem('pages-settings-changed', String(Date.now()))
           } catch {
             /* ignore */

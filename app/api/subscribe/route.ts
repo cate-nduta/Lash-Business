@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
     const subscriberSource = source || 'website'
     let promoCode: string | undefined = undefined
     let unsubscribeToken: string | undefined = undefined
+    const settings = await readDataFile<any>('settings.json', {})
+    const newsletterDiscountEnabled =
+      typeof settings?.newsletter?.discountEnabled === 'boolean' ? settings.newsletter.discountEnabled : true
 
     // Generate unsubscribe token for new signups only
     unsubscribeToken = generateUnsubscribeToken(normalizedEmail)
@@ -115,9 +118,8 @@ export async function POST(request: NextRequest) {
 
     // Generate promo code ONLY for NEW popup signups who haven't received welcome discount before
     // This ensures each email gets exactly ONE welcome discount, ever - no exceptions
-    if (source === 'popup' && !existingSubscriber && !hasReceivedWelcomeDiscount) {
+    if (source === 'popup' && newsletterDiscountEnabled && !existingSubscriber && !hasReceivedWelcomeDiscount) {
       // Load settings to get the discount percentage
-      const settings = await readDataFile<any>('settings.json', {})
       const discountPercentage = typeof settings?.newsletter?.discountPercentage === 'number' 
         ? Math.max(0, Math.min(100, settings.newsletter.discountPercentage)) // Clamp between 0-100
         : 5 // Default to 5% if not set
@@ -221,21 +223,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Send welcome email with promo code if from popup
-    if (source === 'popup' && promoCode && unsubscribeToken) {
+    if (source === 'popup' && unsubscribeToken) {
       try {
         // Get discount percentage from settings for the email
-        const settings = await readDataFile<any>('settings.json', {})
         const discountPercentage = typeof settings?.newsletter?.discountPercentage === 'number' 
           ? Math.max(0, Math.min(100, settings.newsletter.discountPercentage))
           : 5 // Default to 5% if not set
         
-        // CRITICAL: Always use FIRSTAPTDISC for welcome emails, regardless of what was generated
         await sendWelcomeEmail({
           email: normalizedEmail,
           name: subscriberName,
-          promoCode: FIRST_TIME_PROMO_CODE, // Always use FIRSTAPTDISC
+          promoCode: promoCode ? FIRST_TIME_PROMO_CODE : undefined,
           unsubscribeToken,
           discountPercentage,
+          discountEnabled: Boolean(promoCode),
         })
       } catch (emailError) {
         console.error('Error sending welcome email:', emailError)

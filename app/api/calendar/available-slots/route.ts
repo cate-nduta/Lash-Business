@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
+import { getMinimumNoticeHours, isSlotAfterMinimumNotice } from '@/lib/booking-notice-utils'
 import { getCalendarClient } from '@/lib/google-calendar-client'
 
 export const runtime = 'nodejs'
@@ -23,6 +24,9 @@ type BookingWindowConfig = {
     emailSubject?: string
   }
   bookingLink?: string
+  minimumNoticeHours?: number
+  minimumNoticeByDay?: Record<string, number | string | null | undefined>
+  rescheduleCutoffHours?: number
 }
 
 type AvailabilityData = {
@@ -71,7 +75,7 @@ async function loadLocalBookings(includeShowcase: boolean = true): Promise<Array
         // If showcase bookings file doesn't exist, continue without it
       }
     }
-    return Array.isArray(data.bookings) ? data.bookings : []
+    return bookings
   } catch (error) {
     console.warn('Error loading local bookings:', error)
     return []
@@ -313,9 +317,6 @@ export async function GET(request: NextRequest) {
     }
     
     const availabilityData = await loadAvailabilityData()
-    // Include all bookings (regular + showcase) when checking for conflicts
-    // Both types use the same calendar slots
-    const localBookings = await loadLocalBookings(true)
     const bookingWindow = availabilityData?.bookingWindow
     const minimumBookingDate = availabilityData?.minimumBookingDate
     const { start: windowStartDate, end: windowEndDate } = deriveWindowRange(bookingWindow)
@@ -383,6 +384,14 @@ export async function GET(request: NextRequest) {
         const dayEnabled = availabilityData?.businessHours?.[dayKey]?.enabled === true
 
         if (dayEnabled && !fullyBookedSet.has(dateStr)) {
+          const daySlots = await generateTimeSlotsForDate(dateStr, availabilityData)
+          const hasSlotAfterMinimumNotice = daySlots.some((slot) =>
+            isSlotAfterMinimumNotice(slot, new Date(), bookingWindow),
+          )
+          if (!hasSlotAfterMinimumNotice) {
+            currentDate.setDate(currentDate.getDate() + 1)
+            continue
+          }
           const dateLabel = currentDate.toLocaleDateString('en-US', {
             weekday: 'long',
             month: 'long',
@@ -560,6 +569,10 @@ export async function GET(request: NextRequest) {
       // Continue without filtering - all slots will show as available
     }
 
+    // Include all bookings (regular + showcase) when checking for conflicts.
+    // This is only needed for a specific date, not for the initial calendar date list.
+    const localBookings = await loadLocalBookings(true)
+
     // Filter out booked slots and past times
     const now = new Date()
     const todayStr = today.toDateString()
@@ -577,10 +590,6 @@ export async function GET(request: NextRequest) {
       }
     })
     
-    // Enforce 24-hour advance booking requirement
-    const MIN_ADVANCE_BOOKING_HOURS = 24
-    const minBookingTime = new Date(now.getTime() + MIN_ADVANCE_BOOKING_HOURS * 60 * 60 * 1000)
-    
     const availableSlots = allSlots
       .filter(slot => {
         // Check if slot is booked (normalize for comparison)
@@ -589,10 +598,8 @@ export async function GET(request: NextRequest) {
           return false
         }
         
-        const slotTime = new Date(slot)
-        
-        // Enforce 24-hour advance booking: filter out slots less than 24 hours away
-        if (slotTime.getTime() <= minBookingTime.getTime()) {
+        // Enforce configurable advance booking notice.
+        if (!isSlotAfterMinimumNotice(slot, now, bookingWindow)) {
           return false
         }
         

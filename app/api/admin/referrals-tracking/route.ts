@@ -21,7 +21,10 @@ type PartnerReferral = {
   finalPrice: number
   discountApplied: number
   clientDiscountPercent?: number | null
+  clientDiscountAmount?: number | null
+  commissionType?: 'percentage' | 'fixed'
   commissionPercent: number
+  commissionFixedAmount?: number | null
   commissionTotalAmount?: number
   commissionEarlyPercent?: number
   commissionFinalPercent?: number
@@ -43,6 +46,62 @@ type PartnerReferralCatalog = {
 
 const REFERRALS_FILE = 'referrals-tracking.json'
 const LEGACY_REFERRALS_FILE = 'salon-referrals.json'
+
+const formatCurrency = (value: number) => `KSH ${Math.max(0, Math.round(value)).toLocaleString()}`
+
+function buildCommissionPaidEmail(referral: PartnerReferral) {
+  const partnerName = referral.salonName || 'Beauty Partner'
+  const clientName = referral.clientName || 'your referred client'
+  const service = referral.service || 'a LashDiary service'
+  const amount = referral.commissionTotalAmount ?? (referral as any).commissionAmount ?? 0
+  const paidAt = referral.paidAt
+    ? new Date(referral.paidAt).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+
+  const subject = 'Your LashDiary referral commission has been paid 🤎'
+  const html = `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; background: #FDF9F4; color: #3E2A20;">
+      <h2 style="margin-top: 0; color: #7C4B31;">Commission paid</h2>
+      <p>Hi ${partnerName},</p>
+      <p>Your referral commission for <strong>${clientName}</strong> has been marked as paid.</p>
+      <div style="margin: 18px 0; padding: 18px 20px; background: #FFFFFF; border: 1px solid #EADFD6; border-radius: 12px;">
+        <p style="margin: 0 0 8px 0;"><strong>Promo code:</strong> ${referral.promoCode}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Service:</strong> ${service}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Commission paid:</strong> ${formatCurrency(amount)}</p>
+        <p style="margin: 0;"><strong>Paid date:</strong> ${paidAt}</p>
+      </div>
+      <p>Commissions are only confirmed after the client completes their appointment, so this referral is now closed as paid.</p>
+      <p style="margin-top:24px;">Warmly,<br/>Catherine &amp; the LashDiary Team<br/><a href="mailto:hello@lashdiary.co.ke" style="color:#7C4B31;">hello@lashdiary.co.ke</a></p>
+    </div>
+  `.replace(/\n\s+/g, '\n')
+  const text = [
+    'Commission paid',
+    '',
+    `Hi ${partnerName},`,
+    '',
+    `Your referral commission for ${clientName} has been marked as paid.`,
+    `Promo code: ${referral.promoCode}`,
+    `Service: ${service}`,
+    `Commission paid: ${formatCurrency(amount)}`,
+    `Paid date: ${paidAt}`,
+    '',
+    'Commissions are only confirmed after the client completes their appointment, so this referral is now closed as paid.',
+    '',
+    'Warmly,',
+    'Catherine & the LashDiary Team',
+    'hello@lashdiary.co.ke',
+  ].join('\n')
+
+  return { subject, html, text }
+}
 
 async function loadReferralCatalog(): Promise<PartnerReferralCatalog> {
   const primary = await readDataFile<PartnerReferralCatalog>(REFERRALS_FILE, { referrals: [] })
@@ -93,8 +152,16 @@ export async function GET() {
         salonName: promo.salonName || '',
         salonEmail: promo.salonEmail || '',
         salonPartnerType: promo.salonPartnerType || 'salon',
-        clientDiscountPercent: promo.clientDiscountPercent ?? promo.discountValue ?? null,
+        discountType: promo.discountType,
+        clientDiscountPercent:
+          promo.clientDiscountPercent ??
+          (promo.discountType === 'percentage' && (promo.discountValue ?? 0) > 0 ? promo.discountValue : null),
+        clientDiscountAmount:
+          promo.clientDiscountAmount ??
+          (promo.discountType === 'fixed' && (promo.discountValue ?? 0) > 0 ? promo.discountValue : null),
+        salonCommissionType: promo.salonCommissionType ?? 'percentage',
         salonCommissionPercent: promo.salonCommissionPercent ?? null,
+        salonCommissionAmount: promo.salonCommissionAmount ?? null,
         salonUsageLimit: promo.salonUsageLimit ?? promo.usageLimit ?? null,
         salonUsedCount: promo.salonUsedCount ?? promo.usedCount ?? 0,
         commissionTotal: promo.commissionTotal ?? 0,
@@ -157,7 +224,7 @@ export async function POST(request: NextRequest) {
             <p>Hi ${promo.salonName || 'Partner'},</p>
             <p>We’ve paused your LashDiary referral code <strong>${promo.code}</strong> effective immediately.</p>
             <p>This decision follows activity that falls outside our referral guidelines (misuse, inaccurate promotion, client privacy, or other conduct noted in your welcome pack).</p>
-            <p>Any completed referrals already on file will be reviewed and, if eligible, paid out in the next bi-weekly commission cycle. Pending or future bookings made with this code will no longer qualify for payouts.</p>
+            <p>Any completed referrals already on file will be reviewed and, if eligible, paid at the end of the month after the code validity period closes. Pending or future bookings made with this code will no longer qualify for payouts.</p>
             <p>If you believe this was triggered in error, reply to this email so we can review the details together.</p>
             <p>We appreciate your understanding as we protect a consistent client experience for every LashDiary guest.</p>
             <p style="margin-top:24px;">Warmly,<br/>Catherine &amp; the LashDiary Team<br/><a href="mailto:hello@lashdiary.co.ke" style="color:#7C4B31;">hello@lashdiary.co.ke</a></p>
@@ -172,7 +239,7 @@ export async function POST(request: NextRequest) {
           `We’ve paused your LashDiary referral code ${promo.code} effective immediately.`,
           'This follows activity that falls outside our referral guidelines (misuse, inaccurate promotion, client privacy, or other conduct noted in your welcome pack).',
           '',
-          'Any completed referrals already on file will be reviewed and, if eligible, paid out in the next bi-weekly commission cycle. Pending or future bookings made with this code will no longer qualify for payouts.',
+          'Any completed referrals already on file will be reviewed and, if eligible, paid at the end of the month after the code validity period closes. Pending or future bookings made with this code will no longer qualify for payouts.',
           '',
           'If you believe this was triggered in error, reply to this email so we can review the details together.',
           '',
@@ -240,13 +307,19 @@ export async function POST(request: NextRequest) {
     referral.status = nextStatus
     if (nextStatus === 'paid') {
       referral.paidAt = referral.paidAt || new Date().toISOString()
+      referral.commissionFinalStatus = 'paid'
+      referral.commissionFinalPaidAt = referral.commissionFinalPaidAt || referral.paidAt
     } else {
       referral.paidAt = null
+      referral.commissionFinalStatus = 'pending'
+      referral.commissionFinalPaidAt = null
     }
     referral.updatedAt = new Date().toISOString()
 
     referrals[index] = referral
     await writeDataFile(REFERRALS_FILE, { referrals })
+
+    let emailResult: any = null
 
     if (previousStatus !== nextStatus) {
       const promoRaw = await readDataFile('promo-codes.json', {})
@@ -265,6 +338,21 @@ export async function POST(request: NextRequest) {
         catalog.promoCodes[promoIndex] = promo
         await writeDataFile('promo-codes.json', catalog)
       }
+
+      if (nextStatus === 'paid' && referral.salonEmail) {
+        const email = buildCommissionPaidEmail(referral)
+        try {
+          emailResult = await sendPartnerOnboardingEmail({
+            to: referral.salonEmail,
+            subject: email.subject,
+            html: email.html,
+            text: email.text,
+          })
+        } catch (error) {
+          console.error('Failed to send commission paid email:', error)
+          emailResult = { success: false, error: (error as Error)?.message || 'Unable to send email' }
+        }
+      }
     }
 
     await recordActivity({
@@ -274,10 +362,13 @@ export async function POST(request: NextRequest) {
       summary: `Updated referral ${id} status to ${nextStatus}`,
       targetId: id,
       targetType: 'partner_referral',
-      details: referral,
+      details: {
+        referral,
+        emailResult,
+      },
     })
 
-    return NextResponse.json({ success: true, referral })
+    return NextResponse.json({ success: true, referral, emailResult })
   } catch (error) {
     console.error('Error updating referrals tracking:', error)
     if (error instanceof Error && error.message === 'Unauthorized') {

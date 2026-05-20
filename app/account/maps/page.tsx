@@ -81,6 +81,23 @@ export default function ClientLashMapsPage() {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   }
 
+  const parsedLashMaps = useMemo(() => {
+    if (!data?.lashMaps || !Array.isArray(data.lashMaps)) {
+      return []
+    }
+    return [...data.lashMaps]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map((map) => {
+        let parsedData: LashMapDrawingData | null = null
+        try {
+          parsedData = JSON.parse(map.mapData || '{}')
+        } catch {
+          // Invalid JSON, ignore
+        }
+        return { map, parsedData }
+      })
+  }, [data?.lashMaps])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-amber-50 flex items-center justify-center">
@@ -146,22 +163,7 @@ export default function ClientLashMapsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {useMemo(() => {
-              if (!data?.lashMaps || !Array.isArray(data.lashMaps)) {
-                return []
-              }
-              return data.lashMaps
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .map((map) => {
-                  let parsedData: LashMapDrawingData | null = null
-                  try {
-                    parsedData = JSON.parse(map.mapData || '{}')
-                  } catch {
-                    // Invalid JSON, ignore
-                  }
-                  return { map, parsedData }
-                })
-            }, [data.lashMaps]).map(({ map, parsedData }, index) => (
+            {parsedLashMaps.map(({ map, parsedData }, index) => (
               <div
                 key={index}
                 className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-brown/10 shadow-sm"

@@ -81,7 +81,7 @@ export default function PromoBanner() {
       })
   }, [shouldShow])
 
-  // FORCE position navbar below banner - runs BEFORE banner renders
+  // Keep the sticky navbar below the sticky banner without adding visual spacing.
   useEffect(() => {
     const navbarContainer = document.getElementById('navbar-container')
     if (!navbarContainer) return
@@ -102,7 +102,7 @@ export default function PromoBanner() {
         if (el && navbarContainer) {
           const height = el.getBoundingClientRect().height || 40
           navbarContainer.style.setProperty('top', `${height}px`, 'important')
-          navbarContainer.style.setProperty('margin-top', `${height}px`, 'important')
+          navbarContainer.style.setProperty('margin-top', '0', 'important')
         }
       }, 0)
       return
@@ -113,11 +113,11 @@ export default function PromoBanner() {
       const height = bannerElement.offsetHeight || bannerElement.getBoundingClientRect().height || 40
       
       if (height > 0) {
-        // Set BOTH top and margin-top to push navbar below banner using setProperty with !important
+        // Sticky offset prevents overlap while margin stays zero so banner and navbar touch.
         navbarContainer.style.setProperty('top', `${height}px`, 'important')
-        navbarContainer.style.setProperty('margin-top', `${height}px`, 'important')
+        navbarContainer.style.setProperty('margin-top', '0', 'important')
         navbarContainer.style.setProperty('padding-top', '0', 'important')
-        navbarContainer.style.transition = 'margin-top 0.2s ease, top 0.2s ease'
+        navbarContainer.style.transition = 'top 0.2s ease'
         navbarContainer.style.setProperty('border-top', 'none', 'important')
         navbarContainer.style.setProperty('margin-bottom', '0', 'important')
       }
@@ -188,7 +188,7 @@ export default function PromoBanner() {
         width: '100%',
         display: 'block',
         margin: 0,
-        padding: '6px 0',
+        padding: '5px 0',
         zIndex: 60,
         boxSizing: 'border-box',
         minHeight: '40px',
@@ -202,10 +202,10 @@ export default function PromoBanner() {
           <div key={groupIndex} className="flex items-center gap-6 shrink-0">
             {[...Array(3)].map((__, itemIndex) => (
               <div key={`${groupIndex}-${itemIndex}`} className="flex items-center gap-6 shrink-0">
-                <span className="text-xs md:text-sm font-semibold tracking-wide uppercase text-white">
+                <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wide uppercase text-white">
                   {message}
                 </span>
-                <span className="text-sm text-white">•</span>
+                <span className="text-xs md:text-sm text-white">•</span>
               </div>
             ))}
           </div>

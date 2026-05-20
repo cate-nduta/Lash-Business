@@ -19,7 +19,10 @@ interface PartnerReferral {
   finalPrice: number
   discountApplied: number
   clientDiscountPercent?: number | null
+  clientDiscountAmount?: number | null
+  commissionType?: 'percentage' | 'fixed'
   commissionPercent: number
+  commissionFixedAmount?: number | null
   commissionTotalAmount?: number
   commissionEarlyPercent?: number
   commissionFinalPercent?: number
@@ -47,8 +50,12 @@ type PartnerCodeSummary = {
   salonName: string
   salonEmail: string
   salonPartnerType: 'salon' | 'beautician' | 'influencer'
+  discountType?: 'percentage' | 'fixed'
   clientDiscountPercent: number | null
+  clientDiscountAmount?: number | null
+  salonCommissionType?: 'percentage' | 'fixed'
   salonCommissionPercent: number | null
+  salonCommissionAmount?: number | null
   salonUsageLimit: number | null
   salonUsedCount: number
   commissionTotal: number
@@ -63,6 +70,36 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
 const formatCurrency = (value: number) => `KSH ${value.toLocaleString()}`
 const formatDateTime = (value?: string | null) =>
   value ? new Date(value).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+const formatPartnerDiscount = (partner: PartnerCodeSummary) => {
+  if (partner.discountType === 'fixed' && (partner.clientDiscountAmount ?? 0) > 0) {
+    return `${formatCurrency(partner.clientDiscountAmount ?? 0)} off`
+  }
+  if ((partner.clientDiscountPercent ?? 0) > 0) {
+    return `${partner.clientDiscountPercent}% off`
+  }
+  return 'No client discount'
+}
+const formatPartnerCommission = (partner: PartnerCodeSummary) => {
+  if (partner.salonCommissionType === 'fixed' && (partner.salonCommissionAmount ?? 0) > 0) {
+    return `${formatCurrency(partner.salonCommissionAmount ?? 0)} per completed appointment`
+  }
+  return `${partner.salonCommissionPercent ?? 0}%`
+}
+const formatReferralDiscount = (referral: PartnerReferral) => {
+  if ((referral.clientDiscountAmount ?? 0) > 0) {
+    return `${formatCurrency(referral.clientDiscountAmount ?? 0)} off`
+  }
+  if ((referral.clientDiscountPercent ?? 0) > 0) {
+    return `${referral.clientDiscountPercent}% off`
+  }
+  return null
+}
+const formatReferralCommissionRule = (referral: PartnerReferral) => {
+  if (referral.commissionType === 'fixed' && (referral.commissionFixedAmount ?? 0) > 0) {
+    return `${formatCurrency(referral.commissionFixedAmount ?? 0)} fixed`
+  }
+  return `${referral.commissionPercent}%`
+}
 
 export default function ReferralsTrackingAdmin() {
   const [referrals, setReferrals] = useState<PartnerReferral[]>([])
@@ -181,7 +218,15 @@ export default function ReferralsTrackingAdmin() {
         throw new Error(data.error || 'Failed to update referral')
       }
       const updated = await response.json()
-      setMessage({ type: 'success', text: 'Referral status updated.' })
+      setMessage({
+        type: 'success',
+        text:
+          nextStatus === 'paid' && updated.emailResult?.success === false
+            ? 'Referral marked paid, but the partner email failed to send. Please follow up manually.'
+            : nextStatus === 'paid'
+            ? 'Referral marked paid and the partner was notified by email.'
+            : 'Referral status updated.',
+      })
       setReferrals((prev) =>
         prev.map((entry) => (entry.id === id ? { ...entry, ...updated.referral } : entry)),
       )
@@ -319,11 +364,11 @@ export default function ReferralsTrackingAdmin() {
                       <div className="text-xs text-brown-dark/60">{code.salonEmail || 'No email on file'}</div>
                       <div>
                         <span className="font-semibold">Client discount:</span>{' '}
-                        {code.clientDiscountPercent ?? 0}%
+                        {formatPartnerDiscount(code)}
                       </div>
                       <div>
                         <span className="font-semibold">Commission:</span>{' '}
-                        {code.salonCommissionPercent ?? 0}%
+                        {formatPartnerCommission(code)}
                       </div>
                       <div>
                         <span className="font-semibold">Usage:</span>{' '}
@@ -414,8 +459,8 @@ export default function ReferralsTrackingAdmin() {
               <div className="text-brown-dark/70">{selectedPartner.salonEmail || 'No email on file'}</div>
               <div className="flex flex-wrap gap-4 text-xs text-brown-dark/70">
                 <span>Code: {selectedPartner.code}</span>
-                <span>Commission: {selectedPartner.salonCommissionPercent ?? 0}%</span>
-                <span>Client discount: {selectedPartner.clientDiscountPercent ?? 0}%</span>
+                <span>Commission: {formatPartnerCommission(selectedPartner)}</span>
+                <span>Client discount: {formatPartnerDiscount(selectedPartner)}</span>
                 <span>
                   Usage: {selectedPartner.salonUsedCount}
                   {selectedPartner.salonUsageLimit ? ` / ${selectedPartner.salonUsageLimit}` : ''}
@@ -453,7 +498,9 @@ export default function ReferralsTrackingAdmin() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brown-light/40">
-                  {filteredReferrals.map((entry) => (
+                  {filteredReferrals.map((entry) => {
+                    const referralDiscount = formatReferralDiscount(entry)
+                    return (
                     <tr key={entry.id} className="hover:bg-pink-light/20 transition-colors">
                       <td className="px-4 py-3 text-sm text-brown-dark">
                         <div className="font-semibold">{formatDateTime(entry.createdAt)}</div>
@@ -469,9 +516,9 @@ export default function ReferralsTrackingAdmin() {
                       <td className="px-4 py-3 text-sm text-brown-dark">
                         <div className="font-semibold">{entry.clientName || 'New client'}</div>
                         <div className="text-xs text-brown-dark/60">{entry.service || 'Service'}</div>
-                        {entry.clientDiscountPercent !== null && entry.clientDiscountPercent !== undefined && (
+                        {referralDiscount && (
                           <div className="text-xs text-green-700 mt-1">
-                            Client discount: {entry.clientDiscountPercent}% • Commission: {entry.commissionPercent}%
+                            Client discount: {referralDiscount} • Commission: {formatReferralCommissionRule(entry)}
                           </div>
                         )}
                       </td>
@@ -495,7 +542,7 @@ export default function ReferralsTrackingAdmin() {
                         )}
                         <div className="text-xs text-brown-dark/60">
                           Commission release: {formatCurrency(entry.commissionFinalAmount ?? 0)} (
-                          {entry.commissionFinalPercent ?? 0}%){' '}
+                          {formatReferralCommissionRule(entry)}){' '}
                           {entry.commissionFinalStatus && entry.commissionFinalStatus !== 'pending'
                             ? `• ${entry.commissionFinalStatus}`
                             : ''}
@@ -552,7 +599,8 @@ export default function ReferralsTrackingAdmin() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

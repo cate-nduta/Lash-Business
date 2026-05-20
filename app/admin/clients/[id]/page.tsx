@@ -901,6 +901,20 @@ function LashMapsManager({
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   }
 
+  const parsedLashMaps = useMemo(() => {
+    return [...lashMaps]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map((map) => {
+        let parsedData: LashMapDrawingData | null = null
+        try {
+          parsedData = JSON.parse(map.mapData || '{}')
+        } catch {
+          // Invalid JSON, ignore
+        }
+        return { map, parsedData }
+      })
+  }, [lashMaps])
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -1056,19 +1070,7 @@ function LashMapsManager({
           <p className="text-brown/70">No lash maps created yet.</p>
         ) : (
           <div className="space-y-6">
-            {useMemo(() => {
-              return lashMaps
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .map((map) => {
-                  let parsedData: LashMapDrawingData | null = null
-                  try {
-                    parsedData = JSON.parse(map.mapData || '{}')
-                  } catch {
-                    // Invalid JSON, ignore
-                  }
-                  return { map, parsedData }
-                })
-            }, [lashMaps]).map(({ map, parsedData }, index) => (
+            {parsedLashMaps.map(({ map, parsedData }, index) => (
                   <div key={index} className="border-b border-brown/10 pb-6 last:border-0 last:pb-0">
                     <div className="flex justify-between items-start mb-4">
                       <div>

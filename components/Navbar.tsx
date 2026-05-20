@@ -8,10 +8,20 @@ import { useCart } from '@/contexts/CartContext'
 import { Currency } from '@/lib/currency-utils'
 import type { PagesSettings } from '@/app/api/pages-settings/route'
 
+const readStoredPagesSettings = (): PagesSettings | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem('pages-settings')
+    return raw ? (JSON.parse(raw) as PagesSettings) : null
+  } catch {
+    return null
+  }
+}
+
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(null)
+  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(() => readStoredPagesSettings())
   const { currency, setCurrency } = useCurrency()
   const { getTotalItems } = useCart()
   const cartItemCount = getTotalItems()
@@ -23,7 +33,15 @@ export default function Navbar() {
         headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
       })
         .then((res) => (res.ok ? res.json() : null))
-        .then((data) => data && setPagesSettings(data))
+        .then((data) => {
+          if (!data) return
+          setPagesSettings(data)
+          try {
+            window.localStorage.setItem('pages-settings', JSON.stringify(data))
+          } catch {
+            /* ignore storage failures */
+          }
+        })
         .catch(() => {})
     }
     loadPagesSettings()
@@ -172,32 +190,23 @@ export default function Navbar() {
     }
   }, [])
 
-  // Derive nav links from pages settings (fallback to defaults if not loaded)
+  // Derive nav links from pages settings. Do not show hard-coded defaults while loading,
+  // because disabled admin links must not reappear on refresh.
   const mainNavLinks = pagesSettings
     ? Object.entries(pagesSettings.pages)
         .filter(([, p]) => p.navbar && !p.navbarSecondary)
         .map(([, p]) => ({ href: p.href, label: p.label }))
-    : [
-        { href: '/', label: 'Home' },
-        { href: '/services', label: 'Services' },
-        { href: '/booking', label: 'Booking' },
-        { href: '/blog', label: 'Blog' },
-        { href: '/labs', label: 'LashDiary Labs' },
-        { href: '/contact', label: 'Contact' },
-      ]
+    : []
   const secondaryNavLinks = pagesSettings
     ? Object.entries(pagesSettings.pages)
         .filter(([, p]) => p.navbarSecondary)
         .map(([, p]) => ({ href: p.href, label: p.label }))
-    : [
-        { href: '/gallery', label: 'Gallery' },
-        { href: '/policies', label: 'Policies' },
-      ]
+    : []
   const navLinks = mainNavLinks
-  const showShopButton = pagesSettings?.shopButton !== false
-  const showLoginRegisterIcon = pagesSettings?.loginRegisterIcon !== false
-  const showCartIcon = pagesSettings?.cartIcon !== false
-  const showCurrencySelector = pagesSettings?.currencySelector !== false
+  const showShopButton = pagesSettings ? pagesSettings.shopButton !== false : false
+  const showLoginRegisterIcon = pagesSettings ? pagesSettings.loginRegisterIcon !== false : false
+  const showCartIcon = pagesSettings ? pagesSettings.cartIcon !== false : false
+  const showCurrencySelector = pagesSettings ? pagesSettings.currencySelector !== false : false
 
   return (
     <nav className="bg-white shadow-soft w-full relative z-[70]" style={{ visibility: 'visible', opacity: 1 }}>

@@ -11,9 +11,18 @@ interface Booking {
   name: string
   service: string
   date: string
+  timeSlot?: string
   finalPrice: number
   deposit: number
   createdAt: string
+  status?: 'confirmed' | 'cancelled' | 'completed' | 'paid'
+  paymentStatus?: string
+  paidInFullAt?: string | null
+  payments?: Array<{
+    amount: number
+    method: 'cash' | 'card' | 'mpesa'
+    date: string
+  }>
 }
 
 interface Expense {
@@ -21,15 +30,6 @@ interface Expense {
   category: string
   description: string
   amount: number
-  date: string
-  createdAt: string
-}
-
-interface RevenueEntry {
-  id: string
-  bookingId: string
-  amount: number
-  paymentMethod: 'cash' | 'card' | 'mpesa'
   date: string
   createdAt: string
 }
@@ -86,10 +86,13 @@ export default function AdminAnalytics() {
   const { currency, formatCurrency: formatCurrencyContext } = useCurrency()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
-  const [revenue, setRevenue] = useState<RevenueEntry[]>([])
   const [taxPercentage, setTaxPercentage] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
+  const [pinVerified, setPinVerified] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinError, setPinError] = useState('')
+  const [verifyingPin, setVerifyingPin] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day')
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
@@ -98,29 +101,41 @@ export default function AdminAnalytics() {
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/admin/current-user')
+    const alreadyVerified = typeof window !== 'undefined' && window.sessionStorage.getItem('analytics-pin-verified') === 'true'
+    if (alreadyVerified) {
+      setPinVerified(true)
+    }
+
+    fetch('/api/admin/current-user', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (!data.authenticated) {
           router.push('/admin/login')
-        } else if (data.role !== 'owner') {
-          // Non-owner admins can't access analytics
-          setHasAccess(false)
-          setLoading(false)
         } else {
           setHasAccess(true)
-          loadData()
         }
+        setLoading(false)
+      })
+      .catch(() => {
+        setHasAccess(false)
+        setLoading(false)
+        router.push('/admin/login')
       })
   }, [router])
 
+  useEffect(() => {
+    if (hasAccess && pinVerified) {
+      setLoading(true)
+      loadData()
+    }
+  }, [hasAccess, pinVerified])
+
   const loadData = async () => {
     try {
-      const [bookingsRes, expensesRes, revenueRes, settingsRes] = await Promise.all([
-        fetch('/api/admin/bookings'),
-        fetch('/api/admin/expenses'),
-        fetch('/api/admin/revenue'),
-        fetch('/api/admin/settings'),
+      const [bookingsRes, expensesRes, settingsRes] = await Promise.all([
+        fetch('/api/admin/bookings', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/admin/expenses', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/admin/settings', { credentials: 'include', cache: 'no-store' }),
       ])
 
       if (bookingsRes.ok) {
@@ -133,14 +148,9 @@ export default function AdminAnalytics() {
         setExpenses(expensesData.expenses || [])
       }
 
-      if (revenueRes.ok) {
-        const revenueData = await revenueRes.json()
-        setRevenue(revenueData.revenue || [])
-      }
-
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json()
-        setTaxPercentage(settingsData.taxPercentage || 0)
+        setTaxPercentage(settingsData.business?.taxPercentage || 0)
       } else {
         // If settings fail to load, default to 0 and log error
         console.warn('Failed to load tax percentage from settings, defaulting to 0')
@@ -150,6 +160,36 @@ export default function AdminAnalytics() {
       console.error('Error loading data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleVerifyPin = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setPinError('')
+    setVerifyingPin(true)
+
+    try {
+      const response = await fetch('/api/admin/analytics/verify-pin', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setPinError(data.error || 'Incorrect PIN')
+        return
+      }
+
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('analytics-pin-verified', 'true')
+      }
+      setPinVerified(true)
+    } catch (error) {
+      setPinError('Unable to verify PIN. Please try again.')
+    } finally {
+      setVerifyingPin(false)
     }
   }
 
@@ -175,41 +215,21 @@ export default function AdminAnalytics() {
     })
   }
 
-  const filterRevenueByDateRange = (revenue: RevenueEntry[]) => {
-    const start = new Date(dateRange.start)
-    const end = new Date(dateRange.end)
-    end.setHours(23, 59, 59, 999) // Include the entire end date
-
-    return revenue.filter(entry => {
-      const entryDate = new Date(entry.date)
-      return entryDate >= start && entryDate <= end
-    })
+  const getCollectedAmount = (booking: Booking) => {
+    if (booking.status === 'cancelled') return 0
+    const finalPrice = Number(booking.finalPrice || 0)
+    const deposit = Number(booking.deposit || 0)
+    const paymentsTotal = Array.isArray(booking.payments)
+      ? booking.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+      : 0
+    const collected = Math.max(deposit, paymentsTotal)
+    return finalPrice > 0 ? Math.min(collected, finalPrice) : collected
   }
 
   const calculateDailyStats = (): DailyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
-    const filteredRevenue = filterRevenueByDateRange(revenue)
     const dailyMap = new Map<string, DailyStats>()
-
-    // Use actual revenue from payments marked as paid
-    filteredRevenue.forEach(entry => {
-      const dateKey = entry.date
-      const existing = dailyMap.get(dateKey) || {
-        date: dateKey,
-        servicesCount: 0,
-        totalRevenue: 0,
-        deposits: 0,
-        balance: 0,
-        expenses: 0,
-        taxes: 0,
-        savings: 0,
-        profit: 0,
-      }
-
-      existing.totalRevenue += entry.amount
-      dailyMap.set(dateKey, existing)
-    })
 
     filteredBookings.forEach(booking => {
       const dateKey = booking.date.split('T')[0]
@@ -226,8 +246,9 @@ export default function AdminAnalytics() {
       }
 
       existing.servicesCount += 1
+      existing.totalRevenue += getCollectedAmount(booking)
       existing.deposits += booking.deposit
-      existing.balance += (booking.finalPrice - booking.deposit)
+      existing.balance += Math.max((booking.finalPrice || 0) - getCollectedAmount(booking), 0)
 
       dailyMap.set(dateKey, existing)
     })
@@ -264,32 +285,7 @@ export default function AdminAnalytics() {
   const calculateWeeklyStats = (): WeeklyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
-    const filteredRevenue = filterRevenueByDateRange(revenue)
     const weeklyMap = new Map<string, WeeklyStats>()
-
-    // Use actual revenue from payments marked as paid
-    filteredRevenue.forEach(entry => {
-      const date = new Date(entry.date)
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay())
-      const weekKey = weekStart.toISOString().split('T')[0]
-      const weekLabel = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-
-      const existing = weeklyMap.get(weekKey) || {
-        week: weekLabel,
-        servicesCount: 0,
-        totalRevenue: 0,
-        deposits: 0,
-        balance: 0,
-        expenses: 0,
-        taxes: 0,
-        savings: 0,
-        profit: 0,
-      }
-
-      existing.totalRevenue += entry.amount
-      weeklyMap.set(weekKey, existing)
-    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -311,8 +307,9 @@ export default function AdminAnalytics() {
       }
 
       existing.servicesCount += 1
+      existing.totalRevenue += getCollectedAmount(booking)
       existing.deposits += booking.deposit
-      existing.balance += (booking.finalPrice - booking.deposit)
+      existing.balance += Math.max((booking.finalPrice || 0) - getCollectedAmount(booking), 0)
 
       weeklyMap.set(weekKey, existing)
     })
@@ -358,30 +355,7 @@ export default function AdminAnalytics() {
   const calculateMonthlyStats = (): MonthlyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
-    const filteredRevenue = filterRevenueByDateRange(revenue)
     const monthlyMap = new Map<string, MonthlyStats>()
-
-    // Use actual revenue from payments marked as paid
-    filteredRevenue.forEach(entry => {
-      const date = new Date(entry.date)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-
-      const existing = monthlyMap.get(monthKey) || {
-        month: monthLabel,
-        servicesCount: 0,
-        totalRevenue: 0,
-        deposits: 0,
-        balance: 0,
-        expenses: 0,
-        taxes: 0,
-        savings: 0,
-        profit: 0,
-      }
-
-      existing.totalRevenue += entry.amount
-      monthlyMap.set(monthKey, existing)
-    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -401,8 +375,9 @@ export default function AdminAnalytics() {
       }
 
       existing.servicesCount += 1
+      existing.totalRevenue += getCollectedAmount(booking)
       existing.deposits += booking.deposit
-      existing.balance += (booking.finalPrice - booking.deposit)
+      existing.balance += Math.max((booking.finalPrice || 0) - getCollectedAmount(booking), 0)
 
       monthlyMap.set(monthKey, existing)
     })
@@ -446,29 +421,7 @@ export default function AdminAnalytics() {
   const calculateYearlyStats = (): YearlyStats[] => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
-    const filteredRevenue = filterRevenueByDateRange(revenue)
     const yearlyMap = new Map<string, YearlyStats>()
-
-    // Use actual revenue from payments marked as paid
-    filteredRevenue.forEach(entry => {
-      const date = new Date(entry.date)
-      const year = date.getFullYear().toString()
-
-      const existing = yearlyMap.get(year) || {
-        year: year,
-        servicesCount: 0,
-        totalRevenue: 0,
-        deposits: 0,
-        balance: 0,
-        expenses: 0,
-        taxes: 0,
-        savings: 0,
-        profit: 0,
-      }
-
-      existing.totalRevenue += entry.amount
-      yearlyMap.set(year, existing)
-    })
 
     filteredBookings.forEach(booking => {
       const date = new Date(booking.date)
@@ -487,8 +440,9 @@ export default function AdminAnalytics() {
       }
 
       existing.servicesCount += 1
+      existing.totalRevenue += getCollectedAmount(booking)
       existing.deposits += booking.deposit
-      existing.balance += (booking.finalPrice - booking.deposit)
+      existing.balance += Math.max((booking.finalPrice || 0) - getCollectedAmount(booking), 0)
 
       yearlyMap.set(year, existing)
     })
@@ -527,19 +481,17 @@ export default function AdminAnalytics() {
   const getTotalStats = () => {
     const filteredBookings = filterBookingsByDateRange(bookings)
     const filteredExpenses = filterExpensesByDateRange(expenses)
-    const filteredRevenue = filterRevenueByDateRange(revenue)
-    
-    // Use actual revenue from payments marked as paid
-    const totalRevenue = filteredRevenue.reduce((sum, entry) => sum + entry.amount, 0)
     
     const totals = filteredBookings.reduce((acc, booking) => {
+      const collectedAmount = getCollectedAmount(booking)
       acc.servicesCount += 1
+      acc.totalRevenue += collectedAmount
       acc.deposits += booking.deposit
-      acc.balance += (booking.finalPrice - booking.deposit)
+      acc.balance += Math.max((booking.finalPrice || 0) - collectedAmount, 0)
       return acc
     }, {
       servicesCount: 0,
-      totalRevenue: totalRevenue,
+      totalRevenue: 0,
       deposits: 0,
       balance: 0,
       expenses: 0,
@@ -598,6 +550,56 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
     )
   }
 
+  if (hasAccess && !pinVerified) {
+    return (
+      <div className="min-h-screen bg-baby-pink-light py-8 px-4">
+        <div className="max-w-md mx-auto">
+          <div className="mb-6">
+            <Link 
+              href="/admin/dashboard" 
+              className="text-brown hover:text-brown-dark"
+            >
+              ← Back to Dashboard
+            </Link>
+          </div>
+          <form onSubmit={handleVerifyPin} className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-5xl mb-4 text-center">🔒</div>
+            <h1 className="text-3xl font-display text-brown-dark mb-3 text-center">Analytics PIN</h1>
+            <p className="text-brown-dark/80 mb-6 text-center">
+              Enter the analytics PIN to view revenue, expenses, profit, and reports.
+            </p>
+            <label htmlFor="analyticsPin" className="block text-sm font-semibold text-brown-dark mb-2">
+              PIN
+            </label>
+            <input
+              id="analyticsPin"
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+              placeholder="Enter PIN"
+              autoFocus
+            />
+            {pinError && (
+              <p className="mt-3 text-sm text-red-600">{pinError}</p>
+            )}
+            <button
+              type="submit"
+              disabled={verifyingPin || !pin.trim()}
+              className="mt-6 w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {verifyingPin ? 'Checking...' : 'View Analytics'}
+            </button>
+            <p className="mt-4 text-xs text-brown-dark/60 text-center">
+              Set the PIN with the ANALYTICS_PIN environment variable. Default is 1234 if none is configured.
+            </p>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
   if (!hasAccess) {
     return (
       <div className="min-h-screen bg-baby-pink-light py-8 px-4">
@@ -614,10 +616,10 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
             <div className="text-6xl mb-4">🔒</div>
             <h1 className="text-3xl font-display text-brown-dark mb-4">Access Restricted</h1>
             <p className="text-brown-dark mb-6">
-              This page is only accessible to the business owner.
+              Please log in to access analytics.
             </p>
             <p className="text-sm text-gray-600">
-              If you need access to analytics and reports, please contact the business owner.
+              Analytics is available to authenticated admins with the analytics PIN.
             </p>
           </div>
         </div>
@@ -632,19 +634,6 @@ const formatPeriodLabel = (stat: DailyStats | WeeklyStats | MonthlyStats | Yearl
   const totalStats = getTotalStats()
 
   const currentStats = selectedPeriod === 'day' ? dailyStats : selectedPeriod === 'week' ? weeklyStats : selectedPeriod === 'month' ? monthlyStats : yearlyStats
-
-  // Debug: Log data to console
-  console.log('Analytics Debug:', {
-    totalBookings: bookings.length,
-    totalExpenses: expenses.length,
-    dateRange,
-    selectedPeriod,
-    dailyStatsCount: dailyStats.length,
-    weeklyStatsCount: weeklyStats.length,
-    monthlyStatsCount: monthlyStats.length,
-    yearlyStatsCount: yearlyStats.length,
-    currentStatsCount: currentStats.length,
-  })
 
   return (
     <div className="min-h-screen bg-baby-pink-light py-8 px-4">

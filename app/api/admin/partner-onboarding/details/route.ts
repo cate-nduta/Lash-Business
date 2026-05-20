@@ -53,6 +53,31 @@ function renderWithTokens(template: string, context: TemplateContext) {
   })
 }
 
+function buildClientDiscountHtml(referralConfig: ReturnType<typeof resolvePartnerReferralConfig>) {
+  if (!referralConfig.clientDiscountEnabled) {
+    return ''
+  }
+  return `<p style="margin-top:12px;">Every client who uses your code automatically enjoys <strong>${referralConfig.clientDiscountLabel}</strong> their service total.</p>`
+}
+
+function buildClientDiscountListItem(referralConfig: ReturnType<typeof resolvePartnerReferralConfig>) {
+  if (!referralConfig.clientDiscountEnabled) {
+    return ''
+  }
+  return `<li>Your referred clients receive an automatic ${referralConfig.clientDiscountLabel} on the service they choose.</li>`
+}
+
+function buildClientDiscountText(referralConfig: ReturnType<typeof resolvePartnerReferralConfig>) {
+  if (!referralConfig.clientDiscountEnabled) {
+    return ''
+  }
+  return [
+    '',
+    'Client perks:',
+    `• Every client who uses your code unlocks ${referralConfig.clientDiscountLabel} on their service.`,
+  ].join('\n')
+}
+
 async function ensurePromoCode(
   record: PartnerOnboardingRecord,
   commissionPercent: number,
@@ -62,7 +87,13 @@ async function ensurePromoCode(
   const { catalog } = normalizePromoCatalog(promoRaw)
   const existingSet = new Set(catalog.promoCodes.map((promo) => promo.code))
 
-  const discountPercent = referralConfig.clientDiscountPercent
+  const hasClientDiscount = referralConfig.clientDiscountEnabled
+  const discountType = hasClientDiscount ? referralConfig.clientDiscountType : 'percentage'
+  const discountValue = hasClientDiscount
+    ? referralConfig.clientDiscountType === 'fixed'
+      ? referralConfig.clientDiscountAmount
+      : referralConfig.clientDiscountPercent
+    : 0
   const codeValidDays = referralConfig.codeValidDays
   const redeemLimit = referralConfig.redeemLimit
 
@@ -82,8 +113,8 @@ async function ensurePromoCode(
     ...existingPromo,
     code: promoCodeValue,
     description: `Partner referral for ${record.businessName}`,
-    discountType: 'percentage',
-    discountValue: discountPercent,
+    discountType,
+    discountValue,
     minPurchase: existingPromo?.minPurchase ?? 0,
     maxDiscount: existingPromo?.maxDiscount ?? null,
     validFrom: existingPromo?.validFrom ?? validFrom,
@@ -102,8 +133,20 @@ async function ensurePromoCode(
     salonName: record.businessName,
     salonEmail: record.email,
     salonPartnerType: record.partnerType,
-    clientDiscountPercent: discountPercent,
-    salonCommissionPercent: commissionPercent,
+    clientDiscountEnabled: hasClientDiscount,
+    clientDiscountPercent:
+      hasClientDiscount && referralConfig.clientDiscountType === 'percentage'
+        ? referralConfig.clientDiscountPercent
+        : null,
+    clientDiscountAmount:
+      hasClientDiscount && referralConfig.clientDiscountType === 'fixed'
+        ? referralConfig.clientDiscountAmount
+        : null,
+    salonCommissionType: referralConfig.commissionType,
+    salonCommissionPercent:
+      referralConfig.commissionType === 'percentage' ? commissionPercent : null,
+    salonCommissionAmount:
+      referralConfig.commissionType === 'fixed' ? referralConfig.commissionAmount : null,
     salonUsageLimit: redeemLimit,
     salonUsedCount: existingPromo?.salonUsedCount ?? 0,
     commissionTotal: existingPromo?.commissionTotal ?? 0,
@@ -145,37 +188,46 @@ function buildDetailsEmail({
     promoCode,
     validUntil,
     commissionPercent: referralConfig.commissionPercent,
+    commissionAmount: referralConfig.commissionAmount,
+    commissionLabel: referralConfig.commissionLabel,
     clientDiscountPercent: referralConfig.clientDiscountPercent,
+    clientDiscountAmount: referralConfig.clientDiscountAmount,
+    clientDiscountLabel: referralConfig.clientDiscountLabel,
+    clientDiscountHtml: buildClientDiscountHtml(referralConfig),
+    clientDiscountListItem: buildClientDiscountListItem(referralConfig),
+    clientDiscountText: buildClientDiscountText(referralConfig),
     codeValidDays: referralConfig.codeValidDays,
     redeemLimit: referralConfig.redeemLimit,
+    payoutScheduleNote: referralConfig.payoutScheduleNote,
     paymentMethod: referralConfig.paymentMethod,
     studioEmail,
     businessName: partner.businessName,
   }
 
-  const defaultSubject = 'Welcome to the Partner Referral Program'
+  const defaultSubject = 'Welcome to the Partner Referral Program 🤎'
 
   const defaultHtml = `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; padding: 32px; background: #FDF9F4; color: #3E2A20;">
-      <h2 style="margin-top: 0; color: #7C4B31;">Welcome to the Partner Referral Program</h2>
+      <h2 style="margin-top: 0; color: #7C4B31;">Welcome to the Partner Referral Program 🤎</h2>
       <p>Hi {{firstName}},</p>
       <p>We’re thrilled to have you as part of our referral family! Here’s how your exclusive code works:</p>
       <h3 style="color:#7C4B31;">Commission</h3>
-      <p>You’ll earn <strong>{{commissionPercent}}% of the total service price</strong> for every client who books using your promo code — once the service is completed.</p>
+      <p>You’ll earn <strong>{{commissionLabel}}</strong> for every client who books using your promo code, once the client has completed their appointment.</p>
       <h3 style="color:#7C4B31;">Payment</h3>
-      <p>Commissions are processed and paid every two weeks via {{paymentMethod}}.</p>
+      <p>{{payoutScheduleNote}}</p>
+      <p>Approved commissions are paid via {{paymentMethod}}.</p>
       <h3 style="color:#7C4B31;">Your Promo Code</h3>
       <div style="background:#FFFFFF;border-radius:12px;padding:16px 24px;border:1px dashed #7C4B31;display:inline-block;font-size:26px;font-weight:700;letter-spacing:4px;color:#7C4B31;">
         {{promoCode}}
       </div>
       <p style="margin-top:16px;">Each code comes with <strong>{{redeemLimit}} available slots</strong> and will remain active for <strong>{{codeValidDays}} days</strong> from the issue date (until {{validUntil}}). We’ll refresh or extend it based on your performance and engagement.</p>
-      <p style="margin-top:12px;">Every client who uses your code automatically enjoys <strong>{{clientDiscountPercent}}% off</strong> their service total.</p>
+      {{clientDiscountHtml}}
       <h3 style="color:#7C4B31;">Important Details</h3>
       <ul style="line-height:1.6;">
-        <li>Your referred clients receive an automatic {{clientDiscountPercent}}% discount on the service they choose.</li>
-        <li>Commissions apply only to completed appointments.</li>
+        {{clientDiscountListItem}}
+        <li>Commissions apply only after the referred client completes their appointment.</li>
         <li>If a client cancels or reschedules outside our policy window, no commission applies.</li>
-        <li>You’ll receive updates via email whenever a client books, completes a service, or your code is close to expiring.</li>
+        <li>You’ll receive an email when a client uses your code and another email when an eligible commission is marked paid.</li>
         <li>Your referral dashboard keeps a live view of pending and completed referrals.</li>
       </ul>
       <h3 style="color:#7C4B31;">Program Guidelines</h3>
@@ -190,29 +242,28 @@ function buildDetailsEmail({
   `.replace(/\n\s+/g, '\n')
 
   const defaultText = [
-    'Welcome to the Partner Referral Program',
+    'Welcome to the Partner Referral Program 🤎',
     '',
     'Hi {{firstName}},',
     '',
     'We’re thrilled to have you as part of our referral family! Here’s how your exclusive code works:',
     '',
     'Commission:',
-    '• You’ll earn {{commissionPercent}}% of the total service price for every client who books using your promo code — once the service is completed.',
+    '• You’ll earn {{commissionLabel}} for every client who books using your promo code, once the client has completed their appointment.',
     '',
     'Payment:',
-    '• Commissions are processed and paid every two weeks via {{paymentMethod}}.',
+    '• {{payoutScheduleNote}}',
+    '• Approved commissions are paid via {{paymentMethod}}.',
     '',
     'Your promo code:',
     '• {{promoCode}}',
     '• Active for {{codeValidDays}} days (until {{validUntil}}) with {{redeemLimit}} available slots.',
-    '',
-    'Client perks:',
-    '• Every client who uses your code unlocks a {{clientDiscountPercent}}% discount on their service.',
+    '{{clientDiscountText}}',
     '',
     'Important details:',
-    '• Commissions apply only to completed appointments.',
+    '• Commissions apply only after the referred client completes their appointment.',
     '• If a client cancels outside our policy window, no commission applies.',
-    '• You’ll receive updates when someone books, completes a service, or your code is close to expiring.',
+    '• You’ll receive an email when a client uses your code and another email when an eligible commission is marked paid.',
     '• Check your referral dashboard anytime for pending and completed referrals.',
     '',
     'Program guidelines:',

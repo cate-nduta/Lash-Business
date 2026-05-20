@@ -230,7 +230,6 @@ function LabsCheckoutContentInner() {
     let isMounted = true
     let controller: AbortController | null = null
     let availabilityTimeout: ReturnType<typeof setTimeout> | null = null
-    let calendarTimeout: ReturnType<typeof setTimeout> | null = null
 
     const loadAvailability = async () => {
       setLoadingDates(true)
@@ -282,11 +281,9 @@ function LabsCheckoutContentInner() {
             throw error
           }),
           fetch(`/api/labs/consultation/availability?t=${timestamp}`, availabilityOptions).then((res) => {
-            if (calendarTimeout) clearTimeout(calendarTimeout)
             if (!res.ok) return null
             return res.json()
           }).catch((error: any) => {
-            if (calendarTimeout) clearTimeout(calendarTimeout)
             if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
               return null
             }
@@ -344,7 +341,6 @@ function LabsCheckoutContentInner() {
         setLoadingDates(false)
       } catch (error: any) {
         if (availabilityTimeout) clearTimeout(availabilityTimeout)
-        if (calendarTimeout) clearTimeout(calendarTimeout)
         
         if (!isMounted) return
         
@@ -375,7 +371,6 @@ function LabsCheckoutContentInner() {
         }
       }
       if (availabilityTimeout) clearTimeout(availabilityTimeout)
-      if (calendarTimeout) clearTimeout(calendarTimeout)
     }
   }
 

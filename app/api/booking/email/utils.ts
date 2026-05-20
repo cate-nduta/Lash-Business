@@ -223,6 +223,25 @@ function buildGoogleCalendarLink(options: {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
+function formatNairobiDate(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Africa/Nairobi',
+  })
+}
+
+function formatNairobiTime(date: Date) {
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Africa/Nairobi',
+  })
+}
+
 // Convert minutes to readable duration format
 function formatDuration(minutes: number): string {
   if (!minutes || minutes <= 0) {
@@ -328,7 +347,7 @@ function createCustomerEmailTemplate(bookingData: {
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
               <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">✅ Appointment confirmed</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}! 👁️</h1>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">We're Excited to See You, ${friendlyName}!</h1>
             </td>
           </tr>
 
@@ -350,7 +369,7 @@ function createCustomerEmailTemplate(bookingData: {
                     <td style="padding:6px 0; color:${textPrimary};">${formattedTime}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">👁️ Service</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   ${durationText ? `
@@ -525,7 +544,7 @@ function createReminderEmailTemplate(bookingData: {
           <tr>
             <td style="padding:28px 32px 12px 32px; text-align:center; background:${card};">
               <p style="margin:0; text-transform:uppercase; letter-spacing:3px; font-size:12px; color:${textSecondary};">⏰ Appointment reminder</p>
-              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}! 👁️</h1>
+              <h1 style="margin:12px 0 0 0; font-size:36px; color:${brand}; font-family:'Playfair Display', Georgia, 'Times New Roman', serif; font-weight:600; line-height:1.3; letter-spacing:0.5px;">Hi ${friendlyName}!</h1>
             </td>
           </tr>
 
@@ -547,7 +566,7 @@ function createReminderEmailTemplate(bookingData: {
                     <td style="padding:6px 0; color:${textPrimary}; font-weight:600;">${formattedTime}</td>
                   </tr>
                   <tr>
-                    <td style="padding:6px 0; color:${textSecondary};">👁️ Service</td>
+                    <td style="padding:6px 0; color:${textSecondary};">Service</td>
                     <td style="padding:6px 0; color:${textPrimary};">${service || 'Lash service'}</td>
                   </tr>
                   ${durationText ? `
@@ -1029,17 +1048,8 @@ export async function sendAftercareEmail(bookingData: {
     
     // Format date and time
     const dateObj = new Date(timeSlot || date)
-    const formattedDate = dateObj.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-    const formattedTime = dateObj.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
+    const formattedDate = formatNairobiDate(dateObj)
+    const formattedTime = formatNairobiTime(dateObj)
 
     const htmlContent = createAftercareEmailTemplate({
       name,
@@ -1152,27 +1162,14 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
   // Format the date and time
   const appointmentDate = new Date(date)
   const appointmentTime = new Date(timeSlot)
-  const formattedDate = appointmentDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-  const formattedTime = appointmentTime.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
+  const formattedDate = formatNairobiDate(appointmentDate)
+  const formattedTime = formatNairobiTime(appointmentTime)
   
   // Calculate end time based on service duration
   const serviceDuration = await getServiceDuration(service) // Use flexible lookup from services.json
   const endTime = new Date(appointmentTime)
   endTime.setMinutes(endTime.getMinutes() + serviceDuration)
-  const formattedEndTime = endTime.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
+  const formattedEndTime = formatNairobiTime(endTime)
   
   // Format duration text for email
   const durationText = formatDuration(serviceDuration)
@@ -1285,11 +1282,7 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
           console.log(`📧 Preparing to send customer email to: ${email}`)
           // Format time for reminder subject
           const appointmentTimeForSubject = bookingData.isReminder
-            ? new Date(bookingData.timeSlot).toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-              })
+            ? formatNairobiTime(new Date(bookingData.timeSlot))
             : ''
           
           const emailSubject = bookingData.isReminder

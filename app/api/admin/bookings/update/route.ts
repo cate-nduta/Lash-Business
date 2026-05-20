@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     }
 
-    let updatedBooking = { ...booking }
+    const updatedBooking = { ...booking }
     let activitySummary = ''
 
     if (action === 'add-service') {

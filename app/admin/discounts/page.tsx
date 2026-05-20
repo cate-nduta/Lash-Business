@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
+import { normalizeDepositNotice } from '@/lib/deposit-notice-utils'
 
 interface DiscountsData {
   firstTimeClientDiscount: {
@@ -35,7 +36,7 @@ export default function AdminDiscounts() {
     depositPercentage: 30,
     fridayNightDepositPercentage: 50,
     fridayNightEnabled: true,
-    depositNotice: '',
+    depositNotice: normalizeDepositNotice(''),
     paymentRequirement: 'deposit',
   })
   const [originalDiscounts, setOriginalDiscounts] = useState<DiscountsData>({
@@ -44,7 +45,7 @@ export default function AdminDiscounts() {
     depositPercentage: 30,
     fridayNightDepositPercentage: 50,
     fridayNightEnabled: true,
-    depositNotice: '',
+    depositNotice: normalizeDepositNotice(''),
     paymentRequirement: 'deposit',
   })
   const [loading, setLoading] = useState(true)
@@ -122,10 +123,7 @@ export default function AdminDiscounts() {
           depositPercentage: Number(data?.depositPercentage ?? 30),
           fridayNightDepositPercentage: Number(data?.fridayNightDepositPercentage ?? 50),
           fridayNightEnabled: data?.fridayNightEnabled !== false,
-          depositNotice:
-            typeof data?.depositNotice === 'string'
-              ? data.depositNotice
-              : '',
+          depositNotice: normalizeDepositNotice(data?.depositNotice),
           paymentRequirement: (data?.paymentRequirement === 'full' ? 'full' : 'deposit') as 'deposit' | 'full',
         }
         setDiscounts(normalized)
@@ -211,7 +209,7 @@ export default function AdminDiscounts() {
         depositPercentage: Number(discounts.depositPercentage ?? 30),
         fridayNightDepositPercentage: Number(discounts.fridayNightDepositPercentage ?? 50),
         fridayNightEnabled: Boolean(discounts.fridayNightEnabled),
-        depositNotice: discounts.depositNotice ?? '',
+        depositNotice: normalizeDepositNotice(discounts.depositNotice),
         paymentRequirement: discounts.paymentRequirement ?? 'deposit',
       }
 
@@ -522,13 +520,13 @@ export default function AdminDiscounts() {
                       }))
                     }
                     rows={3}
-                    placeholder='e.g. "A {deposit}% deposit is required to secure your booking. Deposits are strictly for securing your booking and cannot be refunded under any circumstance.{fridayDeposit}"'
+                    placeholder='e.g. "A {deposit}% deposit is required to secure your booking. Deposits are strictly for securing your appointment and cannot be refunded under any circumstance."'
                     className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
                   />
                   <p className="text-xs text-brown mt-2">
                     You can use <code>{'{deposit}'}</code> for the standard deposit percentage and{' '}
-                    <code>{'{fridayDeposit}'}</code> for the Friday night percentage. Leave blank to use the default
-                    wording.
+                    <code>{'{fridayDeposit}'}</code> for the Friday night percentage. This text is saved and shown on
+                    the booking page.
                   </p>
                 </div>
               </div>

@@ -35,6 +35,16 @@ type FormState = {
   email: string
   phone: string
   notes: string
+  commissionType: 'percentage' | 'fixed'
+  commissionPercent: string
+  commissionAmount: string
+  clientDiscountEnabled: boolean
+  clientDiscountType: 'percentage' | 'fixed'
+  clientDiscountPercent: string
+  clientDiscountAmount: string
+  codeValidDays: string
+  redeemLimit: string
+  payoutScheduleNote: string
 }
 
 const initialFormState: FormState = {
@@ -44,6 +54,17 @@ const initialFormState: FormState = {
   email: '',
   phone: '',
   notes: '',
+  commissionType: 'percentage',
+  commissionPercent: '3.5',
+  commissionAmount: '',
+  clientDiscountEnabled: true,
+  clientDiscountType: 'percentage',
+  clientDiscountPercent: '8',
+  clientDiscountAmount: '',
+  codeValidDays: '35',
+  redeemLimit: '10',
+  payoutScheduleNote:
+    'Commissions become eligible only after the referred client completes their appointment, then they are paid at the end of the month after the code validity period closes.',
 }
 
 export default function PartnerOnboardingAdminPage() {
@@ -110,7 +131,7 @@ export default function PartnerOnboardingAdminPage() {
     }
   }
 
-  const handleInputChange = (field: keyof FormState, value: string) => {
+  const handleInputChange = (field: keyof FormState, value: string | boolean) => {
     setForm((prev) => ({
       ...prev,
       [field]: value,
@@ -125,6 +146,16 @@ export default function PartnerOnboardingAdminPage() {
       email: '',
       phone: '',
       notes: '',
+        commissionType: form.commissionType,
+        commissionPercent: form.commissionPercent,
+        commissionAmount: form.commissionAmount,
+        clientDiscountEnabled: form.clientDiscountEnabled,
+        clientDiscountType: form.clientDiscountType,
+        clientDiscountPercent: form.clientDiscountPercent,
+        clientDiscountAmount: form.clientDiscountAmount,
+        codeValidDays: form.codeValidDays,
+        redeemLimit: form.redeemLimit,
+        payoutScheduleNote: form.payoutScheduleNote,
     })
   }
 
@@ -140,6 +171,18 @@ export default function PartnerOnboardingAdminPage() {
         email: form.email,
         phone: form.phone,
         notes: form.notes,
+        referralOverrides: {
+          commissionType: form.commissionType,
+          commissionPercent: Number(form.commissionPercent) || 0,
+          commissionAmount: Number(form.commissionAmount) || 0,
+          clientDiscountEnabled: form.clientDiscountEnabled,
+          clientDiscountType: form.clientDiscountType,
+          clientDiscountPercent: Number(form.clientDiscountPercent) || 0,
+          clientDiscountAmount: Number(form.clientDiscountAmount) || 0,
+          codeValidDays: Number(form.codeValidDays) || 35,
+          redeemLimit: Number(form.redeemLimit) || 10,
+          payoutScheduleNote: form.payoutScheduleNote,
+        },
       }
 
       const response = await fetch('/api/admin/partner-onboarding', {
@@ -403,6 +446,147 @@ export default function PartnerOnboardingAdminPage() {
                 placeholder="e.g. +254 7XX XXX XXX"
                 className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
               />
+            </div>
+
+            <div className="md:col-span-2 rounded-xl border-2 border-brown-light/70 bg-baby-pink-light/40 p-4 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-brown-dark">Commission & client offer</h3>
+                <p className="text-xs text-brown-dark/70">
+                  These numbers are written into the onboarding email and used later when the partner code is created.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">Commission paid to partner</label>
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('commissionType', 'percentage')}
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
+                        form.commissionType === 'percentage'
+                          ? 'bg-brown-dark text-white border-brown-dark'
+                          : 'bg-white text-brown-dark border-brown-light'
+                      }`}
+                    >
+                      Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('commissionType', 'fixed')}
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
+                        form.commissionType === 'fixed'
+                          ? 'bg-brown-dark text-white border-brown-dark'
+                          : 'bg-white text-brown-dark border-brown-light'
+                      }`}
+                    >
+                      Fixed KES
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step={form.commissionType === 'fixed' ? '1' : '0.1'}
+                    value={form.commissionType === 'fixed' ? form.commissionAmount : form.commissionPercent}
+                    onChange={(event) =>
+                      handleInputChange(
+                        form.commissionType === 'fixed' ? 'commissionAmount' : 'commissionPercent',
+                        event.target.value,
+                      )
+                    }
+                    placeholder={form.commissionType === 'fixed' ? 'e.g. 500' : 'e.g. 3.5'}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <label className="block text-sm font-semibold text-brown-dark">Client discount</label>
+                    <label className="inline-flex items-center gap-2 text-xs text-brown-dark">
+                      <input
+                        type="checkbox"
+                        checked={form.clientDiscountEnabled}
+                        onChange={(event) => handleInputChange('clientDiscountEnabled', event.target.checked)}
+                        className="h-4 w-4 accent-brown-dark"
+                      />
+                      Enable
+                    </label>
+                  </div>
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('clientDiscountType', 'percentage')}
+                      disabled={!form.clientDiscountEnabled}
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-50 ${
+                        form.clientDiscountType === 'percentage'
+                          ? 'bg-brown-dark text-white border-brown-dark'
+                          : 'bg-white text-brown-dark border-brown-light'
+                      }`}
+                    >
+                      Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('clientDiscountType', 'fixed')}
+                      disabled={!form.clientDiscountEnabled}
+                      className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-50 ${
+                        form.clientDiscountType === 'fixed'
+                          ? 'bg-brown-dark text-white border-brown-dark'
+                          : 'bg-white text-brown-dark border-brown-light'
+                      }`}
+                    >
+                      Fixed KES
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step={form.clientDiscountType === 'fixed' ? '1' : '0.1'}
+                    disabled={!form.clientDiscountEnabled}
+                    value={form.clientDiscountType === 'fixed' ? form.clientDiscountAmount : form.clientDiscountPercent}
+                    onChange={(event) =>
+                      handleInputChange(
+                        form.clientDiscountType === 'fixed' ? 'clientDiscountAmount' : 'clientDiscountPercent',
+                        event.target.value,
+                      )
+                    }
+                    placeholder={form.clientDiscountType === 'fixed' ? 'e.g. 300' : 'e.g. 10'}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">Code validity (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.codeValidDays}
+                    onChange={(event) => handleInputChange('codeValidDays', event.target.value)}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">Redeem limit</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.redeemLimit}
+                    onChange={(event) => handleInputChange('redeemLimit', event.target.value)}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-2">Payout note</label>
+                  <input
+                    type="text"
+                    value={form.payoutScheduleNote}
+                    onChange={(event) => handleInputChange('payoutScheduleNote', event.target.value)}
+                    className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="md:col-span-2">

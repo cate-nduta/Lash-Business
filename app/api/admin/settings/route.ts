@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         newsletter: {
           discountPercentage: 10,
           enabled: true,
+          discountEnabled: true,
         },
       })
     }
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
       newsletter: {
         discountPercentage: typeof newsletter?.discountPercentage === 'number' ? newsletter.discountPercentage : 10,
         enabled: typeof newsletter?.enabled === 'boolean' ? newsletter.enabled : true,
+        discountEnabled: typeof newsletter?.discountEnabled === 'boolean' ? newsletter.discountEnabled : true,
       },
       exchangeRates: {
         usdToKes: typeof exchangeRates.usdToKes === 'number' ? exchangeRates.usdToKes : 130,
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest) {
         eyepatchImageUrl: '',
       },
       social: {},
-      newsletter: { discountPercentage: 10, enabled: true },
+      newsletter: { discountPercentage: 10, enabled: true, discountEnabled: true },
     })
   }
 }
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
       newsletter: {
         discountPercentage: typeof newsletter?.discountPercentage === 'number' ? newsletter.discountPercentage : 10,
         enabled: typeof newsletter?.enabled === 'boolean' ? newsletter.enabled : true,
+        discountEnabled: typeof newsletter?.discountEnabled === 'boolean' ? newsletter.discountEnabled : true,
       },
       exchangeRates: {
         usdToKes: typeof exchangeRates?.usdToKes === 'number' && exchangeRates.usdToKes > 0 

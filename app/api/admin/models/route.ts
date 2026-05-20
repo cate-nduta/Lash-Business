@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { sendModelRejectionEmail } from '@/lib/email/model-rejection-email'
+import { loadModelApplicationSettings, normalizeModelApplicationQuestions } from '@/lib/model-application-settings'
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
     const data = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })
-    return NextResponse.json(data)
+    const settings = await loadModelApplicationSettings()
+    return NextResponse.json({ ...data, settings })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,6 +24,12 @@ export async function POST(request: NextRequest) {
     await requireAdminAuth()
     const body = await request.json()
     const { action, applicationId, status, personalNote } = body
+
+    if (action === 'updateSettings') {
+      const questions = normalizeModelApplicationQuestions(body.questions)
+      await writeDataFile('model-application-settings.json', { questions })
+      return NextResponse.json({ success: true, settings: { questions } })
+    }
 
     if (action === 'updateStatus') {
       const data = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })

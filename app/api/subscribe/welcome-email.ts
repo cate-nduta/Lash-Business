@@ -64,8 +64,14 @@ const zohoTransporter =
       })
     : null
 
-async function createWelcomeEmailTemplate(data: { name: string; promoCode: string; unsubscribeToken: string; discountPercentage: number }) {
-  const { name, promoCode, unsubscribeToken, discountPercentage } = data
+async function createWelcomeEmailTemplate(data: {
+  name: string
+  promoCode?: string
+  unsubscribeToken: string
+  discountPercentage: number
+  discountEnabled?: boolean
+}) {
+  const { name, promoCode, unsubscribeToken, discountPercentage, discountEnabled = true } = data
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   
   // Load homepage features dynamically
@@ -135,7 +141,7 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
           <tr>
             <td style="background: linear-gradient(135deg, ${brand} 0%, #9A5B3A 100%); padding:48px 32px 40px 32px; text-align:center;">
               <div style="font-size:48px; margin-bottom:16px;">🤎</div>
-              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">Your Exclusive Discount Awaits!</h1>
+              <h1 style="margin:0; font-size:32px; font-weight:600; color:#FFFFFF; font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; letter-spacing:0.5px;">${discountEnabled && promoCode ? 'Your Exclusive Discount Awaits!' : 'Welcome to LashDiary!'}</h1>
               <p style="margin:12px 0 0 0; font-size:18px; color:#FFFFFF; opacity:0.95;">We're so excited to have you, ${name}!</p>
             </td>
           </tr>
@@ -149,6 +155,7 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
                 Thank you for joining our newsletter! I'm so excited to share my latest lash looks, special offers, and beauty tips with you.
               </p>
 
+              ${discountEnabled && promoCode ? `
               <!-- Promo Code Box -->
               <div style="background: linear-gradient(135deg, ${accent} 0%, #F9EDE3 100%); border:2px dashed ${brand}; border-radius:20px; padding:32px 24px; text-align:center; margin:32px 0;">
                 <p style="margin:0 0 12px 0; font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:${textSecondary};">
@@ -159,7 +166,7 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
                     Get ${discountPercentage}% OFF
                   </p>
                   <p style="margin:0; font-size:16px; color:${textSecondary};">
-                    👁️ Your First Lash Appointment
+                    Your First Lash Appointment
                   </p>
                 </div>
                 <div style="background:${card}; border-radius:12px; padding:20px; margin:20px 0; border:2px solid ${brand};">
@@ -177,6 +184,16 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
                   ⏰ This code will be effective for 40 days after you join The LashDiary.
                 </p>
               </div>
+              ` : `
+              <div style="background:${accent}; border-radius:20px; padding:28px 24px; text-align:center; margin:32px 0;">
+                <p style="margin:0; font-size:20px; font-weight:600; color:${textPrimary};">
+                  You are on the list
+                </p>
+                <p style="margin:10px 0 0 0; font-size:15px; color:${textSecondary}; line-height:1.6;">
+                  We will send occasional updates about new services, openings, and studio news.
+                </p>
+              </div>
+              `}
 
               <!-- CTA Button -->
               <div style="text-align:center; margin:32px 0;">
@@ -232,8 +249,15 @@ async function createWelcomeEmailTemplate(data: { name: string; promoCode: strin
   `.trim()
 }
 
-export async function sendWelcomeEmail(data: { email: string; name: string; promoCode: string; unsubscribeToken: string; discountPercentage: number }) {
-  const { email, name, promoCode, unsubscribeToken, discountPercentage } = data
+export async function sendWelcomeEmail(data: {
+  email: string
+  name: string
+  promoCode?: string
+  unsubscribeToken: string
+  discountPercentage: number
+  discountEnabled?: boolean
+}) {
+  const { email, name, promoCode, unsubscribeToken, discountPercentage, discountEnabled = true } = data
 
   if (!zohoTransporter) {
     console.warn('Email transporter not configured. Skipping welcome email.')
@@ -271,7 +295,7 @@ export async function sendWelcomeEmail(data: { email: string; name: string; prom
     ]
   }
 
-  const html = await createWelcomeEmailTemplate({ name, promoCode, unsubscribeToken, discountPercentage })
+  const html = await createWelcomeEmailTemplate({ name, promoCode, unsubscribeToken, discountPercentage, discountEnabled })
   
   // Generate plain text features section
   const featuresText = homepageFeatures.map((feature, index) => 
@@ -282,20 +306,21 @@ export async function sendWelcomeEmail(data: { email: string; name: string; prom
     const info = await zohoTransporter.sendMail({
       from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
       to: email,
-      subject: 'Welcome! Your Exclusive Discount Code Awaits',
+      subject: discountEnabled && promoCode ? 'Welcome! Your Exclusive Discount Code Awaits' : 'Welcome to LashDiary',
       html,
       text: `
 Welcome to LashDiary, ${name}!
 
 Thank you for joining our newsletter! We're so excited to have you.
 
-Your Exclusive Discount:
+${discountEnabled && promoCode ? `Your Exclusive Discount:
 Get ${discountPercentage}% OFF your first lash appointment!
 
 Use Code: ${promoCode}
 
 Valid for first-time clients only. One use per customer.
-⏰ This code will be effective for 40 days after you join The LashDiary.
+This code will be effective for 40 days after you join The LashDiary.` : `You are subscribed to LashDiary updates.
+We will send occasional updates about new services, openings, and studio news.`}
 
 Book your appointment now: ${BASE_URL}/booking
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { loadModelApplicationSettings } from '@/lib/model-application-settings'
 import nodemailer from 'nodemailer'
 
 const EMAIL_FROM_NAME = 'The LashDiary'
@@ -52,21 +53,65 @@ export async function POST(request: NextRequest) {
     const hasAppointmentBefore = formData.get('hasAppointmentBefore') as string || ''
     const allergies = formData.get('allergies') as string || ''
     const comfortableLongSessions = formData.get('comfortableLongSessions') as string || ''
+    const customAnswersRaw = formData.get('customAnswers') as string || '{}'
+    const modelQuestionsRaw = formData.get('modelQuestions') as string || '[]'
+    const settings = await loadModelApplicationSettings()
+    let customAnswers: Record<string, string | string[]> = {}
+    let modelQuestionsSnapshot = settings.questions
+
+    try {
+      const parsedAnswers = JSON.parse(customAnswersRaw)
+      if (parsedAnswers && typeof parsedAnswers === 'object' && !Array.isArray(parsedAnswers)) {
+        customAnswers = parsedAnswers
+      }
+    } catch {
+      customAnswers = {}
+    }
+
+    try {
+      const parsedQuestions = JSON.parse(modelQuestionsRaw)
+      if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
+        modelQuestionsSnapshot = parsedQuestions
+      }
+    } catch {
+      modelQuestionsSnapshot = settings.questions
+    }
 
     // Validate required fields
-    if (!firstName || !email || !phone || !availability) {
+    if (!firstName || !email || !phone) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Validate lash experience questions
-    if (!hasLashExtensions || !hasAppointmentBefore || !comfortableLongSessions) {
+    const missingRequiredQuestion = settings.questions.some((question) => {
+      if (!question.required) return false
+      const answer = customAnswers[question.id]
+      if (Array.isArray(answer)) return answer.length === 0
+      return typeof answer !== 'string' || answer.trim().length === 0
+    })
+
+    // Validate configured model application questions
+    if (missingRequiredQuestion) {
       return NextResponse.json(
-        { error: 'Please answer all lash experience questions' },
+        { error: 'Please answer all required model application questions' },
         { status: 400 }
       )
+    }
+
+    const answerDisplayRows = settings.questions
+      .map((question) => {
+        const answer = customAnswers[question.id]
+        const display = Array.isArray(answer) ? answer.join(', ') : answer || 'Not specified'
+        return { label: question.label, answer: display }
+      })
+      .filter((row) => row.answer && row.answer !== 'Not specified')
+
+    const answerByLabel = (fallbackId: string, fallbackValue: string) => {
+      const answer = customAnswers[fallbackId]
+      if (Array.isArray(answer)) return answer.join(', ') || fallbackValue
+      return answer || fallbackValue
     }
 
     // Get location from contact settings
@@ -81,11 +126,13 @@ export async function POST(request: NextRequest) {
       email,
       phone,
       instagram,
-      availability,
-      hasLashExtensions,
-      hasAppointmentBefore,
-      allergies,
-      comfortableLongSessions,
+      availability: answerByLabel('availability', availability),
+      hasLashExtensions: answerByLabel('hasLashExtensions', hasLashExtensions),
+      hasAppointmentBefore: answerByLabel('hasAppointmentBefore', hasAppointmentBefore),
+      allergies: answerByLabel('allergies', allergies),
+      comfortableLongSessions: answerByLabel('comfortableLongSessions', comfortableLongSessions),
+      customAnswers,
+      modelQuestions: modelQuestionsSnapshot,
       submittedAt: new Date().toISOString(),
       status: 'pending' as 'pending' | 'selected' | 'rejected',
     }
@@ -172,33 +219,14 @@ export async function POST(request: NextRequest) {
                   </td>
                 </tr>
                 ` : ''}
+                ${answerDisplayRows.map((row) => `
                 <tr>
                   <td style="padding:8px 0; border-bottom:1px solid #E8D5C4;">
-                    <strong style="color:#7C4B31;">Availability:</strong><br>
-                    <span style="color:#7C4B31; white-space:pre-wrap;">${availability}</span>
+                    <strong style="color:#7C4B31;">${row.label}:</strong><br>
+                    <span style="color:#7C4B31; white-space:pre-wrap;">${row.answer}</span>
                   </td>
                 </tr>
-                <tr>
-                  <td style="padding:8px 0; border-bottom:1px solid #E8D5C4;">
-                    <strong style="color:#7C4B31;">Has had lash extensions before:</strong> ${hasLashExtensions || 'Not specified'}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0; border-bottom:1px solid #E8D5C4;">
-                    <strong style="color:#7C4B31;">Has been a client at LashDiary before:</strong> ${hasAppointmentBefore || 'Not specified'}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0; border-bottom:1px solid #E8D5C4;">
-                    <strong style="color:#7C4B31;">Allergies/Sensitivities:</strong><br>
-                    <span style="color:#7C4B31; white-space:pre-wrap;">${allergies || 'None specified'}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 0;">
-                    <strong style="color:#7C4B31;">Comfortable with long sessions (3-4 hours):</strong> ${comfortableLongSessions || 'Not specified'}
-                  </td>
-                </tr>
+                `).join('')}
               </table>
 
             </td>

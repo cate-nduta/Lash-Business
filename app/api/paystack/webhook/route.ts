@@ -938,7 +938,7 @@ async function handleLabsWebServicesPayment(transaction: any, metadata: any) {
                 // Try parsing label format (e.g., "9:30 AM", "09:30 AM", "9:30AM")
                 const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
                 if (match) {
-                  let hour = parseInt(match[1], 10)
+                  const hour = parseInt(match[1], 10)
                   const minute = match[2]
                   const ampm = match[3]?.toLowerCase() || 'am'
                   return `${hour}:${minute} ${ampm}`

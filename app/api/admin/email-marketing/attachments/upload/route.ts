@@ -26,23 +26,32 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'email-attachments')
-    await mkdir(uploadsDir, { recursive: true })
-
     const extension = file.name.split('.').pop() || 'bin'
     const fileName = `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
     const filePath = path.join(uploadsDir, fileName)
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    await writeFile(filePath, buffer)
+    const contentBase64 = buffer.toString('base64')
+    let url = ''
+
+    try {
+      await mkdir(uploadsDir, { recursive: true })
+      await writeFile(filePath, buffer)
+      url = `/uploads/email-attachments/${fileName}`
+    } catch (writeError) {
+      console.warn('Could not persist email attachment to public uploads; using inline attachment data.', writeError)
+      url = `inline://${fileName}`
+    }
 
     return NextResponse.json({
       success: true,
       attachment: {
         name: file.name,
-        url: `/uploads/email-attachments/${fileName}`,
+        url,
         type: file.type,
         size: file.size,
+        contentBase64,
       },
     })
   } catch (error: any) {
