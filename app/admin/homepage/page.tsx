@@ -613,6 +613,7 @@ export default function AdminHomepage() {
 
       const response = await fetch('/api/upload/studio', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       })
 
@@ -647,6 +648,7 @@ export default function AdminHomepage() {
 
       const response = await fetch('/api/upload/studio', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       })
 
@@ -756,6 +758,7 @@ export default function AdminHomepage() {
 
       const response = await fetch('/api/upload/studio', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       })
 
