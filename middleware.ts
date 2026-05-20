@@ -4,7 +4,7 @@ import {
   ADMIN_LAST_ACTIVE_COOKIE,
   ADMIN_SESSION_MAX_IDLE_MS,
   ADMIN_USER_COOKIE,
-} from '@/lib/admin-auth'
+} from '@/lib/admin-auth-constants'
 
 const SECURITY_HEADERS: Record<string, string> = {
   'X-DNS-Prefetch-Control': 'off',

@@ -13,6 +13,13 @@ interface HomepageData {
     highlight?: string
     badge?: string
     mobileServiceNote?: string
+    desktopImage?: string
+    mobileImage?: string
+    imageAlt?: string
+    imageOverlayOpacity?: number
+    hideTextOnImage?: boolean
+    buttonPosition?: 'center' | 'bottom-center' | 'bottom-left' | 'bottom-right'
+    imageVersion?: number
     buttons?: Array<{
       text: string
       url: string
@@ -315,6 +322,40 @@ export default function Home() {
         highlight: '',
         badge: '',
       }
+  const heroDesktopImageRaw = hero.desktopImage || hero.mobileImage || ''
+  const heroMobileImageRaw = hero.mobileImage || hero.desktopImage || ''
+  const heroImageVersion = Number(hero.imageVersion || 0)
+  const addHeroImageVersion = (src: string) => {
+    if (!src || !heroImageVersion) return src
+    return `${src}${src.includes('?') ? '&' : '?'}v=${heroImageVersion}`
+  }
+  const heroDesktopImage = addHeroImageVersion(heroDesktopImageRaw)
+  const heroMobileImage = addHeroImageVersion(heroMobileImageRaw)
+  const heroDesktopImageIsSvg = heroDesktopImageRaw.toLowerCase().endsWith('.svg')
+  const heroMobileImageIsSvg = heroMobileImageRaw.toLowerCase().endsWith('.svg')
+  const hasHeroImage = Boolean(heroDesktopImageRaw || heroMobileImageRaw)
+  const heroOverlayOpacity = Math.min(70, Math.max(0, Number(hero.imageOverlayOpacity ?? 35))) / 100
+  const showHeroText = !hasHeroImage || hero.hideTextOnImage !== true
+  const heroButtonPosition = hero.buttonPosition ?? 'center'
+  const heroContentPositionClass = hasHeroImage && hero.hideTextOnImage === true
+    ? {
+        center: 'relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto',
+        'bottom-center': 'absolute z-10 inset-x-0 bottom-16 w-full max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8',
+        'bottom-left': 'absolute z-10 left-0 bottom-16 w-full max-w-4xl text-left px-4 sm:px-8 lg:px-12',
+        'bottom-right': 'absolute z-10 right-0 bottom-16 w-full max-w-4xl text-right px-4 sm:px-8 lg:px-12',
+      }[heroButtonPosition]
+    : 'relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto'
+  const heroButtonWrapperClass = heroButtonPosition === 'bottom-left'
+    ? 'flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-start gap-3 sm:gap-4 px-4 sm:px-0'
+    : heroButtonPosition === 'bottom-right'
+    ? 'flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-end gap-3 sm:gap-4 px-4 sm:px-0'
+    : 'flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4'
+  const lockHeroButtonMotion = hasHeroImage && hero.hideTextOnImage === true
+  const heroContentVisibilityClass = lockHeroButtonMotion
+    ? ''
+    : heroInView
+    ? 'animate-fade-in-up'
+    : 'opacity-0'
 
 
   // Memoize computed values for performance
@@ -482,49 +523,87 @@ export default function Home() {
       {/* Hero Section */}
       <section
         ref={heroRef}
-        className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[var(--color-background)] via-[color-mix(in srgb,var(--color-background) 70%,var(--color-surface) 30%)] to-[var(--color-surface)]"
+        className="relative min-h-[90svh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[var(--color-background)] via-[color-mix(in srgb,var(--color-background) 70%,var(--color-surface) 30%)] to-[var(--color-surface)]"
       >
+        {hasHeroImage && (
+          <div className="absolute inset-0">
+            {heroMobileImage && (
+              <Image
+                src={heroMobileImage}
+                alt={hero.imageAlt || 'LashDiary lash extensions'}
+                fill
+                priority
+                quality={90}
+                sizes="100vw"
+                unoptimized={heroMobileImageIsSvg}
+                className="object-cover md:hidden"
+              />
+            )}
+            {heroDesktopImage && (
+              <Image
+                src={heroDesktopImage}
+                alt={hero.imageAlt || 'LashDiary lash extensions'}
+                fill
+                priority
+                quality={90}
+                sizes="100vw"
+                unoptimized={heroDesktopImageIsSvg}
+                className="hidden object-cover md:block"
+              />
+            )}
+            <div
+              className="absolute inset-0 bg-black"
+              style={{ opacity: heroOverlayOpacity }}
+            />
+          </div>
+        )}
         <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              backgroundImage: 'radial-gradient(60% 60% at 20% 30%, rgba(255,255,255,0.35) 0%, transparent 65%), radial-gradient(70% 70% at 80% 20%, rgba(255,255,255,0.18) 0%, transparent 60%)',
-            }}
-          />
-          <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[color-mix(in srgb,var(--color-background) 90%, transparent 10%)] to-transparent" />
+          {!hasHeroImage && (
+            <>
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                  backgroundImage: 'radial-gradient(60% 60% at 20% 30%, rgba(255,255,255,0.35) 0%, transparent 65%), radial-gradient(70% 70% at 80% 20%, rgba(255,255,255,0.18) 0%, transparent 60%)',
+                }}
+              />
+              <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[color-mix(in srgb,var(--color-background) 90%, transparent 10%)] to-transparent" />
+            </>
+          )}
           
           {/* Cartoon Stickers */}
-          <div className="cartoon-sticker top-20 left-10 animate-float-sticker opacity-60 hidden md:block" style={{ animationDelay: '0s' }}>
-            <div className="sticker-lash"></div>
-          </div>
-          <div className="cartoon-sticker top-32 right-16 animate-float-sticker opacity-50 hidden lg:block" style={{ animationDelay: '1s' }}>
-            <div className="sticker-star"></div>
-          </div>
-          <div className="cartoon-sticker bottom-40 left-20 animate-float-sticker opacity-40 hidden md:block" style={{ animationDelay: '2s' }}>
-            <div className="sticker-heart"></div>
-          </div>
-          <div className="cartoon-sticker top-1/2 right-12 animate-float-sticker opacity-50 hidden xl:block" style={{ animationDelay: '1.5s' }}>
-            <div className="sticker-sparkle animate-rotate-slow"></div>
-          </div>
+          {!hasHeroImage && (
+            <>
+              <div className="cartoon-sticker top-20 left-10 animate-float-sticker opacity-60 hidden md:block" style={{ animationDelay: '0s' }}>
+                <div className="sticker-lash"></div>
+              </div>
+              <div className="cartoon-sticker top-32 right-16 animate-float-sticker opacity-50 hidden lg:block" style={{ animationDelay: '1s' }}>
+                <div className="sticker-star"></div>
+              </div>
+              <div className="cartoon-sticker bottom-40 left-20 animate-float-sticker opacity-40 hidden md:block" style={{ animationDelay: '2s' }}>
+                <div className="sticker-heart"></div>
+              </div>
+              <div className="cartoon-sticker top-1/2 right-12 animate-float-sticker opacity-50 hidden xl:block" style={{ animationDelay: '1.5s' }}>
+                <div className="sticker-sparkle animate-rotate-slow"></div>
+              </div>
+            </>
+          )}
         </div>
 
         <div
-          className={`relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto ${
-            heroInView ? 'animate-fade-in-up' : 'opacity-0'
-          }`}
+          className={`${heroContentPositionClass} ${heroContentVisibilityClass}`}
         >
-          {hero.badge && (
+          {showHeroText && hero.badge && (
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30 backdrop-blur-md text-sm font-medium text-[var(--color-text)] mb-6">
               <span className="inline-block w-2 h-2 rounded-full bg-[var(--color-primary)]" />
               {hero.badge}
             </div>
           )}
-          {hero.title && (
+          {showHeroText && hero.title && (
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-[var(--color-text)] mb-4 drop-shadow-lg animate-title">
               {hero.title}
             </h1>
           )}
-          {hero.subtitle && (
+          {showHeroText && hero.subtitle && (
             <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[var(--color-text)]/80 mb-6 drop-shadow-md px-2">
               {hero.subtitle}
             </p>
@@ -582,7 +661,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          {hero.highlight && (
+          {showHeroText && hero.highlight && (
             <div
               className={`mb-8 inline-flex flex-wrap items-center justify-center gap-2 bg-[var(--color-surface)]/60 backdrop-blur-lg border border-[var(--color-primary)]/30 rounded-full px-6 py-3 shadow-lg ${
                 countdownBanner?.enabled && countdownBanner.eventDate ? 'mt-6' : ''
@@ -594,13 +673,13 @@ export default function Home() {
             </div>
           )}
           {hero.buttons && hero.buttons.length > 0 ? (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
+            <div className={heroButtonWrapperClass}>
               {hero.buttons.map((button, index) => {
                 const isPrimary = button.primary !== false && index === 0
                 const isExternal = button.external === true
                 const buttonClassName = isPrimary
-                  ? "btn-fun btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
-                  : "btn-fun hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
+                  ? `${lockHeroButtonMotion ? '' : 'btn-fun btn-cute hover-lift'} inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group`
+                  : `${lockHeroButtonMotion ? '' : 'btn-fun hover-lift hover-sparkle'} inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative`
                 
                 if (isExternal) {
                   return (
@@ -638,10 +717,10 @@ export default function Home() {
               })}
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 px-4">
+            <div className={heroButtonWrapperClass}>
               <Link
                 href="/booking"
-                className="btn-fun btn-cute hover-lift inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group"
+                className={`${lockHeroButtonMotion ? '' : 'btn-fun btn-cute hover-lift'} inline-flex items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[var(--color-on-primary)] font-semibold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl border border-[var(--color-primary)]/20 w-full sm:w-auto touch-manipulation relative overflow-hidden group`}
               >
                 <span className="relative z-10 flex items-center gap-2">
                   Book Now
@@ -650,7 +729,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/gallery"
-                className="btn-fun hover-lift hover-sparkle inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative"
+                className={`${lockHeroButtonMotion ? '' : 'btn-fun hover-lift hover-sparkle'} inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative`}
               >
                 <span className="relative z-10">View Gallery</span>
               </Link>

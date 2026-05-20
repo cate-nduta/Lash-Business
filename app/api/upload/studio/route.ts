@@ -19,10 +19,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Invalid file type. Please upload a JPEG, PNG, WebP, or GIF image.' },
+        { error: 'Invalid file type. Please upload a JPEG, PNG, WebP, GIF, or SVG image.' },
         { status: 400 }
       )
     }
@@ -48,19 +48,38 @@ export async function POST(request: NextRequest) {
     const filename = `${timestamp}-${originalName}`
     const filepath = join(uploadDir, filename)
 
-    // Convert file to buffer and save
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+
+    if (file.type === 'image/svg+xml') {
+      const svgText = buffer.toString('utf8')
+      const unsafeSvgPattern = /<script|on\w+\s*=|javascript:|<foreignObject/i
+      if (unsafeSvgPattern.test(svgText)) {
+        return NextResponse.json(
+          { error: 'This SVG contains unsupported interactive code. Please export a clean/static SVG from Canva.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Convert file to buffer and save
     await writeFile(filepath, buffer)
 
     // Return the public URL path
     const publicUrl = `/uploads/studio/${filename}`
 
-    return NextResponse.json({
-      success: true,
-      url: publicUrl,
-      filename: filename,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        url: publicUrl,
+        filename: filename,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      }
+    )
   } catch (error) {
     console.error('Error uploading file:', error)
     return NextResponse.json(

@@ -14,6 +14,13 @@ interface HomepageData {
     highlight?: string
     badge?: string
     mobileServiceNote?: string
+    desktopImage?: string
+    mobileImage?: string
+    imageAlt?: string
+    imageOverlayOpacity?: number
+    hideTextOnImage?: boolean
+    buttonPosition?: 'center' | 'bottom-center' | 'bottom-left' | 'bottom-right'
+    imageVersion?: number
     buttons?: Array<{
       text: string
       url: string
@@ -144,7 +151,7 @@ const createDefaultCountdownBanner = () => ({
 
 export default function AdminHomepage() {
   const [homepage, setHomepage] = useState<HomepageData>({
-    hero: { title: '', subtitle: '', highlight: '', badge: '', buttons: [] },
+    hero: { title: '', subtitle: '', highlight: '', badge: '', desktopImage: '', mobileImage: '', imageAlt: '', imageOverlayOpacity: 35, hideTextOnImage: false, buttonPosition: 'center', imageVersion: 0, buttons: [] },
     intro: { title: '', paragraph1: '', paragraph2: '', features: '' },
     features: [],
     meetArtist: {
@@ -201,6 +208,7 @@ export default function AdminHomepage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [uploadingImages, setUploadingImages] = useState<Record<number, boolean>>({})
+  const [uploadingHeroImage, setUploadingHeroImage] = useState<'desktop' | 'mobile' | null>(null)
   const [uploadingArtistPhoto, setUploadingArtistPhoto] = useState(false)
   const [uploadingMassageBackground, setUploadingMassageBackground] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
@@ -266,6 +274,13 @@ export default function AdminHomepage() {
           ...data.hero,
           highlight: data.hero?.highlight ?? data.hero?.mobileServiceNote ?? '',
           badge: data.hero?.badge ?? data.hero?.mobileServiceNote ?? '',
+          desktopImage: data.hero?.desktopImage ?? '',
+          mobileImage: data.hero?.mobileImage ?? '',
+          imageAlt: data.hero?.imageAlt ?? 'LashDiary lash extensions',
+          imageOverlayOpacity: Number(data.hero?.imageOverlayOpacity ?? 35),
+          hideTextOnImage: Boolean(data.hero?.hideTextOnImage),
+          buttonPosition: data.hero?.buttonPosition ?? 'center',
+          imageVersion: Number(data.hero?.imageVersion ?? 0),
           buttons: Array.isArray(data.hero?.buttons) ? data.hero.buttons : [],
         }
         const normalizedHomepage: HomepageData = {
@@ -621,6 +636,48 @@ export default function AdminHomepage() {
     }
   }
 
+  const handleHeroImageUpload = async (kind: 'desktop' | 'mobile', file: File) => {
+    if (!file) return
+
+    setUploadingHeroImage(kind)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload/studio', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to upload hero image')
+      }
+
+      setHomepage((prev) => ({
+        ...prev,
+        hero: {
+          ...prev.hero,
+          [kind === 'desktop' ? 'desktopImage' : 'mobileImage']: data.url,
+          imageAlt: prev.hero.imageAlt || 'LashDiary lash extensions',
+          hideTextOnImage: true,
+          imageVersion: Date.now(),
+        },
+      }))
+      setMessage({ type: 'success', text: `${kind === 'desktop' ? 'Desktop' : 'Mobile'} hero image uploaded successfully! Remember to save your changes.` })
+    } catch (error) {
+      console.error('Error uploading hero image:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to upload hero image',
+      })
+    } finally {
+      setUploadingHeroImage(null)
+    }
+  }
+
   const handleArtistPhotoSelect = (file: File) => {
     if (!file) return
     
@@ -880,6 +937,154 @@ export default function AdminHomepage() {
                   </p>
                 </div>
               )}
+              <div className="rounded-xl border-2 border-brown-light bg-pink-light/20 p-4 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-brown-dark">Canva Hero Image</h3>
+                  <p className="text-sm text-brown-dark/75 mt-1">
+                    Upload your full-width Canva design for the top of the homepage. Recommended sizes:
+                    desktop 1920 x 1080 px, mobile 1080 x 1920 px. SVG, JPG, or WebP are supported.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Desktop hero image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/svg+xml,.svg"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleHeroImageUpload('desktop', file)
+                        e.currentTarget.value = ''
+                      }}
+                      disabled={uploadingHeroImage !== null}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm"
+                    />
+                    <p className="text-xs text-brown mt-1">
+                      {uploadingHeroImage === 'desktop' ? 'Uploading...' : 'Best size: 1920 x 1080 px, or SVG from Canva.'}
+                    </p>
+                    {homepage.hero.desktopImage && (
+                      <div className="mt-3 overflow-hidden rounded-lg border border-brown-light bg-white">
+                        <img src={homepage.hero.desktopImage} alt="" className="h-28 w-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Mobile hero image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/svg+xml,.svg"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleHeroImageUpload('mobile', file)
+                        e.currentTarget.value = ''
+                      }}
+                      disabled={uploadingHeroImage !== null}
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown text-sm"
+                    />
+                    <p className="text-xs text-brown mt-1">
+                      {uploadingHeroImage === 'mobile' ? 'Uploading...' : 'Best size: 1080 x 1920 px, or SVG from Canva. Optional, but recommended.'}
+                    </p>
+                    {homepage.hero.mobileImage && (
+                      <div className="mt-3 overflow-hidden rounded-lg border border-brown-light bg-white">
+                        <img src={homepage.hero.mobileImage} alt="" className="h-28 w-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">Image alt text</label>
+                    <input
+                      type="text"
+                      value={homepage.hero.imageAlt ?? ''}
+                      onChange={(e) => setHomepage({ ...homepage, hero: { ...homepage.hero, imageAlt: e.target.value } })}
+                      placeholder="LashDiary lash extensions"
+                      className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brown-dark mb-2">
+                      Dim overlay: {homepage.hero.imageOverlayOpacity ?? 35}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="70"
+                      value={homepage.hero.imageOverlayOpacity ?? 35}
+                      onChange={(e) =>
+                        setHomepage({
+                          ...homepage,
+                          hero: { ...homepage.hero, imageOverlayOpacity: Number(e.target.value) },
+                        })
+                      }
+                      className="w-full accent-brown-dark"
+                    />
+                    <p className="text-xs text-brown mt-1">
+                      Use this if the real website button needs more contrast over the design.
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-brown-dark mb-2">Booking button position</label>
+                  <select
+                    value={homepage.hero.buttonPosition ?? 'center'}
+                    onChange={(e) =>
+                      setHomepage({
+                        ...homepage,
+                        hero: {
+                          ...homepage.hero,
+                          buttonPosition: e.target.value as 'center' | 'bottom-center' | 'bottom-left' | 'bottom-right',
+                        },
+                      })
+                    }
+                    className="w-full px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  >
+                    <option value="center">Center</option>
+                    <option value="bottom-center">Bottom center</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
+                  </select>
+                  <p className="text-xs text-brown mt-1">
+                    This controls where the real clickable homepage buttons sit over your Canva design.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={homepage.hero.hideTextOnImage === true}
+                    onChange={(e) =>
+                      setHomepage({ ...homepage, hero: { ...homepage.hero, hideTextOnImage: e.target.checked } })
+                    }
+                    className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                  />
+                  <span className="text-sm font-medium text-brown-dark">
+                    Hide website text over the Canva image, but keep the real clickable buttons
+                  </span>
+                </label>
+                {(homepage.hero.desktopImage || homepage.hero.mobileImage) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHomepage({
+                        ...homepage,
+                        hero: {
+                          ...homepage.hero,
+                          desktopImage: '',
+                          mobileImage: '',
+                          hideTextOnImage: false,
+                        },
+                      })
+                    }
+                    className="text-sm font-medium text-red-700 hover:text-red-900"
+                  >
+                    Remove Canva hero images
+                  </button>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-brown-dark mb-2">Title</label>
                 <input

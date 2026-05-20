@@ -1,9 +1,11 @@
 import { cookies } from 'next/headers'
-
-export const ADMIN_AUTH_COOKIE = 'admin-auth'
-export const ADMIN_USER_COOKIE = 'admin-user'
-export const ADMIN_LAST_ACTIVE_COOKIE = 'admin-last-active'
-export const ADMIN_SESSION_MAX_IDLE_MS = 1000 * 60 * 60 * 2 // 2 hours
+export {
+  ADMIN_AUTH_COOKIE,
+  ADMIN_LAST_ACTIVE_COOKIE,
+  ADMIN_SESSION_MAX_IDLE_MS,
+  ADMIN_USER_COOKIE,
+} from './admin-auth-constants'
+import { ADMIN_AUTH_COOKIE, ADMIN_LAST_ACTIVE_COOKIE, ADMIN_SESSION_MAX_IDLE_MS, ADMIN_USER_COOKIE } from './admin-auth-constants'
 
 type AdminUser = { username: string; role: string; canManageAdmins: boolean }
 
