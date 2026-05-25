@@ -6,6 +6,12 @@ import { sendEmailNotification } from '@/app/api/booking/email/utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
 import { redeemGiftCard } from '@/lib/gift-card-utils'
+import {
+  getBookingDurationMinutes,
+  hasAppointmentConflict,
+  loadBookingBusyIntervals,
+  loadModelApplicationBusyIntervals,
+} from '@/lib/model-application-settings'
 import { randomBytes } from 'crypto'
 import { type ClientData, type ClientUsersData, type LashHistory } from '@/types/client'
 
@@ -57,7 +63,19 @@ export async function POST(request: NextRequest) {
     const createdAt = new Date().toISOString()
     const salonCommissionSettings = await getSalonCommissionSettings()
     const startTime = new Date(bookingData.timeSlot)
+    const durationMinutes = getBookingDurationMinutes(bookingData)
     const cancellationCutoff = new Date(startTime.getTime() - CLIENT_MANAGE_WINDOW_HOURS * 60 * 60 * 1000)
+
+    const [bookingBusyIntervals, modelBusyIntervals] = await Promise.all([
+      loadBookingBusyIntervals({ excludeBookingReference: bookingReference }),
+      loadModelApplicationBusyIntervals(),
+    ])
+    if (hasAppointmentConflict(startTime, durationMinutes, [...bookingBusyIntervals, ...modelBusyIntervals])) {
+      return NextResponse.json(
+        { error: 'This time slot overlaps with an existing booking or model appointment. Please select another time.' },
+        { status: 409 }
+      )
+    }
 
     // Create calendar event if configured
     let eventId = null
@@ -65,7 +83,7 @@ export async function POST(request: NextRequest) {
       const calendar = await getCalendarClientWithWrite()
       if (calendar) {
         const endTime = new Date(startTime)
-        endTime.setHours(endTime.getHours() + (bookingData.totalDuration || 2))
+        endTime.setMinutes(endTime.getMinutes() + durationMinutes)
 
         const event = {
           summary: `Lash Appointment - ${bookingData.name}`,
@@ -144,6 +162,8 @@ export async function POST(request: NextRequest) {
       service: bookingData.service,
       services: bookingData.services || [],
       serviceDetails: bookingData.serviceDetails || null,
+      totalDuration: bookingData.totalDuration ?? durationMinutes / 60,
+      totalDurationMinutes: durationMinutes,
       date: bookingData.date,
       timeSlot: bookingData.timeSlot,
       location: bookingData.location || STUDIO_LOCATION,

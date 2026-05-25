@@ -13,17 +13,60 @@ interface ModelApplicationQuestion {
   options: string[]
 }
 
+interface ModelConsentItem {
+  id: string
+  label: string
+}
+
 const DEFAULT_MODEL_QUESTIONS: ModelApplicationQuestion[] = [
-  { id: 'availability', label: 'Availability (Afternoon)', type: 'multiple', required: true, options: ['Monday (afternoon)', 'Tuesday (afternoon)', 'Wednesday (afternoon)', 'Thursday (afternoon)', 'Friday (afternoon)'] },
+  { id: 'availability', label: 'Choose one available model slot', type: 'single', required: true, options: [] },
   { id: 'hasLashExtensions', label: 'Have you had lash extensions before?', type: 'single', required: true, options: ['Yes', 'No'] },
   { id: 'hasAppointmentBefore', label: 'Have you been a client at LashDiary before?', type: 'single', required: true, options: ['Yes', 'No'] },
   { id: 'allergies', label: 'Do you have any known allergies, sensitivities or eye conditions?', type: 'text', required: false, options: [] },
   { id: 'comfortableLongSessions', label: 'Are you comfortable with long sessions? (3-4 hours)', type: 'single', required: true, options: ['Yes', 'No'] },
 ]
 
+const DEFAULT_CONSENT_ITEMS: ModelConsentItem[] = [
+  { id: 'freeModelSet', label: 'I understand this is a free model set provided for training/content creation.' },
+  { id: 'longSessions', label: 'I understand the appointment may take up to 3-4 hours.' },
+  { id: 'photosVideos', label: 'I consent to photos/videos of my lashes being used for marketing purposes.' },
+  { id: 'noInfills', label: 'I understand infills are not included in this offer.' },
+  { id: 'onTime', label: 'I agree to arrive on time; late arrivals may forfeit the appointment.' },
+  { id: 'styleChoice', label: 'I understand the lash style will be chosen based on the model call needs.' },
+]
+
+const DEFAULT_INTRO_TEXT = `I'm currently building my lash portfolio and practicing new lash mapping techniques as part of my ongoing training. I'm offering a limited number of free lash sets to selected models in exchange for photos and videos of the final look.
+
+Because these sets involve practice and filming, the appointment may take longer than a regular session.
+
+Submitting this form does not guarantee a booking. Models will be selected based on availability and how many spots I have open for each model round.`
+
+const createConsentState = (items: ModelConsentItem[]) =>
+  items.reduce<Record<string, boolean>>((state, item) => {
+    state[item.id] = false
+    return state
+  }, {})
+
+const formatModelSlotLabel = (option: string) => {
+  const date = new Date(option)
+  if (Number.isNaN(date.getTime())) return option
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Africa/Nairobi',
+  }).format(date)
+}
+
 export default function ModelSignupPage() {
   const [modelSignupEnabled, setModelSignupEnabled] = useState<boolean | null>(null)
+  const [introText, setIntroText] = useState(DEFAULT_INTRO_TEXT)
   const [modelQuestions, setModelQuestions] = useState<ModelApplicationQuestion[]>(DEFAULT_MODEL_QUESTIONS)
+  const [reservedAvailabilityOptions, setReservedAvailabilityOptions] = useState<string[]>([])
+  const [consentItems, setConsentItems] = useState<ModelConsentItem[]>(DEFAULT_CONSENT_ITEMS)
   const [customAnswers, setCustomAnswers] = useState<Record<string, string | string[]>>({})
   const [formData, setFormData] = useState({
     firstName: '',
@@ -37,14 +80,7 @@ export default function ModelSignupPage() {
     allergies: '',
     comfortableLongSessions: '',
   })
-  const [consent, setConsent] = useState({
-    freeModelSet: false,
-    longSessions: false,
-    photosVideos: false,
-    noInfills: false,
-    onTime: false,
-    styleChoice: false,
-  })
+  const [consent, setConsent] = useState<Record<string, boolean>>(() => createConsentState(DEFAULT_CONSENT_ITEMS))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showSuccessModal, setShowSuccessModal] = useState(false)
@@ -64,8 +100,18 @@ export default function ModelSignupPage() {
         }
         if (questionsResponse.ok) {
           const settings = await questionsResponse.json()
+          if (typeof settings.introText === 'string' && settings.introText.trim()) {
+            setIntroText(settings.introText)
+          }
           if (Array.isArray(settings.questions) && settings.questions.length > 0) {
             setModelQuestions(settings.questions)
+          }
+          if (Array.isArray(settings.reservedAvailabilityOptions)) {
+            setReservedAvailabilityOptions(settings.reservedAvailabilityOptions)
+          }
+          if (Array.isArray(settings.consentItems) && settings.consentItems.length > 0) {
+            setConsentItems(settings.consentItems)
+            setConsent(createConsentState(settings.consentItems))
           }
         }
       } catch (error) {
@@ -81,7 +127,7 @@ export default function ModelSignupPage() {
     setFormData({ ...formData, [name]: value })
   }
 
-  const handleConsentChange = (field: keyof typeof consent) => {
+  const handleConsentChange = (field: string) => {
     setConsent({ ...consent, [field]: !consent[field] })
   }
 
@@ -97,6 +143,11 @@ export default function ModelSignupPage() {
 
       return { ...prev, [question.id]: optionOrValue }
     })
+  }
+
+  const getVisibleQuestionOptions = (question: ModelApplicationQuestion) => {
+    if (question.id !== 'availability') return question.options
+    return question.options.filter((option) => !reservedAvailabilityOptions.includes(option))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,7 +172,7 @@ export default function ModelSignupPage() {
     }
 
     // Validate all consent checkboxes
-    const allConsented = Object.values(consent).every(value => value === true)
+    const allConsented = consentItems.every((item) => consent[item.id] === true)
     if (!allConsented) {
       setError('Please check all consent boxes to proceed')
       return
@@ -148,6 +199,8 @@ export default function ModelSignupPage() {
       formDataToSend.append('comfortableLongSessions', answerString('comfortableLongSessions'))
       formDataToSend.append('customAnswers', JSON.stringify(customAnswers))
       formDataToSend.append('modelQuestions', JSON.stringify(modelQuestions))
+      formDataToSend.append('consentItems', JSON.stringify(consentItems))
+      formDataToSend.append('consentAccepted', JSON.stringify(consent))
 
       const response = await fetch('/api/model-application', {
         method: 'POST',
@@ -170,6 +223,9 @@ export default function ModelSignupPage() {
       setLoading(false)
     }
   }
+
+  const availabilityQuestion = modelQuestions.find((question) => question.id === 'availability')
+  const hasAvailableModelSlots = !availabilityQuestion || getVisibleQuestionOptions(availabilityQuestion).length > 0
 
   if (modelSignupEnabled === null) {
     return (
@@ -236,14 +292,7 @@ export default function ModelSignupPage() {
                     comfortableLongSessions: '',
                   })
                   setCustomAnswers({})
-                  setConsent({
-                    freeModelSet: false,
-                    longSessions: false,
-                    photosVideos: false,
-                    noInfills: false,
-                    onTime: false,
-                    styleChoice: false,
-                  })
+                  setConsent(createConsentState(consentItems))
                 }}
                 className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
               >
@@ -268,16 +317,14 @@ export default function ModelSignupPage() {
 
         {/* Description */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-brown/10 p-8 mb-8">
-          <p className="text-brown/80 leading-relaxed mb-4">
-            I'm currently building my lash portfolio and practicing new lash mapping techniques as part of my ongoing training. 
-            I'm offering a limited number of free lash sets to selected models in exchange for photos and videos of the final look.
-          </p>
-          <p className="text-brown/80 leading-relaxed mb-4">
-            Because these sets involve practice and filming, the appointment may take longer than a regular session.
-          </p>
-          <p className="text-brown/80 leading-relaxed">
-            Submitting this form does not guarantee a booking. Models will be selected based on availability and how many spots I have open for each model round.
-          </p>
+          {introText.split(/\n\s*\n/).map((paragraph, index, paragraphs) => (
+            <p
+              key={`${paragraph.slice(0, 20)}-${index}`}
+              className={`text-brown/80 leading-relaxed ${index < paragraphs.length - 1 ? 'mb-4' : ''}`}
+            >
+              {paragraph}
+            </p>
+          ))}
         </div>
 
         {/* Application Form */}
@@ -376,7 +423,10 @@ export default function ModelSignupPage() {
             {/* Model Application Questions */}
             <div className="space-y-4 border-t border-brown/20 pt-6">
               <h3 className="text-lg font-semibold text-brown-dark mb-4">Application Questions</h3>
-              {modelQuestions.map((question) => (
+              {modelQuestions.map((question) => {
+                const visibleOptions = getVisibleQuestionOptions(question)
+
+                return (
                 <div key={question.id}>
                   <label className="block text-sm font-medium text-brown-dark mb-2">
                     {question.label} {question.required && <span className="text-red-500">*</span>}
@@ -391,7 +441,11 @@ export default function ModelSignupPage() {
                     />
                   ) : (
                     <div className="space-y-2">
-                      {question.options.map((option) => (
+                      {visibleOptions.length === 0 && question.id === 'availability' ? (
+                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                          All current model slots have already been taken. Please check back when new slots are added.
+                        </p>
+                      ) : visibleOptions.map((option) => (
                         <label key={option} className="flex items-center cursor-pointer hover:bg-brown/5 p-2 rounded-lg transition-colors">
                           <input
                             type={question.type === 'multiple' ? 'checkbox' : 'radio'}
@@ -406,107 +460,48 @@ export default function ModelSignupPage() {
                             required={question.required && question.type === 'single' && !customAnswers[question.id]}
                             className="mr-3 w-4 h-4 text-brown-dark border-brown/30 focus:ring-brown/30"
                           />
-                          <span className="text-sm text-brown/80">{option}</span>
+                          <span className="text-sm text-brown/80">{formatModelSlotLabel(option)}</span>
                         </label>
                       ))}
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Consent & Agreement */}
             <div className="space-y-3 border-t border-brown/20 pt-6">
               <h3 className="text-lg font-semibold text-brown-dark mb-4">Consent & Agreement</h3>
               
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.freeModelSet}
-                  onChange={() => handleConsentChange('freeModelSet')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I understand this is a free model set provided for training/content creation.
-                </span>
-              </label>
-
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.longSessions}
-                  onChange={() => handleConsentChange('longSessions')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I understand the appointment may take up to 3–4 hours.
-                </span>
-              </label>
-
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.photosVideos}
-                  onChange={() => handleConsentChange('photosVideos')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I consent to photos/videos of my lashes being used for marketing purposes.
-                </span>
-              </label>
-
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.noInfills}
-                  onChange={() => handleConsentChange('noInfills')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I understand infills are not included in this offer.
-                </span>
-              </label>
-
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.onTime}
-                  onChange={() => handleConsentChange('onTime')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I agree to arrive on time; late arrivals may forfeit the appointment.
-                </span>
-              </label>
-
-              <label className="flex items-start">
-                <input
-                  type="checkbox"
-                  checked={consent.styleChoice}
-                  onChange={() => handleConsentChange('styleChoice')}
-                  className="mt-1 mr-3"
-                  required
-                />
-                <span className="text-sm text-brown/80">
-                  I understand the lash style will be chosen based on the model call needs.
-                </span>
-              </label>
+              {consentItems.map((item) => (
+                <label key={item.id} className="flex items-start">
+                  <input
+                    type="checkbox"
+                    checked={consent[item.id] === true}
+                    onChange={() => handleConsentChange(item.id)}
+                    className="mt-1 mr-3"
+                    required
+                  />
+                  <span className="text-sm text-brown/80">{item.label}</span>
+                </label>
+              ))}
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || !Object.values(consent).every(value => value === true)}
+              disabled={loading || !hasAvailableModelSlots || !consentItems.every((item) => consent[item.id] === true)}
               className="w-full bg-brown-dark hover:bg-brown text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
             >
               {loading ? 'Submitting...' : 'Apply Now'}
             </button>
-            {!Object.values(consent).every(value => value === true) && (
+            {!hasAvailableModelSlots && (
+              <p className="text-sm text-red-600 text-center mt-2">
+                All current model slots have already been taken.
+              </p>
+            )}
+            {!consentItems.every((item) => consent[item.id] === true) && (
               <p className="text-sm text-red-600 text-center mt-2">
                 Please check all consent boxes to proceed
               </p>

@@ -26,6 +26,12 @@ import {
   computeHomeVisitFeeKES,
   sumServiceDetailsSubtotalKES,
 } from '@/lib/home-visit-pricing'
+import {
+  hasAppointmentConflict,
+  loadBookingBusyIntervals,
+  loadModelApplicationBusyIntervals,
+  MODEL_APPOINTMENT_DURATION_MINUTES,
+} from '@/lib/model-application-settings'
 
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
@@ -539,17 +545,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate total duration from service details or use default
-    let totalDuration = 2 // Default 2 hours
+    // Calculate total duration from service details or use the shared 75-minute default
+    let totalDurationMinutes = MODEL_APPOINTMENT_DURATION_MINUTES
     if (Array.isArray(serviceDetails) && serviceDetails.length > 0) {
-      totalDuration = Math.ceil(serviceDetails.reduce((sum, s) => sum + (s.duration || 0), 0) / 60) // Convert minutes to hours
-    } else if (service) {
-      // Fallback: try to estimate from service name (legacy support)
-      totalDuration = 2
+      const serviceMinutes = serviceDetails.reduce((sum, serviceItem) => sum + (serviceItem.duration || 0), 0)
+      totalDurationMinutes = serviceMinutes > 0 ? serviceMinutes : MODEL_APPOINTMENT_DURATION_MINUTES
     }
+    const totalDuration = totalDurationMinutes / 60
     
     const endTime = new Date(startTime)
-    endTime.setHours(endTime.getHours() + totalDuration)
+    endTime.setMinutes(endTime.getMinutes() + totalDurationMinutes)
+
+    const [bookingBusyIntervals, modelBusyIntervals] = await Promise.all([
+      loadBookingBusyIntervals(),
+      loadModelApplicationBusyIntervals(),
+    ])
+    if (hasAppointmentConflict(startTime, totalDurationMinutes, [...bookingBusyIntervals, ...modelBusyIntervals])) {
+      return NextResponse.json(
+        { error: 'This time slot overlaps with an existing booking or model appointment. Please select another time.' },
+        { status: 409 }
+      )
+    }
 
     let eventId = null
 
@@ -782,6 +798,7 @@ export async function POST(request: NextRequest) {
         paymentOrderTrackingId: body.paymentOrderTrackingId || null,
         isFirstTimeClient: isFirstTimeClient === true,
         totalDuration,
+        totalDurationMinutes,
         isSalonReferral: body.isSalonReferral || false,
         promoCodeData: body.promoCodeData || null,
       }
@@ -857,6 +874,8 @@ export async function POST(request: NextRequest) {
         service: normalizedServices.length > 0 ? normalizedServices.join(' + ') : service || '',
         services: normalizedServices.length > 0 ? normalizedServices : service ? [service] : [],
         serviceDetails: Array.isArray(serviceDetails) ? serviceDetails : null,
+        totalDuration,
+        totalDurationMinutes,
         lastFullSetDate: typeof lastFullSetDate === 'string' ? lastFullSetDate : null,
         lastFullSetDaysSince: typeof daysSinceLastFullSet === 'number' ? daysSinceLastFullSet : null,
         date,

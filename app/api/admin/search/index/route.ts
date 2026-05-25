@@ -18,6 +18,118 @@ interface SearchItem {
   relevance?: number
 }
 
+type SearchableDataFile = {
+  file: string
+  panel: string
+  panelHref: string
+  label: string
+  category: SearchItem['category']
+}
+
+const searchableDataFiles: SearchableDataFile[] = [
+  { file: 'availability.json', panel: 'Availability & Hours', panelHref: '/admin/availability', label: 'Availability settings', category: 'setting' },
+  { file: 'blog.json', panel: 'Blog', panelHref: '/admin/blog', label: 'Blog content', category: 'feature' },
+  { file: 'bookings.json', panel: 'Bookings', panelHref: '/admin/bookings', label: 'Booking records', category: 'feature' },
+  { file: 'contact.json', panel: 'Contact Information', panelHref: '/admin/contact', label: 'Contact information', category: 'setting' },
+  { file: 'courses.json', panel: 'Courses', panelHref: '/admin/courses', label: 'Courses', category: 'feature' },
+  { file: 'discounts.json', panel: 'Discounts', panelHref: '/admin/discounts', label: 'Discount settings', category: 'setting' },
+  { file: 'email-campaigns.json', panel: 'Email Marketing', panelHref: '/admin/email-marketing', label: 'Email campaigns', category: 'feature' },
+  { file: 'email-subscribers.json', panel: 'Email Marketing', panelHref: '/admin/email-marketing', label: 'Email subscribers', category: 'feature' },
+  { file: 'expenses.json', panel: 'Expenses', panelHref: '/admin/expenses', label: 'Expenses', category: 'feature' },
+  { file: 'faq.json', panel: 'FAQ', panelHref: '/admin/faq', label: 'FAQ content', category: 'feature' },
+  { file: 'gallery.json', panel: 'Gallery Management', panelHref: '/admin/gallery', label: 'Gallery content', category: 'feature' },
+  { file: 'gift-cards.json', panel: 'Gift Cards', panelHref: '/admin/gift-cards', label: 'Gift cards', category: 'feature' },
+  { file: 'homepage.json', panel: 'Homepage Content', panelHref: '/admin/homepage', label: 'Homepage content', category: 'setting' },
+  { file: 'labs-settings.json', panel: 'LashDiary Labs', panelHref: '/admin/labs', label: 'Labs settings', category: 'setting' },
+  { file: 'model-application-settings.json', panel: 'Model Applications', panelHref: '/admin/models', label: 'Model application settings', category: 'setting' },
+  { file: 'model-applications.json', panel: 'Model Applications', panelHref: '/admin/models', label: 'Model applications', category: 'feature' },
+  { file: 'partner-onboarding.json', panel: 'Partner Onboarding', panelHref: '/admin/partner-onboarding', label: 'Partner onboarding', category: 'feature' },
+  { file: 'policies.json', panel: 'Client Policies', panelHref: '/admin/policies', label: 'Client policies', category: 'setting' },
+  { file: 'pre-appointment-guidelines.json', panel: 'Pre-Appointment Guidelines', panelHref: '/admin/pre-appointment-guidelines', label: 'Pre-appointment guidelines', category: 'setting' },
+  { file: 'promo-codes.json', panel: 'Promo Codes', panelHref: '/admin/promo-codes', label: 'Promo codes', category: 'feature' },
+  { file: 'referrals-tracking.json', panel: 'Referrals Tracking', panelHref: '/admin/referrals-tracking', label: 'Referral tracking', category: 'feature' },
+  { file: 'services.json', panel: 'Service Prices', panelHref: '/admin/services', label: 'Services and prices', category: 'feature' },
+  { file: 'settings.json', panel: 'Settings', panelHref: '/admin/settings', label: 'Website settings', category: 'setting' },
+  { file: 'surveys.json', panel: 'Surveys', panelHref: '/admin/surveys', label: 'Surveys', category: 'feature' },
+  { file: 'terms.json', panel: 'Terms & Conditions', panelHref: '/admin/terms', label: 'Terms and conditions', category: 'setting' },
+  { file: 'testimonials.json', panel: 'Testimonials', panelHref: '/admin/testimonials', label: 'Testimonials', category: 'feature' },
+  { file: 'theme.json', panel: 'Seasonal Themes', panelHref: '/admin/theme', label: 'Theme settings', category: 'setting' },
+]
+
+function valueToSearchText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map(valueToSearchText).filter(Boolean).join(' ')
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nestedValue]) => `${key} ${valueToSearchText(nestedValue)}`)
+      .filter(Boolean)
+      .join(' ')
+  }
+  return ''
+}
+
+function summarizeMatchedValue(value: unknown, queryLower: string): string {
+  const text = valueToSearchText(value).replace(/\s+/g, ' ').trim()
+  if (!text) return 'Matched saved admin content'
+
+  const matchIndex = text.toLowerCase().indexOf(queryLower)
+  if (matchIndex === -1) return text.slice(0, 160)
+
+  const start = Math.max(0, matchIndex - 45)
+  const end = Math.min(text.length, matchIndex + queryLower.length + 75)
+  const prefix = start > 0 ? '...' : ''
+  const suffix = end < text.length ? '...' : ''
+  return `${prefix}${text.slice(start, end)}${suffix}`
+}
+
+function collectDataMatches(
+  value: unknown,
+  queryLower: string,
+  path: string[] = [],
+  matches: Array<{ path: string; value: unknown; exact: boolean }> = [],
+) {
+  if (matches.length >= 8) return matches
+
+  if (value === null || value === undefined) return matches
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).toLowerCase()
+    if (text.includes(queryLower)) {
+      matches.push({
+        path: path.join(' > ') || 'Saved content',
+        value,
+        exact: text === queryLower,
+      })
+    }
+    return matches
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectDataMatches(item, queryLower, [...path, `Item ${index + 1}`], matches))
+    return matches
+  }
+
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, nestedValue]) => {
+      if (key.toLowerCase().includes(queryLower)) {
+        matches.push({
+          path: [...path, key].join(' > '),
+          value: nestedValue,
+          exact: key.toLowerCase() === queryLower,
+        })
+      }
+      collectDataMatches(nestedValue, queryLower, [...path, key], matches)
+    })
+  }
+
+  return matches
+}
+
 const searchIndex: SearchItem[] = [
   // Analytics & Reports
   {
@@ -1199,6 +1311,31 @@ export async function GET(request: NextRequest) {
       }
     } catch (error) {
       console.error('Error reading clients for search:', error)
+    }
+
+    // 5. Broad search through saved admin data files.
+    // This catches editable content that is not yet represented in the hand-written index above.
+    try {
+      for (const dataFile of searchableDataFiles) {
+        const data = await readDataFile<unknown>(dataFile.file, null)
+        const matches = collectDataMatches(data, queryLower).slice(0, 4)
+
+        matches.forEach((match, index) => {
+          allResults.push({
+            id: `data-${dataFile.file}-${index}-${match.path}`.replace(/[^a-z0-9-]+/gi, '-').slice(0, 120),
+            title: `${dataFile.label}: ${match.path}`,
+            description: summarizeMatchedValue(match.value, queryLower),
+            panel: dataFile.panel,
+            panelHref: dataFile.panelHref,
+            location: `${dataFile.panel} - ${match.path}`,
+            keywords: [dataFile.label.toLowerCase(), dataFile.panel.toLowerCase(), match.path.toLowerCase(), queryLower],
+            category: dataFile.category,
+            relevance: match.exact ? 65 : 38,
+          })
+        })
+      }
+    } catch (error) {
+      console.error('Error reading generic admin data for search:', error)
     }
 
     // Sort all results by relevance and return top 30

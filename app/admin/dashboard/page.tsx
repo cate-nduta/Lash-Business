@@ -526,7 +526,7 @@ export default function AdminDashboard() {
               </div>
               <input
                 type="text"
-                placeholder="Search admin panels..."
+                placeholder="Search admin panels, settings, bookings, clients, promo codes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border-2 border-brown-light rounded-lg focus:outline-none focus:border-brown-dark focus:ring-2 focus:ring-brown-light text-brown-dark placeholder-brown-light"

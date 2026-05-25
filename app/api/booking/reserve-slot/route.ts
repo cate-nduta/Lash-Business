@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import {
+  hasAppointmentConflict,
+  loadBookingBusyIntervals,
+  loadModelApplicationBusyIntervals,
+  MODEL_APPOINTMENT_DURATION_MINUTES,
+} from '@/lib/model-application-settings'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -22,6 +28,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Date, time slot, and booking reference are required' },
         { status: 400 }
+      )
+    }
+
+    const requestedStart = new Date(timeSlot)
+    if (Number.isNaN(requestedStart.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid time slot' },
+        { status: 400 }
+      )
+    }
+
+    const [bookingBusyIntervals, modelBusyIntervals] = await Promise.all([
+      loadBookingBusyIntervals({ excludeBookingReference: bookingReference }),
+      loadModelApplicationBusyIntervals(),
+    ])
+    if (hasAppointmentConflict(requestedStart, MODEL_APPOINTMENT_DURATION_MINUTES, [...bookingBusyIntervals, ...modelBusyIntervals])) {
+      return NextResponse.json(
+        { error: 'This time slot overlaps with an existing booking or model appointment. Please select another time.' },
+        { status: 409 }
       )
     }
 

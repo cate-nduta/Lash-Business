@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 import { sendModelRejectionEmail } from '@/lib/email/model-rejection-email'
-import { loadModelApplicationSettings, normalizeModelApplicationQuestions } from '@/lib/model-application-settings'
+import {
+  loadModelApplicationSettings,
+  normalizeModelApplicationIntroText,
+  normalizeModelApplicationQuestions,
+  normalizeModelConsentItems,
+} from '@/lib/model-application-settings'
+
+function revalidateModelAvailability() {
+  revalidatePath('/api/model-application-settings')
+  revalidatePath('/api/calendar/available-slots')
+  revalidatePath('/modelsignup')
+  revalidatePath('/booking')
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,9 +39,12 @@ export async function POST(request: NextRequest) {
     const { action, applicationId, status, personalNote } = body
 
     if (action === 'updateSettings') {
+      const introText = normalizeModelApplicationIntroText(body.introText)
       const questions = normalizeModelApplicationQuestions(body.questions)
-      await writeDataFile('model-application-settings.json', { questions })
-      return NextResponse.json({ success: true, settings: { questions } })
+      const consentItems = normalizeModelConsentItems(body.consentItems)
+      await writeDataFile('model-application-settings.json', { introText, questions, consentItems })
+      revalidateModelAvailability()
+      return NextResponse.json({ success: true, settings: { introText, questions, consentItems } })
     }
 
     if (action === 'updateStatus') {
@@ -38,6 +54,7 @@ export async function POST(request: NextRequest) {
         const previousStatus = application.status
         application.status = status
         await writeDataFile('model-applications.json', data)
+        revalidateModelAvailability()
         
         // Send rejection email if status changed to 'rejected'
         if (status === 'rejected' && previousStatus !== 'rejected') {

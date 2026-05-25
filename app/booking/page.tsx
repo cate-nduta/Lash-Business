@@ -3244,9 +3244,6 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       {validatingPromo ? 'Checking...' : 'Apply'}
                     </button>
                   </div>
-                  <p className="text-xs text-brown-dark/70 mt-1">
-                    Have a promo code from a card? Enter it here to apply your discount. Note: Some promo codes are only available for returning clients.
-                  </p>
                   {(promoError || giftCardError) && (
                     <div className="mt-3 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
                       <div className="flex items-start gap-3">
@@ -3565,7 +3562,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     <span className="text-lg">ℹ️</span>
                     <div className="text-sm text-blue-900">
                       <p className="font-medium mb-1">Secure Payment</p>
-                    <p>You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa). We accept both KES and USD.</p>
+                    <p>You'll be redirected to Paystack's secure payment page where you can choose your preferred payment method (Card or M-Pesa).</p>
                     </div>
                   </div>
                 </div>

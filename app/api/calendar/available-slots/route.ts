@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readDataFile } from '@/lib/data-utils'
 import { getMinimumNoticeHours, isSlotAfterMinimumNotice } from '@/lib/booking-notice-utils'
 import { getCalendarClient } from '@/lib/google-calendar-client'
+import {
+  hasAppointmentConflict,
+  loadBookingBusyIntervals,
+  loadModelApplicationBusyIntervals,
+  MODEL_APPOINTMENT_DURATION_MINUTES,
+} from '@/lib/model-application-settings'
 
 export const runtime = 'nodejs'
 export const revalidate = 0
@@ -571,7 +577,12 @@ export async function GET(request: NextRequest) {
 
     // Include all bookings (regular + showcase) when checking for conflicts.
     // This is only needed for a specific date, not for the initial calendar date list.
-    const localBookings = await loadLocalBookings(true)
+    const [localBookings, bookingBusyIntervals, modelBusyIntervals] = await Promise.all([
+      loadLocalBookings(true),
+      loadBookingBusyIntervals(),
+      loadModelApplicationBusyIntervals(),
+    ])
+    const busyIntervals = [...bookingBusyIntervals, ...modelBusyIntervals]
 
     // Filter out booked slots and past times
     const now = new Date()
@@ -595,6 +606,10 @@ export async function GET(request: NextRequest) {
         // Check if slot is booked (normalize for comparison)
         const normalizedSlot = normalizeSlotForComparison(slot)
         if (bookedSlots.has(normalizedSlot)) {
+          return false
+        }
+
+        if (hasAppointmentConflict(new Date(slot), MODEL_APPOINTMENT_DURATION_MINUTES, busyIntervals)) {
           return false
         }
         
