@@ -18,6 +18,13 @@ interface ModelConsentItem {
   label: string
 }
 
+interface ModelApplicationFeeSettings {
+  enabled: boolean
+  amount: number
+  currency: string
+  noticeText: string
+}
+
 const DEFAULT_MODEL_QUESTIONS: ModelApplicationQuestion[] = [
   { id: 'availability', label: 'Choose one available model slot', type: 'single', required: true, options: [] },
   { id: 'hasLashExtensions', label: 'Have you had lash extensions before?', type: 'single', required: true, options: ['Yes', 'No'] },
@@ -40,6 +47,17 @@ const DEFAULT_INTRO_TEXT = `I'm currently building my lash portfolio and practic
 Because these sets involve practice and filming, the appointment may take longer than a regular session.
 
 Submitting this form does not guarantee a booking. Models will be selected based on availability and how many spots I have open for each model round.`
+
+const DEFAULT_FEE_SETTINGS: ModelApplicationFeeSettings = {
+  enabled: false,
+  amount: 0,
+  currency: 'KES',
+  noticeText:
+    'If selected, you will be asked to pay {{amount}} to confirm your model appointment. You only pay after you are selected.',
+}
+
+const formatFeeAmount = (amount = 0, currency = 'KES') =>
+  `${currency} ${Math.max(Number(amount) || 0, 0).toLocaleString()}`
 
 const createConsentState = (items: ModelConsentItem[]) =>
   items.reduce<Record<string, boolean>>((state, item) => {
@@ -67,6 +85,7 @@ export default function ModelSignupPage() {
   const [modelQuestions, setModelQuestions] = useState<ModelApplicationQuestion[]>(DEFAULT_MODEL_QUESTIONS)
   const [reservedAvailabilityOptions, setReservedAvailabilityOptions] = useState<string[]>([])
   const [consentItems, setConsentItems] = useState<ModelConsentItem[]>(DEFAULT_CONSENT_ITEMS)
+  const [feeSettings, setFeeSettings] = useState<ModelApplicationFeeSettings>(DEFAULT_FEE_SETTINGS)
   const [customAnswers, setCustomAnswers] = useState<Record<string, string | string[]>>({})
   const [formData, setFormData] = useState({
     firstName: '',
@@ -112,6 +131,13 @@ export default function ModelSignupPage() {
           if (Array.isArray(settings.consentItems) && settings.consentItems.length > 0) {
             setConsentItems(settings.consentItems)
             setConsent(createConsentState(settings.consentItems))
+          }
+          if (settings.feeSettings) {
+            setFeeSettings({
+              ...DEFAULT_FEE_SETTINGS,
+              ...settings.feeSettings,
+              amount: Math.max(Number(settings.feeSettings.amount) || 0, 0),
+            })
           }
         }
       } catch (error) {
@@ -226,6 +252,9 @@ export default function ModelSignupPage() {
 
   const availabilityQuestion = modelQuestions.find((question) => question.id === 'availability')
   const hasAvailableModelSlots = !availabilityQuestion || getVisibleQuestionOptions(availabilityQuestion).length > 0
+  const shouldShowFeeNotice = feeSettings.enabled && feeSettings.amount > 0
+  const feeAmountLabel = formatFeeAmount(feeSettings.amount, feeSettings.currency)
+  const feeNoticeText = feeSettings.noticeText.replace(/\{\{\s*amount\s*\}\}/g, feeAmountLabel)
 
   if (modelSignupEnabled === null) {
     return (
@@ -326,6 +355,18 @@ export default function ModelSignupPage() {
             </p>
           ))}
         </div>
+
+        {shouldShowFeeNotice && (
+          <div className="bg-amber-50/90 backdrop-blur-sm rounded-2xl shadow-lg border border-amber-200 p-6 mb-8">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brown-dark mb-2">
+              Model Confirmation Fee
+            </p>
+            <p className="text-brown/80 leading-relaxed">{feeNoticeText}</p>
+            <p className="text-xs text-brown/60 mt-3">
+              You will not be charged when submitting this application.
+            </p>
+          </div>
+        )}
 
         {/* Application Form */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-brown/10 p-8">

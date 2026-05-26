@@ -19,6 +19,7 @@ export default function PaymentSuccessPage() {
   const amount = searchParams.get('amount')
   const currency = searchParams.get('currency') || 'KES'
   const paymentType = searchParams.get('payment_type') || 'unknown'
+  const isModelApplicationFee = paymentTypeDetected === 'model_application_fee' || paymentType === 'model_application_fee'
 
   useEffect(() => {
     if (!reference) {
@@ -108,6 +109,8 @@ export default function PaymentSuccessPage() {
               ? 'Payment Successful & Appointment Booked!' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Payment Successful & Appointment Booked!'
+              : isModelApplicationFee
+              ? 'Model Slot Fee Paid!'
               : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
               ? 'Payment Successful & Order Confirmed!'
               : 'Payment Successful!'}
@@ -117,6 +120,8 @@ export default function PaymentSuccessPage() {
               ? 'Your payment was successful and your consultation appointment has been booked.' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Your payment was successful and your lash appointment has been booked.'
+              : isModelApplicationFee
+              ? 'Your model confirmation fee has been paid. Your selected model slot is now marked as paid.'
               : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
               ? 'Your payment was successful! Your website build order has been confirmed. You\'ll receive an email shortly with details about your 7-day build timeline.'
               : 'Your payment has been processed successfully.'}
@@ -175,6 +180,21 @@ export default function PaymentSuccessPage() {
                 <span>You'll receive all appointment details in the confirmation email</span>
               </li>
             </ul>
+          ) : isModelApplicationFee ? (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your payment has been recorded on your model application</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Please keep the selected appointment date and preparation guidelines from your email</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Contact LashDiary if you need help before your model appointment</span>
+              </li>
+            </ul>
           ) : (paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services') ? (
             <ul className="space-y-2 text-sm text-[#3E2A20]">
               <li className="flex items-start">
@@ -209,7 +229,14 @@ export default function PaymentSuccessPage() {
         </div>
 
         <div className="space-y-3">
-          {emailSent ? (
+          {isModelApplicationFee ? (
+            <Link
+              href="/"
+              className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
+            >
+              Return Home
+            </Link>
+          ) : emailSent ? (
             <>
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <p className="text-green-800 text-sm font-medium">

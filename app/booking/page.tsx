@@ -504,6 +504,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 note: calendarData.bookingWindow.note ?? previous.bookingWindow?.note ?? '',
                 bannerMessage: calendarData.bookingWindow.bannerMessage ?? previous.bookingWindow?.bannerMessage ?? '',
                 bannerEnabled: calendarData.bookingWindow.bannerEnabled ?? previous.bookingWindow?.bannerEnabled,
+                minimumNoticeHours:
+                  calendarData.bookingWindow.minimumNoticeHours ?? previous.bookingWindow?.minimumNoticeHours,
+                minimumNoticeByDay:
+                  calendarData.bookingWindow.minimumNoticeByDay ?? previous.bookingWindow?.minimumNoticeByDay,
+                rescheduleCutoffHours:
+                  calendarData.bookingWindow.rescheduleCutoffHours ?? previous.bookingWindow?.rescheduleCutoffHours,
               },
             }
           })
@@ -637,6 +643,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               note: availabilityData?.bookingWindow?.note ?? '',
               bannerMessage: availabilityData?.bookingWindow?.bannerMessage ?? '',
               bannerEnabled: availabilityData?.bookingWindow?.bannerEnabled,
+              minimumNoticeHours: availabilityData?.bookingWindow?.minimumNoticeHours,
+              minimumNoticeByDay: availabilityData?.bookingWindow?.minimumNoticeByDay,
+              rescheduleCutoffHours: availabilityData?.bookingWindow?.rescheduleCutoffHours,
             },
             homeCalls: {
               enabled: Boolean(availabilityData?.homeCalls?.enabled),
@@ -1521,6 +1530,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       note?: string
       bannerMessage?: string
       bannerEnabled?: boolean | null
+      minimumNoticeHours?: number
+      minimumNoticeByDay?: Record<string, number | string | null | undefined>
+      rescheduleCutoffHours?: number
     }
     homeCalls?: {
       enabled: boolean

@@ -236,6 +236,11 @@ export async function POST(request: NextRequest) {
       label: escapeHtml(row.label),
       answer: escapeHtml(row.answer),
     }))
+    const modelFeeEnabled = settings.feeSettings.enabled && settings.feeSettings.amount > 0
+    const modelFeeAmount = `${settings.feeSettings.currency} ${settings.feeSettings.amount.toLocaleString()}`
+    const safeModelFeeNotice = modelFeeEnabled
+      ? escapeHtml(settings.feeSettings.noticeText.replace(/\{\{\s*amount\s*\}\}/g, modelFeeAmount))
+      : ''
 
     // Store model application
     const modelApplication = {
@@ -254,6 +259,19 @@ export async function POST(request: NextRequest) {
       modelQuestions: modelQuestionsSnapshot,
       consentItems: consentItemsSnapshot,
       consentAccepted,
+      modelFee: modelFeeEnabled
+        ? {
+            enabled: true,
+            amount: settings.feeSettings.amount,
+            currency: settings.feeSettings.currency,
+            paymentStatus: 'pending' as const,
+          }
+        : {
+            enabled: false,
+            amount: 0,
+            currency: settings.feeSettings.currency,
+            paymentStatus: 'not_required' as const,
+          },
       submittedAt: new Date().toISOString(),
       status: 'pending' as 'pending' | 'selected' | 'rejected',
     }
@@ -398,6 +416,14 @@ export async function POST(request: NextRequest) {
               <p style="margin:0 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
                 If you are selected for an upcoming model slot, we will contact you with the appointment details and preparation instructions. You do not need to submit another application.
               </p>
+              ${safeModelFeeNotice ? `
+              <div style="background:#FFF7E8; border-left:4px solid #B7791F; padding:16px; margin:22px 0; border-radius:8px;">
+                <p style="margin:0 0 8px 0; font-size:15px; font-weight:600; color:#7C4B31;">Model Confirmation Fee</p>
+                <p style="margin:0; font-size:15px; line-height:1.6; color:#7C4B31;">
+                  ${safeModelFeeNotice}
+                </p>
+              </div>
+              ` : ''}
               <div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:22px 0; border-radius:8px;">
                 <p style="margin:0; font-size:15px; line-height:1.6; color:#7C4B31;">
                   Please keep an eye on your inbox for updates from LashDiary. If you have questions, you can reply directly to this email.

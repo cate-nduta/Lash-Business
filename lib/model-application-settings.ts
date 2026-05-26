@@ -16,10 +16,18 @@ export interface ModelConsentItem {
   label: string
 }
 
+export interface ModelApplicationFeeSettings {
+  enabled: boolean
+  amount: number
+  currency: string
+  noticeText: string
+}
+
 export interface ModelApplicationSettings {
   introText: string
   questions: ModelApplicationQuestion[]
   consentItems: ModelConsentItem[]
+  feeSettings: ModelApplicationFeeSettings
 }
 
 export const MODEL_APPOINTMENT_DURATION_MINUTES = 75
@@ -29,6 +37,14 @@ export const DEFAULT_MODEL_APPLICATION_INTRO_TEXT = `I'm currently building my l
 Because these sets involve practice and filming, the appointment may take longer than a regular session.
 
 Submitting this form does not guarantee a booking. Models will be selected based on availability and how many spots I have open for each model round.`
+
+export const DEFAULT_MODEL_APPLICATION_FEE_SETTINGS: ModelApplicationFeeSettings = {
+  enabled: false,
+  amount: 0,
+  currency: 'KES',
+  noticeText:
+    'If selected, you will be asked to pay {{amount}} to confirm your model appointment. You only pay after you are selected.',
+}
 
 const LEGACY_MODEL_AVAILABILITY_OPTIONS = [
   'Monday (afternoon)',
@@ -146,6 +162,26 @@ export function normalizeModelApplicationIntroText(value: unknown): string {
   }
 
   return DEFAULT_MODEL_APPLICATION_INTRO_TEXT
+}
+
+export function normalizeModelApplicationFeeSettings(value: unknown): ModelApplicationFeeSettings {
+  const settings = value && typeof value === 'object' ? (value as Partial<ModelApplicationFeeSettings>) : {}
+  const amount = Number(settings.amount)
+  const currency =
+    typeof settings.currency === 'string' && settings.currency.trim()
+      ? settings.currency.trim().toUpperCase()
+      : DEFAULT_MODEL_APPLICATION_FEE_SETTINGS.currency
+  const noticeText =
+    typeof settings.noticeText === 'string' && settings.noticeText.trim()
+      ? settings.noticeText.trim()
+      : DEFAULT_MODEL_APPLICATION_FEE_SETTINGS.noticeText
+
+  return {
+    enabled: settings.enabled === true,
+    amount: Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0,
+    currency,
+    noticeText,
+  }
 }
 
 export function getModelApplicationAnswerValues(answer: unknown): string[] {
@@ -355,11 +391,13 @@ export async function loadModelApplicationSettings(): Promise<ModelApplicationSe
     introText: DEFAULT_MODEL_APPLICATION_INTRO_TEXT,
     questions: DEFAULT_MODEL_APPLICATION_QUESTIONS,
     consentItems: DEFAULT_MODEL_CONSENT_ITEMS,
+    feeSettings: DEFAULT_MODEL_APPLICATION_FEE_SETTINGS,
   })
 
   return {
     introText: normalizeModelApplicationIntroText(settings?.introText),
     questions: normalizeModelApplicationQuestions(settings?.questions),
     consentItems: normalizeModelConsentItems(settings?.consentItems),
+    feeSettings: normalizeModelApplicationFeeSettings(settings?.feeSettings),
   }
 }

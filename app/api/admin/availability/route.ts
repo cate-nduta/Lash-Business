@@ -6,6 +6,31 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
+function normalizeBookingWindow(value: unknown): Record<string, unknown> {
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const minimumNoticeHours = Number(source.minimumNoticeHours)
+  const rescheduleCutoffHours = Number(source.rescheduleCutoffHours)
+  const minimumNoticeByDay =
+    source.minimumNoticeByDay && typeof source.minimumNoticeByDay === 'object'
+      ? Object.fromEntries(
+          Object.entries(source.minimumNoticeByDay as Record<string, unknown>)
+            .filter(([, notice]) => notice !== '' && notice !== null && notice !== undefined)
+            .map(([day, notice]) => [day, Math.max(0, Number(notice) || 0)])
+        )
+      : {}
+
+  return {
+    ...source,
+    current: source.current && typeof source.current === 'object' ? source.current : {},
+    next: source.next && typeof source.next === 'object' ? source.next : {},
+    minimumNoticeHours:
+      Number.isFinite(minimumNoticeHours) && minimumNoticeHours >= 0 ? minimumNoticeHours : 12,
+    minimumNoticeByDay,
+    rescheduleCutoffHours:
+      Number.isFinite(rescheduleCutoffHours) && rescheduleCutoffHours >= 0 ? rescheduleCutoffHours : 12,
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
@@ -31,7 +56,7 @@ export async function POST(request: NextRequest) {
       ...existing,
       businessHours: incoming.businessHours ?? existing.businessHours,
       timeSlots: incoming.timeSlots ?? existing.timeSlots,
-      bookingWindow: incoming.bookingWindow ?? existing.bookingWindow,
+      bookingWindow: normalizeBookingWindow(incoming.bookingWindow ?? existing.bookingWindow),
       homeCalls: incoming.homeCalls !== undefined ? incoming.homeCalls : existing.homeCalls,
       fullyBookedDates: Array.isArray(incoming.fullyBookedDates)
         ? incoming.fullyBookedDates
@@ -42,18 +67,6 @@ export async function POST(request: NextRequest) {
         incoming.minimumBookingDate !== undefined
           ? incoming.minimumBookingDate
           : existing.minimumBookingDate ?? null,
-    }
-
-    // Ensure bookingWindow structure is preserved even if current/next are empty
-    const bw = availability.bookingWindow as Record<string, unknown> | undefined
-    if (bw && typeof bw === 'object') {
-      if (!bw.current || typeof bw.current !== 'object' || Object.keys(bw.current as object).length === 0) {
-        bw.current = {}
-      }
-      if (!bw.next || typeof bw.next !== 'object' || Object.keys(bw.next as object).length === 0) {
-        bw.next = {}
-      }
-      availability.bookingWindow = bw
     }
 
     await writeDataFile('availability.json', availability)

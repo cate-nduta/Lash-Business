@@ -23,6 +23,7 @@ interface ModelApplication {
   modelQuestions?: ModelApplicationQuestion[]
   consentItems?: ModelConsentItem[]
   consentAccepted?: Record<string, boolean>
+  modelFee?: ModelApplicationFeeRecord
 }
 
 type ModelQuestionType = 'single' | 'multiple' | 'text'
@@ -38,6 +39,24 @@ interface ModelApplicationQuestion {
 interface ModelConsentItem {
   id: string
   label: string
+}
+
+interface ModelApplicationFeeSettings {
+  enabled: boolean
+  amount: number
+  currency: string
+  noticeText: string
+}
+
+interface ModelApplicationFeeRecord {
+  enabled?: boolean
+  amount?: number
+  currency?: string
+  paymentStatus?: 'pending' | 'paid' | 'waived' | 'not_required'
+  paymentReference?: string
+  paymentUrl?: string
+  requestedAt?: string
+  paidAt?: string
 }
 
 interface SlotOption {
@@ -79,8 +98,19 @@ Because these sets involve practice and filming, the appointment may take longer
 
 Submitting this form does not guarantee a booking. Models will be selected based on availability and how many spots I have open for each model round.`
 
+const defaultFeeSettings: ModelApplicationFeeSettings = {
+  enabled: false,
+  amount: 0,
+  currency: 'KES',
+  noticeText:
+    'If selected, you will be asked to pay {{amount}} to confirm your model appointment. You only pay after you are selected.',
+}
+
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
+
+const formatModelFeeAmount = (amount = 0, currency = 'KES') =>
+  `${currency} ${Math.max(Number(amount) || 0, 0).toLocaleString()}`
 
 const formatModelSlotLabel = (value?: string) => {
   if (!value) return 'Not specified'
@@ -187,6 +217,7 @@ export default function AdminModels() {
   const [introText, setIntroText] = useState(defaultIntroText)
   const [modelQuestions, setModelQuestions] = useState<ModelApplicationQuestion[]>(defaultModelQuestions)
   const [consentItems, setConsentItems] = useState<ModelConsentItem[]>(defaultConsentItems)
+  const [feeSettings, setFeeSettings] = useState<ModelApplicationFeeSettings>(defaultFeeSettings)
   const [savingQuestions, setSavingQuestions] = useState(false)
   const [modelSlotOptionsByDate, setModelSlotOptionsByDate] = useState<Record<string, SlotOption[]>>({})
   const [modelSlotDraftDates, setModelSlotDraftDates] = useState<Record<string, string>>({})
@@ -245,6 +276,13 @@ export default function AdminModels() {
         }
         if (Array.isArray(data.settings?.consentItems) && data.settings.consentItems.length > 0) {
           setConsentItems(data.settings.consentItems)
+        }
+        if (data.settings?.feeSettings) {
+          setFeeSettings({
+            ...defaultFeeSettings,
+            ...data.settings.feeSettings,
+            amount: Math.max(Number(data.settings.feeSettings.amount) || 0, 0),
+          })
         }
       }
     } catch (error) {
@@ -345,7 +383,7 @@ export default function AdminModels() {
       const response = await authorizedFetch('/api/admin/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'updateSettings', introText, questions: modelQuestions, consentItems }),
+        body: JSON.stringify({ action: 'updateSettings', introText, questions: modelQuestions, consentItems, feeSettings }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -359,6 +397,9 @@ export default function AdminModels() {
       }
       if (Array.isArray(data.settings?.consentItems)) {
         setConsentItems(data.settings.consentItems)
+      }
+      if (data.settings?.feeSettings) {
+        setFeeSettings(data.settings.feeSettings)
       }
       setMessage({ type: 'success', text: 'Model application settings saved.' })
     } catch (error: any) {
@@ -470,7 +511,13 @@ export default function AdminModels() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Selection email sent successfully!' })
+        const data = await response.json().catch(() => ({}))
+        setMessage({
+          type: 'success',
+          text: data.paymentRequired
+            ? 'Selection email sent with model fee payment link.'
+            : 'Selection email sent successfully!',
+        })
         setShowEmailModal(false)
         setEmailMessage('')
         setAppointmentDate('')
@@ -562,6 +609,66 @@ export default function AdminModels() {
               />
               <p className="mt-2 text-xs text-brown/70">
                 This text appears on the public model application page. Use blank lines to separate paragraphs.
+              </p>
+            </div>
+
+            <div className="mb-6 rounded-lg border border-brown-light bg-white p-4">
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-brown-dark">Selected Model Confirmation Fee</h3>
+                  <p className="text-sm text-brown/70">
+                    When enabled, applicants see the fee notice before applying, but they only pay after you select them.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-semibold text-brown-dark">
+                  <input
+                    type="checkbox"
+                    checked={feeSettings.enabled}
+                    onChange={(event) => setFeeSettings((prev) => ({ ...prev, enabled: event.target.checked }))}
+                    className="h-4 w-4"
+                  />
+                  Charge selected models
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-brown-dark">Amount</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={feeSettings.amount}
+                    onChange={(event) =>
+                      setFeeSettings((prev) => ({ ...prev, amount: Math.max(Number(event.target.value) || 0, 0) }))
+                    }
+                    className="w-full rounded-lg border-2 border-brown-light px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-brown-dark">Currency</label>
+                  <input
+                    value={feeSettings.currency}
+                    onChange={(event) =>
+                      setFeeSettings((prev) => ({ ...prev, currency: event.target.value.toUpperCase() || 'KES' }))
+                    }
+                    className="w-full rounded-lg border-2 border-brown-light px-3 py-2"
+                    placeholder="KES"
+                  />
+                </div>
+                <div className="rounded-lg bg-pink-light/30 p-3 text-sm text-brown/80">
+                  Current public fee:{' '}
+                  <strong>{feeSettings.enabled ? formatModelFeeAmount(feeSettings.amount, feeSettings.currency) : 'Disabled'}</strong>
+                </div>
+              </div>
+              <label className="mb-2 mt-4 block text-sm font-medium text-brown-dark">Public notice text</label>
+              <textarea
+                value={feeSettings.noticeText}
+                onChange={(event) => setFeeSettings((prev) => ({ ...prev, noticeText: event.target.value }))}
+                rows={3}
+                className="w-full rounded-lg border-2 border-brown-light px-3 py-2"
+                placeholder="Explain when selected models will pay."
+              />
+              <p className="mt-2 text-xs text-brown/70">
+                Use {'{{amount}}'} where you want the formatted fee to appear.
               </p>
             </div>
 
@@ -829,6 +936,27 @@ export default function AdminModels() {
                             {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                           </span>
                         </p>
+                        {app.modelFee?.enabled && (
+                          <p>
+                            <strong>Model fee:</strong>{' '}
+                            {formatModelFeeAmount(app.modelFee.amount, app.modelFee.currency)} ·{' '}
+                            <span
+                              className={`font-semibold ${
+                                app.modelFee.paymentStatus === 'paid'
+                                  ? 'text-green-600'
+                                  : app.modelFee.paymentStatus === 'waived'
+                                  ? 'text-blue-600'
+                                  : 'text-amber-600'
+                              }`}
+                            >
+                              {app.modelFee.paymentStatus === 'paid'
+                                ? 'Paid'
+                                : app.modelFee.paymentStatus === 'waived'
+                                ? 'Waived'
+                                : 'Pending payment'}
+                            </span>
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -937,8 +1065,17 @@ export default function AdminModels() {
               Sending selection email to <strong>{selectedApplication.firstName} {selectedApplication.lastName}</strong> ({selectedApplication.email})
             </p>
             <div className="mb-4">
+              <div className="mb-4 rounded-lg border border-brown-light bg-pink-light/30 p-3">
+                <p className="text-sm font-semibold text-brown-dark">Chosen model slot</p>
+                <p className="text-sm text-brown/80">
+                  {formatModelSlotLabel(selectedApplication.availability)}
+                </p>
+                <p className="mt-1 text-xs text-brown/60">
+                  This slot will be included automatically in the selection email. Use the fields below only if you need to override it.
+                </p>
+              </div>
               <label className="block text-sm font-medium text-brown-dark mb-2">
-                Appointment Date & Time <span className="text-gray-400 text-xs">(optional)</span>
+                Override Appointment Date & Time <span className="text-gray-400 text-xs">(optional)</span>
               </label>
               
               {/* Date Picker */}
@@ -1000,8 +1137,16 @@ export default function AdminModels() {
               )}
               
               <p className="text-xs text-brown/60 mt-1 mb-4">
-                The date and time of the model's appointment. This will be included in the email.
+                Leave this empty to use the model's chosen application slot.
               </p>
+              <div className="mb-4 rounded-lg border border-brown-light bg-pink-light/30 p-3">
+                <p className="text-sm font-semibold text-brown-dark">Model fee</p>
+                <p className="text-sm text-brown/80">
+                  {feeSettings.enabled && feeSettings.amount > 0
+                    ? `${formatModelFeeAmount(feeSettings.amount, feeSettings.currency)} payment link will be included in this email.`
+                    : 'No model fee will be charged because the fee setting is disabled.'}
+                </p>
+              </div>
               <label className="block text-sm font-medium text-brown-dark mb-2">
                 Additional Message (Optional)
               </label>

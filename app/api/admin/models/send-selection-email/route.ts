@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
+import { loadModelApplicationSettings, MODEL_APPOINTMENT_DURATION_MINUTES } from '@/lib/model-application-settings'
+import { generateReference, initializeTransaction } from '@/lib/paystack-utils'
 import nodemailer from 'nodemailer'
 
 const BUSINESS_NOTIFICATION_EMAIL =
@@ -82,6 +84,26 @@ function buildGoogleCalendarLink(options: {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
+function formatModelSlotLabel(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Africa/Nairobi',
+  }).format(date)
+}
+
+function formatCurrency(amount: number, currency = 'KES'): string {
+  return `${currency} ${Math.max(Number(amount) || 0, 0).toLocaleString()}`
+}
+
 // Parse appointment date and time from date string and time object
 function parseAppointmentDateTime(dateStr: string, timeObj: { hours: string; minutes: string; ampm: string }): { start: Date; end: Date } | null {
   if (!dateStr || !timeObj) return null
@@ -101,8 +123,7 @@ function parseAppointmentDateTime(dateStr: string, timeObj: { hours: string; min
     // Create date with time in local timezone (will be converted to UTC for calendar)
     const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minutes, 0)
     
-    // Model appointments are 3-4 hours, use 3.5 hours (210 minutes) as default
-    const end = new Date(start.getTime() + 3.5 * 60 * 60 * 1000)
+    const end = new Date(start.getTime() + MODEL_APPOINTMENT_DURATION_MINUTES * 60 * 1000)
     
     return { start, end }
   } catch (error) {
@@ -125,6 +146,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 })
     }
 
+    const settings = await loadModelApplicationSettings()
+    const feeSettings = settings.feeSettings
+    const shouldChargeModelFee = feeSettings.enabled && feeSettings.amount > 0
+    let paymentUrl = ''
+    let paymentReference = ''
+    let safeFeeAmount = ''
+
     // Get location from contact settings
     const contact = await readDataFile<{ location?: string }>('contact.json', {})
     const location = contact?.location || process.env.NEXT_PUBLIC_STUDIO_LOCATION || 'LashDiary Studio, Nairobi, Kenya'
@@ -132,8 +160,60 @@ export async function POST(request: NextRequest) {
     // Escape user inputs
     const safeFirstName = escapeHtml(application.firstName || 'there')
     const safeMessage = message ? escapeHtml(message) : ''
-    const safeAppointmentDateTime = appointmentDateTime ? escapeHtml(appointmentDateTime) : ''
+    const modelSlotStart = application.availability ? new Date(application.availability) : null
+    const hasModelSlot = modelSlotStart && !Number.isNaN(modelSlotStart.getTime())
+    const resolvedAppointmentDateTime =
+      appointmentDateTime ||
+      (hasModelSlot ? formatModelSlotLabel(application.availability) : '')
+    const safeAppointmentDateTime = resolvedAppointmentDateTime ? escapeHtml(resolvedAppointmentDateTime) : ''
     const safeLocation = escapeHtml(location)
+
+    if (shouldChargeModelFee) {
+      safeFeeAmount = escapeHtml(formatCurrency(feeSettings.amount, feeSettings.currency))
+      paymentReference = generateReference('model-fee')
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://lashdiary.co.ke'
+      const payment = await initializeTransaction({
+        email: application.email,
+        amount: feeSettings.amount,
+        currency: feeSettings.currency,
+        reference: paymentReference,
+        callbackUrl: `${baseUrl}/api/paystack/callback`,
+        customerName: `${application.firstName || ''} ${application.lastName || ''}`.trim(),
+        phone: application.phone,
+        metadata: {
+          payment_type: 'model_application_fee',
+          application_id: application.id,
+          model_slot: application.availability || '',
+        },
+      })
+
+      if (!payment.success || !payment.authorizationUrl) {
+        return NextResponse.json(
+          { error: payment.error || 'Failed to create model fee payment link' },
+          { status: 500 }
+        )
+      }
+
+      paymentUrl = payment.authorizationUrl
+      application.modelFee = {
+        enabled: true,
+        amount: feeSettings.amount,
+        currency: feeSettings.currency,
+        paymentStatus: 'pending',
+        paymentReference,
+        paymentUrl,
+        requestedAt: new Date().toISOString(),
+      }
+      await writeDataFile('model-applications.json', data)
+    } else if (application.modelFee?.paymentStatus !== 'paid') {
+      application.modelFee = {
+        enabled: false,
+        amount: 0,
+        currency: feeSettings.currency || 'KES',
+        paymentStatus: 'not_required',
+      }
+      await writeDataFile('model-applications.json', data)
+    }
     
     // Generate calendar link if appointment date/time is provided
     let calendarLink: string | null = null
@@ -149,6 +229,16 @@ export async function POST(request: NextRequest) {
           reminderMinutes: 1440, // 24 hours before
         })
       }
+    } else if (hasModelSlot && modelSlotStart) {
+      const modelSlotEnd = new Date(modelSlotStart.getTime() + MODEL_APPOINTMENT_DURATION_MINUTES * 60 * 1000)
+      calendarLink = buildGoogleCalendarLink({
+        summary: 'LashDiary Model Appointment',
+        start: modelSlotStart,
+        end: modelSlotEnd,
+        location,
+        description: `Model appointment with LashDiary.\n\nPlease arrive on time with clean lashes and no makeup.\n\nLocation: ${location}`,
+        reminderMinutes: 1440,
+      })
     }
 
     // Create selection email HTML
@@ -183,14 +273,14 @@ export async function POST(request: NextRequest) {
               ${safeMessage ? '<div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;"><p style="margin:0; font-size:15px; line-height:1.6; color:#7C4B31; white-space:pre-wrap;">' + safeMessage.replace(/\n/g, '<br>') + '</p></div>' : ''}
               
               <p style="margin:24px 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
-                Before your appointment, please take a moment to read through the preparation guidelines. These help the session run smoothly and keep you comfortable during the longer model appointment.
+                Before your appointment, please take a moment to read through the preparation guidelines. These help the session run smoothly and keep you comfortable during your model appointment.
               </p>
               
               <div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;">
                 <p style="margin:0 0 12px 0; font-size:15px; font-weight:600; color:#7C4B31;">Before You Arrive:</p>
                 <ul style="margin:8px 0 0 0; padding-left:20px; font-size:14px; line-height:1.8; color:#7C4B31;">
                   <li>Avoid caffeine at least 3–4 hours before your appointment. Caffeine can make your eyes flutter and your body restless, which makes the process uncomfortable for you.</li>
-                  <li>Come well-fed. Model sets take longer than regular lash appointments, so having a meal beforehand will help you stay comfortable.</li>
+                  <li>Come well-fed. Having a meal beforehand will help you stay comfortable during the appointment.</li>
                   <li>Use the washroom before your appointment begins. Once we start, you'll be lying down for an extended period.</li>
                   <li>Arrive with clean eyes and no makeup. Please come with no mascara, eyeliner, or skincare around the eye area.</li>
                   <li>Avoid oils or heavy skincare products near your eyes for 24 hours before the appointment.</li>
@@ -202,7 +292,7 @@ export async function POST(request: NextRequest) {
               <div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;">
                 <p style="margin:0 0 12px 0; font-size:15px; font-weight:600; color:#7C4B31;">During the Appointment:</p>
                 <p style="margin:0; font-size:14px; line-height:1.6; color:#7C4B31;">
-                  You'll be lying down for 2.5–4 hours, depending on the style we're practicing. Feel free to bring a sweater or dress comfortably. I'll guide you through everything once you arrive.
+                  The appointment is scheduled for about ${MODEL_APPOINTMENT_DURATION_MINUTES} minutes. Feel free to bring a sweater or dress comfortably. I'll guide you through everything once you arrive.
                 </p>
               </div>
               
@@ -213,6 +303,18 @@ export async function POST(request: NextRequest) {
                 </p>
                 ${safeAppointmentDateTime ? '<p style="margin:0 0 8px 0; font-size:15px; font-weight:600; color:#7C4B31;">Date & Time:</p><p style="margin:0; font-size:14px; line-height:1.6; color:#7C4B31;">' + safeAppointmentDateTime + '</p>' : ''}
               </div>
+
+              ${shouldChargeModelFee && paymentUrl ? `
+              <div style="background:#FFF7E8; border-left:4px solid #B7791F; padding:16px; margin:20px 0; border-radius:8px;">
+                <p style="margin:0 0 8px 0; font-size:15px; font-weight:600; color:#7C4B31;">Confirm Your Model Slot</p>
+                <p style="margin:0 0 16px 0; font-size:14px; line-height:1.6; color:#7C4B31;">
+                  A confirmation fee of <strong>${safeFeeAmount}</strong> is required to secure your selected model appointment. You only need to pay this after being selected.
+                </p>
+                <div style="text-align:center;">
+                  <a href="${paymentUrl}" style="display:inline-block; padding:12px 28px; background:#7C4B31; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:15px;" target="_blank" rel="noopener noreferrer">Pay ${safeFeeAmount}</a>
+                </div>
+              </div>
+              ` : ''}
               
               ${calendarLink ? `
               <div style="margin:24px 0; text-align:center;">
@@ -222,7 +324,7 @@ export async function POST(request: NextRequest) {
               ` : ''}
               
               <p style="margin:24px 0 18px 0; font-size:16px; line-height:1.6; color:#7C4B31;">
-                Please reply to this email to confirm your appointment within 24 hours.
+                ${shouldChargeModelFee ? 'Please complete the payment above within 24 hours to confirm your appointment.' : 'Please reply to this email to confirm your appointment within 24 hours.'}
               </p>
               
               <p style="margin:18px 0 0 0; font-size:16px; line-height:1.6; color:#7C4B31;">
@@ -253,7 +355,13 @@ export async function POST(request: NextRequest) {
           },
         })
         console.log('Selection email sent successfully:', info.messageId)
-        return NextResponse.json({ success: true, message: 'Selection email sent successfully', messageId: info.messageId })
+        return NextResponse.json({
+          success: true,
+          message: 'Selection email sent successfully',
+          messageId: info.messageId,
+          paymentRequired: shouldChargeModelFee,
+          paymentReference: paymentReference || null,
+        })
       } catch (emailError: any) {
         console.error('Error sending selection email:', emailError)
         return NextResponse.json({ 

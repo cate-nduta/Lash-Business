@@ -5,6 +5,7 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 import { sendModelRejectionEmail } from '@/lib/email/model-rejection-email'
 import {
   loadModelApplicationSettings,
+  normalizeModelApplicationFeeSettings,
   normalizeModelApplicationIntroText,
   normalizeModelApplicationQuestions,
   normalizeModelConsentItems,
@@ -42,9 +43,10 @@ export async function POST(request: NextRequest) {
       const introText = normalizeModelApplicationIntroText(body.introText)
       const questions = normalizeModelApplicationQuestions(body.questions)
       const consentItems = normalizeModelConsentItems(body.consentItems)
-      await writeDataFile('model-application-settings.json', { introText, questions, consentItems })
+      const feeSettings = normalizeModelApplicationFeeSettings(body.feeSettings)
+      await writeDataFile('model-application-settings.json', { introText, questions, consentItems, feeSettings })
       revalidateModelAvailability()
-      return NextResponse.json({ success: true, settings: { introText, questions, consentItems } })
+      return NextResponse.json({ success: true, settings: { introText, questions, consentItems, feeSettings } })
     }
 
     if (action === 'updateStatus') {

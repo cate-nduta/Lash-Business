@@ -19,6 +19,32 @@ import { type ClientData, type ClientUsersData, type LashHistory } from '@/types
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+function escapeHtml(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function formatModelSlotLabel(value?: string): string {
+  if (!value) return 'your selected model appointment'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Africa/Nairobi',
+  }).format(date)
+}
+
 /**
  * Paystack webhook handler
  * POST /api/paystack/webhook
@@ -108,6 +134,10 @@ export async function POST(request: NextRequest) {
           await handleBookingBalancePayment(verifiedTransaction, metadata)
           break
 
+        case 'model_application_fee':
+          await handleModelApplicationFeePayment(verifiedTransaction, metadata)
+          break
+
         case 'labs_web_services':
           await handleLabsWebServicesPayment(verifiedTransaction, metadata)
           break
@@ -153,6 +183,84 @@ export async function POST(request: NextRequest) {
     console.error('Error processing Paystack webhook:', error)
     // Still return 200 to prevent Paystack from retrying
     return NextResponse.json({ received: true })
+  }
+}
+
+/**
+ * Handle selected model confirmation fee payments
+ */
+async function handleModelApplicationFeePayment(transaction: any, metadata: any) {
+  try {
+    const applicationId = metadata.application_id
+    const data = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })
+    const application = data.applications.find(
+      (app) =>
+        app.id === applicationId ||
+        app.modelFee?.paymentReference === transaction.reference
+    )
+
+    if (!application) {
+      console.error('Model application not found for fee payment:', applicationId || transaction.reference)
+      return
+    }
+
+    const confirmationAlreadySent = application.modelFee?.confirmationEmailSent === true
+    const paidAt = transaction.paidAt || new Date().toISOString()
+    application.status = 'selected'
+    application.modelFee = {
+      ...(application.modelFee || {}),
+      enabled: true,
+      amount: transaction.amount,
+      currency: transaction.currency || application.modelFee?.currency || 'KES',
+      paymentStatus: 'paid',
+      paymentReference: application.modelFee?.paymentReference || transaction.reference,
+      paymentTransactionId: transaction.reference,
+      amountPaid: transaction.amount,
+      paidAt,
+    }
+
+    if (!confirmationAlreadySent && application.email) {
+      try {
+        const safeFirstName = escapeHtml(application.firstName || 'there')
+        const safeAmount = escapeHtml(`${transaction.currency || application.modelFee.currency || 'KES'} ${Number(transaction.amount || 0).toLocaleString()}`)
+        const safeSlot = escapeHtml(formatModelSlotLabel(application.availability))
+        const safeReference = escapeHtml(transaction.reference)
+
+        await sendEmailViaZoho({
+          to: application.email,
+          subject: 'Your LashDiary Model Fee Payment Was Received',
+          html: `
+            <div style="font-family: Georgia, serif; padding: 24px; background: #FDF9F4; color: #7C4B31;">
+              <div style="max-width: 620px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E8D5C4; border-radius: 18px; padding: 28px;">
+                <h1 style="margin: 0 0 16px 0; color: #7C4B31;">Payment Received</h1>
+                <p style="font-size: 16px; line-height: 1.6;">Hey ${safeFirstName},</p>
+                <p style="font-size: 16px; line-height: 1.6;">
+                  We received your <strong>${safeAmount}</strong> model confirmation fee. Your selected LashDiary model slot is now marked as paid.
+                </p>
+                <div style="background: #F5F1EB; border-left: 4px solid #7C4B31; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 0 0 8px 0;"><strong>Model appointment:</strong> ${safeSlot}</p>
+                  <p style="margin: 0;"><strong>Payment reference:</strong> ${safeReference}</p>
+                </div>
+                <p style="font-size: 16px; line-height: 1.6;">
+                  Please keep your appointment details and preparation guidelines from the selection email. If you have any questions, reply to that email or contact LashDiary directly.
+                </p>
+                <p style="font-size: 16px; line-height: 1.6;">With love,<br><strong>The LashDiary Team</strong></p>
+              </div>
+            </div>
+          `,
+        })
+        application.modelFee.confirmationEmailSent = true
+        application.modelFee.confirmationEmailSentAt = new Date().toISOString()
+      } catch (emailError: any) {
+        console.error('Error sending model fee confirmation email:', emailError)
+        application.modelFee.confirmationEmailError = emailError?.message || String(emailError)
+      }
+    }
+
+    await writeDataFile('model-applications.json', data)
+    console.log('Model application fee payment processed:', application.id)
+  } catch (error) {
+    console.error('Error handling model application fee payment:', error)
   }
 }
 
