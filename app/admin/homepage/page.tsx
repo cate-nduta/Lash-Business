@@ -281,7 +281,13 @@ export default function AdminHomepage() {
           hideTextOnImage: Boolean(data.hero?.hideTextOnImage),
           buttonPosition: data.hero?.buttonPosition ?? 'center',
           imageVersion: Number(data.hero?.imageVersion ?? 0),
-          buttons: Array.isArray(data.hero?.buttons) ? data.hero.buttons : [],
+          buttons: Array.isArray(data.hero?.buttons)
+            ? data.hero.buttons.filter((button: { text?: string; url?: string }) => {
+                const text = button.text?.trim().toLowerCase()
+                const url = button.url?.trim().toLowerCase()
+                return text !== 'view gallery' && url !== '/gallery'
+              })
+            : [],
         }
         const normalizedHomepage: HomepageData = {
           ...data,
@@ -1222,7 +1228,7 @@ export default function AdminHomepage() {
                 </button>
                 {(!homepage.hero.buttons || homepage.hero.buttons.length === 0) && (
                   <p className="mt-2 text-xs text-brown-dark/60 italic">
-                    No buttons configured. Default buttons (Book Now, View Gallery) will be shown.
+                    No buttons configured. The default Book Now button will be shown.
                   </p>
                 )}
               </div>

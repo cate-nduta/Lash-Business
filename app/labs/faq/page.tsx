@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { LabsFAQData } from '@/lib/labs-faq-utils'
+import FormattedText from '@/components/FormattedText'
 
 export default function LabsFAQPage() {
   const [faq, setFAQ] = useState<LabsFAQData | null>(null)
@@ -127,7 +128,7 @@ export default function LabsFAQPage() {
                       </button>
                       {expandedId === item.id && (
                         <div className="px-6 py-4 bg-white">
-                          <p className="text-brown-dark leading-relaxed whitespace-pre-line">{item.answer}</p>
+                          <FormattedText text={item.answer} as="p" className="text-brown-dark leading-relaxed" />
                         </div>
                       )}
                     </div>

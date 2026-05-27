@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 
 type BannerState = {
@@ -31,7 +31,6 @@ export default function PromoBanner() {
   const pathname = usePathname()
   const [bannerState, setBannerState] = useState<BannerState>(DEFAULT_STATE)
   const [ready, setReady] = useState(false)
-  const bannerRef = useRef<HTMLDivElement | null>(null)
 
   // Hide banner on /labs pages
   const shouldShow = !pathname.startsWith('/labs')
@@ -81,81 +80,12 @@ export default function PromoBanner() {
       })
   }, [shouldShow])
 
-  // Keep the sticky navbar below the sticky banner without adding visual spacing.
   useEffect(() => {
     const navbarContainer = document.getElementById('navbar-container')
     if (!navbarContainer) return
-
-    if (!shouldShow || !ready || !bannerState.bannerEnabled) {
-      // Reset when banner not showing
-      navbarContainer.style.setProperty('top', '0', 'important')
-      navbarContainer.style.setProperty('margin-top', '0', 'important')
-      navbarContainer.style.setProperty('padding-top', '0', 'important')
-      return
-    }
-
-    const bannerElement = bannerRef.current
-    if (!bannerElement) {
-      // Banner not rendered yet - set a default and retry
-      setTimeout(() => {
-        const el = bannerRef.current
-        if (el && navbarContainer) {
-          const height = el.getBoundingClientRect().height || 40
-          navbarContainer.style.setProperty('top', `${height}px`, 'important')
-          navbarContainer.style.setProperty('margin-top', '0', 'important')
-        }
-      }, 0)
-      return
-    }
-
-    const updatePosition = () => {
-      // Force reflow
-      const height = bannerElement.offsetHeight || bannerElement.getBoundingClientRect().height || 40
-      
-      if (height > 0) {
-        // Sticky offset prevents overlap while margin stays zero so banner and navbar touch.
-        navbarContainer.style.setProperty('top', `${height}px`, 'important')
-        navbarContainer.style.setProperty('margin-top', '0', 'important')
-        navbarContainer.style.setProperty('padding-top', '0', 'important')
-        navbarContainer.style.transition = 'top 0.2s ease'
-        navbarContainer.style.setProperty('border-top', 'none', 'important')
-        navbarContainer.style.setProperty('margin-bottom', '0', 'important')
-      }
-    }
-
-    // Use MutationObserver to watch for banner size changes
-    const observer = new MutationObserver(updatePosition)
-    observer.observe(bannerElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['style', 'class'],
-    })
-
-    // Update immediately and continuously
-    updatePosition()
-    const intervalId = setInterval(updatePosition, 100)
-    
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition)
-
-    // Multiple immediate updates to catch any timing issues
-    const timeouts = [
-      setTimeout(updatePosition, 0),
-      setTimeout(updatePosition, 10),
-      setTimeout(updatePosition, 50),
-      setTimeout(updatePosition, 100),
-      setTimeout(updatePosition, 200),
-      setTimeout(updatePosition, 500),
-    ]
-
-    return () => {
-      observer.disconnect()
-      clearInterval(intervalId)
-      timeouts.forEach(clearTimeout)
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition)
-    }
+    navbarContainer.style.setProperty('top', '0', 'important')
+    navbarContainer.style.setProperty('margin-top', '0', 'important')
+    navbarContainer.style.setProperty('padding-top', '0', 'important')
   }, [shouldShow, ready, bannerState.bannerEnabled])
 
   if (!shouldShow || !ready || !bannerState.bannerEnabled) {
@@ -180,36 +110,21 @@ export default function PromoBanner() {
 
   return (
     <div
-      ref={bannerRef}
-      className="overflow-hidden w-full bg-[var(--color-primary)] text-white border-b border-[var(--color-primary-dark)]/25 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+      className="w-full bg-[var(--color-primary)] text-white border-b border-[var(--color-primary-dark)]/25 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
       style={{
-        position: 'sticky',
-        top: 0,
         width: '100%',
         display: 'block',
         margin: 0,
-        padding: '5px 0',
+        padding: '8px 12px',
         zIndex: 60,
         boxSizing: 'border-box',
-        minHeight: '40px',
-        // Ensure banner takes up space and doesn't collapse
-        flexShrink: 0,
         height: 'auto',
       }}
     >
-      <div className="flex animate-scroll whitespace-nowrap">
-        {[...Array(2)].map((_, groupIndex) => (
-          <div key={groupIndex} className="flex items-center gap-6 shrink-0">
-            {[...Array(3)].map((__, itemIndex) => (
-              <div key={`${groupIndex}-${itemIndex}`} className="flex items-center gap-6 shrink-0">
-                <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wide uppercase text-white">
-                  {message}
-                </span>
-                <span className="text-xs md:text-sm text-white">•</span>
-              </div>
-            ))}
-          </div>
-        ))}
+      <div className="mx-auto max-w-7xl text-center">
+        <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wide uppercase text-white leading-snug">
+          {message}
+        </span>
       </div>
     </div>
   )

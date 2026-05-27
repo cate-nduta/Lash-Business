@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 interface DailyOrderCount {
   date: string // Format: DDMMYYYY
   count: number

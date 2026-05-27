@@ -6,6 +6,7 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { useCart } from '@/contexts/CartContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import Link from 'next/link'
+import FormattedText from '@/components/FormattedText'
 
 interface Product {
   id: string
@@ -216,9 +217,7 @@ export default function ProductDetail() {
                   <h2 className="text-xl font-semibold text-brown-dark mb-2">
                     Description
                   </h2>
-                  <p className="text-brown-dark/80 leading-relaxed whitespace-pre-line">
-                    {product.description}
-                  </p>
+                  <FormattedText text={product.description} as="p" className="text-brown-dark/80 leading-relaxed" />
                 </div>
               )}
 

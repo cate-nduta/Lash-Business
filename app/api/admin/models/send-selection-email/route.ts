@@ -105,7 +105,11 @@ function formatCurrency(amount: number, currency = 'KES'): string {
 }
 
 // Parse appointment date and time from date string and time object
-function parseAppointmentDateTime(dateStr: string, timeObj: { hours: string; minutes: string; ampm: string }): { start: Date; end: Date } | null {
+function parseAppointmentDateTime(
+  dateStr: string,
+  timeObj: { hours: string; minutes: string; ampm: string },
+  durationMinutes: number,
+): { start: Date; end: Date } | null {
   if (!dateStr || !timeObj) return null
   
   try {
@@ -123,7 +127,7 @@ function parseAppointmentDateTime(dateStr: string, timeObj: { hours: string; min
     // Create date with time in local timezone (will be converted to UTC for calendar)
     const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minutes, 0)
     
-    const end = new Date(start.getTime() + MODEL_APPOINTMENT_DURATION_MINUTES * 60 * 1000)
+    const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
     
     return { start, end }
   } catch (error) {
@@ -137,6 +141,11 @@ export async function POST(request: NextRequest) {
     await requireAdminAuth()
     const body = await request.json()
     const { applicationId, message, appointmentDateTime, appointmentDate, appointmentTime } = body
+    const requestedDurationMinutes = Number(body.appointmentDurationMinutes)
+    const appointmentDurationMinutes =
+      Number.isFinite(requestedDurationMinutes) && requestedDurationMinutes > 0
+        ? Math.round(requestedDurationMinutes)
+        : MODEL_APPOINTMENT_DURATION_MINUTES
 
     // Load model applications
     const data = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })
@@ -152,6 +161,7 @@ export async function POST(request: NextRequest) {
     let paymentUrl = ''
     let paymentReference = ''
     let safeFeeAmount = ''
+    const safeAppointmentDurationMinutes = escapeHtml(String(appointmentDurationMinutes))
 
     // Get location from contact settings
     const contact = await readDataFile<{ location?: string }>('contact.json', {})
@@ -218,7 +228,7 @@ export async function POST(request: NextRequest) {
     // Generate calendar link if appointment date/time is provided
     let calendarLink: string | null = null
     if (appointmentDate && appointmentTime) {
-      const parsedDateTime = parseAppointmentDateTime(appointmentDate, appointmentTime)
+      const parsedDateTime = parseAppointmentDateTime(appointmentDate, appointmentTime, appointmentDurationMinutes)
       if (parsedDateTime) {
         calendarLink = buildGoogleCalendarLink({
           summary: 'LashDiary Model Appointment',
@@ -230,7 +240,7 @@ export async function POST(request: NextRequest) {
         })
       }
     } else if (hasModelSlot && modelSlotStart) {
-      const modelSlotEnd = new Date(modelSlotStart.getTime() + MODEL_APPOINTMENT_DURATION_MINUTES * 60 * 1000)
+      const modelSlotEnd = new Date(modelSlotStart.getTime() + appointmentDurationMinutes * 60 * 1000)
       calendarLink = buildGoogleCalendarLink({
         summary: 'LashDiary Model Appointment',
         start: modelSlotStart,
@@ -292,7 +302,7 @@ export async function POST(request: NextRequest) {
               <div style="background:#F5F1EB; border-left:4px solid #7C4B31; padding:16px; margin:20px 0; border-radius:8px;">
                 <p style="margin:0 0 12px 0; font-size:15px; font-weight:600; color:#7C4B31;">During the Appointment:</p>
                 <p style="margin:0; font-size:14px; line-height:1.6; color:#7C4B31;">
-                  The appointment is scheduled for about ${MODEL_APPOINTMENT_DURATION_MINUTES} minutes. Feel free to bring a sweater or dress comfortably. I'll guide you through everything once you arrive.
+                  The appointment is scheduled for about ${safeAppointmentDurationMinutes} minutes. Feel free to bring a sweater or dress comfortably. I'll guide you through everything once you arrive.
                 </p>
               </div>
               

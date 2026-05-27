@@ -127,6 +127,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Admin Assisted Booking',
+      description: 'Create a client booking and send a Paystack deposit link',
+      href: '/admin/assisted-booking',
+      icon: '💳',
+      ownerOnly: false,
+    },
+    {
       title: 'Calendar',
       description: 'View bookings synchronized with your calendar',
       href: '/admin/calendar',

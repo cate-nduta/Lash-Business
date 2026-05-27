@@ -81,6 +81,7 @@ export default function Footer() {
   const getFooterLabel = (href: string, label: string) => {
     if (href === '/booking') return 'Book Appointment'
     if (href === '/policies') return 'Booking Policies'
+    if (href === '/privacy') return 'Privacy Policy'
     if (href === '/terms') return 'Terms & Conditions'
     if (href === '/contact') return 'Contact Us'
     return label

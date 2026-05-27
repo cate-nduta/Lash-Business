@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { normalizePromoCatalog, type PromoCode } from '@/lib/promo-utils'
 
 export async function POST(request: NextRequest) {
   try {
-    const raw = await readDataFile('promo-codes.json', {})
+    const raw = await readDataFilePreferRemote('promo-codes.json', {})
     const { catalog, changed } = normalizePromoCatalog(raw)
 
     if (changed) {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // SECURITY: If this is a welcome discount, check if email has already used one AND check 40-day validity
     if (isWelcomeDiscount && email) {
       const normalizedEmail = email.toLowerCase().trim()
-      const welcomeDiscountData = await readDataFile<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
+      const welcomeDiscountData = await readDataFilePreferRemote<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
         'welcome-discount-recipients.json',
         { recipients: [] }
       )

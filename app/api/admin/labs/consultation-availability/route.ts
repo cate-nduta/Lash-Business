@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export const revalidate = 0
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const availability = await readDataFile('labs-consultation-availability.json', {
+    const availability = await readDataFilePreferRemote('labs-consultation-availability.json', {
       availableDays: {
         monday: true,
         tuesday: true,

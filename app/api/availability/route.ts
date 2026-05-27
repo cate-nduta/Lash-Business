@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 
 export const runtime = 'nodejs'
-export const revalidate = 30 // Revalidate every 30 seconds (availability changes frequently)
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
-    const availability = await readDataFile('availability.json', {})
+    const availability = await readDataFilePreferRemote('availability.json', {})
     return NextResponse.json(availability, {
       headers: {
-        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {
@@ -24,7 +27,9 @@ export async function GET(request: NextRequest) {
       { 
         status: 500,
         headers: {
-          'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=60',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
       }
     )

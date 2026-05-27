@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Toast from '@/components/Toast'
 import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import AdminBackButton from '@/components/AdminBackButton'
+import FormattedText from '@/components/FormattedText'
 import { type ServiceCatalog, type ServiceCategory, type Service } from '@/lib/services-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
@@ -38,6 +39,25 @@ const blankCategory = (): ServiceCategory => ({
   services: [blankService()],
 })
 
+type NewServiceEmailDraft = {
+  subject: string
+  headline: string
+  subheading: string
+  intro: string
+  closing: string
+  buttonLabel: string
+}
+
+const defaultNewServiceEmail: NewServiceEmailDraft = {
+  subject: 'New Service Available 🤎',
+  headline: 'New Service Available!',
+  subheading: "We're excited to share something special with you",
+  intro: "We're thrilled to announce our newest service: **{{serviceName}}**!",
+  closing:
+    "Ready to book? Visit our services page to see all available options and schedule your appointment. We can't wait to see you!",
+  buttonLabel: 'View All Services',
+}
+
 export default function AdminServices() {
   const { currency, formatCurrency } = useCurrency()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
@@ -49,12 +69,28 @@ export default function AdminServices() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [notifySubscribers, setNotifySubscribers] = useState(false)
+  const [newServiceEmail, setNewServiceEmail] = useState<NewServiceEmailDraft>(defaultNewServiceEmail)
   const router = useRouter()
 
   const hasUnsavedChanges = useMemo(
     () => JSON.stringify(catalog) !== JSON.stringify(originalCatalog),
     [catalog, originalCatalog],
   )
+
+  const newServicesPreview = useMemo(() => {
+    const originalIds = new Set(
+      originalCatalog.categories.flatMap((category) => category.services.map((service) => service.id)),
+    )
+
+    return catalog.categories.flatMap((category) =>
+      category.services
+        .filter((service) => service.name.trim().length > 0 && !originalIds.has(service.id))
+        .map((service) => ({
+          ...service,
+          categoryName: category.name || 'New Category',
+        })),
+    )
+  }, [catalog, originalCatalog])
 
   // Helper function to get display price in selected currency
   const getDisplayPrice = (service: Service): number => {
@@ -65,6 +101,31 @@ export default function AdminServices() {
       return convertCurrency(service.price, 'KES', 'USD', DEFAULT_EXCHANGE_RATES)
     }
     return service.price
+  }
+
+  const sampleEmailService = newServicesPreview[0] || {
+    ...blankService(),
+    name: 'Wispy Volume Lashes',
+    price: 4500,
+    duration: 120,
+    categoryName: 'Lash Extensions',
+  }
+
+  const applyEmailPreviewTokens = (value: string) => {
+    const servicePrice = formatCurrency(getDisplayPrice(sampleEmailService))
+    return value
+      .replace(/\{\{\s*subscriberName\s*\}\}/g, 'Beautiful Soul')
+      .replace(/\{\{\s*serviceName\s*\}\}/g, sampleEmailService.name || 'New Service')
+      .replace(/\{\{\s*categoryName\s*\}\}/g, sampleEmailService.categoryName)
+      .replace(/\{\{\s*price\s*\}\}/g, servicePrice)
+      .replace(/\{\{\s*duration\s*\}\}/g, sampleEmailService.duration ? `${sampleEmailService.duration} minutes` : 'Varies')
+      .replace(/\{\{\s*servicesUrl\s*\}\}/g, '/services')
+  }
+
+  const formatEmailPreviewText = (value: string) => {
+    return applyEmailPreviewTokens(value)
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
   }
 
   useEffect(() => {
@@ -156,6 +217,7 @@ const setCatalogWithUpdate = (updater: (previous: ServiceCatalog) => ServiceCata
         body: JSON.stringify({
           ...catalog,
           notifySubscribers,
+          newServiceEmail,
         }),
       })
 
@@ -364,6 +426,141 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
             type={message.type}
             onClose={() => setMessage(null)}
           />
+        )}
+
+        {notifySubscribers && (
+          <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl shadow-lg border border-brown-light p-5 space-y-4">
+              <div>
+                <h2 className="text-xl font-display text-brown-dark">New service email</h2>
+                <p className="text-sm text-brown/70">
+                  Edit the email subscribers receive when you save a brand-new service. Use tokens like{' '}
+                  <code className="bg-pink-light px-1 rounded">{'{{serviceName}}'}</code>,{' '}
+                  <code className="bg-pink-light px-1 rounded">{'{{price}}'}</code>, and{' '}
+                  <code className="bg-pink-light px-1 rounded">{'{{duration}}'}</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={newServiceEmail.subject}
+                  onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, subject: event.target.value }))}
+                  className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">Header title</label>
+                  <input
+                    type="text"
+                    value={newServiceEmail.headline}
+                    onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, headline: event.target.value }))}
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">Header subtitle</label>
+                  <input
+                    type="text"
+                    value={newServiceEmail.subheading}
+                    onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, subheading: event.target.value }))}
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-1">Intro message</label>
+                <textarea
+                  value={newServiceEmail.intro}
+                  onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, intro: event.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-brown-dark mb-1">Closing message</label>
+                <textarea
+                  value={newServiceEmail.closing}
+                  onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, closing: event.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                <div>
+                  <label className="block text-sm font-semibold text-brown-dark mb-1">Button text</label>
+                  <input
+                    type="text"
+                    value={newServiceEmail.buttonLabel}
+                    onChange={(event) => setNewServiceEmail((prev) => ({ ...prev, buttonLabel: event.target.value }))}
+                    className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewServiceEmail(defaultNewServiceEmail)}
+                  className="px-4 py-2 rounded-lg border border-brown-light text-brown-dark hover:bg-pink-light/70"
+                >
+                  Reset copy
+                </button>
+              </div>
+
+              <p className="text-xs text-brown/60">
+                Tip: <strong>**bold**</strong> and <em>*italic*</em> work inside intro and closing messages.
+              </p>
+            </div>
+
+            <div className="bg-[#FDF9F4] rounded-2xl shadow-lg border border-brown-light p-5">
+              <p className="text-xs uppercase tracking-[0.25em] text-brown/60 mb-3">Preview</p>
+              <div className="rounded-2xl overflow-hidden bg-white shadow border border-brown-light/50">
+                <div className="bg-gradient-to-br from-[#7C4B31] to-[#F3E6DC] text-center px-6 py-8">
+                  <h3 className="text-2xl font-semibold text-white">
+                    {formatEmailPreviewText(newServiceEmail.headline)}
+                  </h3>
+                  <p className="mt-2 text-white/90">{formatEmailPreviewText(newServiceEmail.subheading)}</p>
+                </div>
+                <div className="p-6 space-y-5 text-brown-dark">
+                  <p>Hi Beautiful Soul!</p>
+                  <FormattedText
+                    text={applyEmailPreviewTokens(newServiceEmail.intro)}
+                    as="p"
+                    className="leading-relaxed"
+                  />
+                  <div className="rounded-xl border-2 border-[#F3E6DC] bg-[#FDF9F4] p-5">
+                    <h4 className="text-xl font-semibold text-brown-dark mb-3">
+                      {sampleEmailService.name}
+                    </h4>
+                    <div className="space-y-1 text-sm">
+                      <p><span className="text-brown/70">Category:</span> {sampleEmailService.categoryName}</p>
+                      <p><span className="text-brown/70">Price:</span> {formatCurrency(getDisplayPrice(sampleEmailService))}</p>
+                      <p><span className="text-brown/70">Duration:</span> {sampleEmailService.duration ? `${sampleEmailService.duration} minutes` : 'Varies'}</p>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <span className="inline-block rounded-full bg-brown-dark px-6 py-3 text-sm font-semibold text-white">
+                      {formatEmailPreviewText(newServiceEmail.buttonLabel)}
+                    </span>
+                  </div>
+                  <FormattedText
+                    text={applyEmailPreviewTokens(newServiceEmail.closing)}
+                    as="p"
+                    className="text-sm leading-relaxed text-brown/80"
+                  />
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-brown/60">
+                {newServicesPreview.length > 0
+                  ? `Previewing ${newServicesPreview[0].name}. If you add more than one new service, each service gets its own email.`
+                  : 'Add a new service to preview the real service details.'}
+              </p>
+            </div>
+          </div>
         )}
 
         <div className="bg-white rounded-2xl shadow-lg p-8">

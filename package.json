@@ -12,6 +12,8 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.45.2",
+    "baseline-browser-mapping": "^2.10.32",
+    "caniuse-lite": "^1.0.30001793",
     "critters": "^0.0.23",
     "dotenv": "^16.4.5",
     "googleapis": "^128.0.0",

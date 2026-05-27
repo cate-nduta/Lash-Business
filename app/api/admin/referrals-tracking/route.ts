@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
 import { normalizePromoCatalog } from '@/lib/promo-utils'
@@ -104,12 +104,12 @@ function buildCommissionPaidEmail(referral: PartnerReferral) {
 }
 
 async function loadReferralCatalog(): Promise<PartnerReferralCatalog> {
-  const primary = await readDataFile<PartnerReferralCatalog>(REFERRALS_FILE, { referrals: [] })
+  const primary = await readDataFilePreferRemote<PartnerReferralCatalog>(REFERRALS_FILE, { referrals: [] })
   if (Array.isArray(primary?.referrals) && primary.referrals.length > 0) {
     return primary
   }
 
-  const legacy = await readDataFile<PartnerReferralCatalog>(LEGACY_REFERRALS_FILE, { referrals: [] })
+  const legacy = await readDataFilePreferRemote<PartnerReferralCatalog>(LEGACY_REFERRALS_FILE, { referrals: [] })
   if (Array.isArray(legacy?.referrals) && legacy.referrals.length > 0) {
     await writeDataFile(REFERRALS_FILE, legacy)
     return legacy
@@ -139,7 +139,7 @@ export async function GET() {
       { pendingCount: 0, pendingAmount: 0, paidCount: 0, paidAmount: 0 },
     )
 
-    const promoRaw = await readDataFile('promo-codes.json', {})
+    const promoRaw = await readDataFilePreferRemote('promo-codes.json', {})
     const { catalog: promoCatalog, changed: promoChanged } = normalizePromoCatalog(promoRaw)
     if (promoChanged) {
       await writeDataFile('promo-codes.json', promoCatalog)
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Promo code is required.' }, { status: 400 })
       }
 
-      const promoRaw = await readDataFile('promo-codes.json', {})
+      const promoRaw = await readDataFilePreferRemote('promo-codes.json', {})
       const { catalog } = normalizePromoCatalog(promoRaw)
       const index = catalog.promoCodes.findIndex((promo) => promo.code === promoCodeValue)
       if (index === -1) {
@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
     let emailResult: any = null
 
     if (previousStatus !== nextStatus) {
-      const promoRaw = await readDataFile('promo-codes.json', {})
+      const promoRaw = await readDataFilePreferRemote('promo-codes.json', {})
       const { catalog } = normalizePromoCatalog(promoRaw)
       const promoIndex = catalog.promoCodes.findIndex(
         (promoCode) => promoCode.code.toLowerCase() === referral.promoCode.toLowerCase(),

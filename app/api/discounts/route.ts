@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 import { normalizeDepositNotice } from '@/lib/deposit-notice-utils'
 
 export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
-    const discounts = await readDataFile('discounts.json', {})
+    const discounts = await readDataFilePreferRemote('discounts.json', {})
     return NextResponse.json({
       ...discounts,
       depositNotice: normalizeDepositNotice((discounts as any)?.depositNotice),

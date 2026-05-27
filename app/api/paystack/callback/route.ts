@@ -85,9 +85,10 @@ export async function GET(request: NextRequest) {
       // Try to update booking/purchase records if we can find them
       // (Webhook will handle the main update, but this ensures immediate update)
       try {
-        // Check if this is a booking payment
-        const bookings = await readDataFile<any[]>('bookings.json', [])
-        const booking = bookings.find(b => 
+        // Check if this is a booking payment. Support both legacy array storage and current { bookings: [] } storage.
+        const bookingsData = await readDataFile<any[] | { bookings?: any[] }>('bookings.json', { bookings: [] })
+        const bookings = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || []
+        const booking = bookings.find(b =>
           b && (
             b.paymentOrderTrackingId === transactionReference ||
             b.pesapalOrderTrackingId === transactionReference
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
           const bookingIndex = bookings.findIndex(b => b.bookingId === booking.bookingId)
           if (bookingIndex !== -1) {
             bookings[bookingIndex] = booking
-            await writeDataFile('bookings.json', bookings)
+            await writeDataFile('bookings.json', Array.isArray(bookingsData) ? bookings : { ...bookingsData, bookings })
           }
         }
 

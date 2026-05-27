@@ -1,4 +1,4 @@
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 import { normalizeServiceCatalog } from '@/lib/services-utils'
 
 // CRITICAL: Email templates always read fresh data - no caching
@@ -65,7 +65,7 @@ const servicePrices: { [key: string]: number } = {
 async function loadServiceDurations(): Promise<{ [key: string]: number }> {
   try {
     // Always read fresh data - no caching for emails
-    const raw = await readDataFile('services.json', {})
+    const raw = await readDataFilePreferRemote('services.json', {})
     const { catalog } = normalizeServiceCatalog(raw)
     
     const durations: { [key: string]: number } = {}

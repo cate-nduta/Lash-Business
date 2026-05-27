@@ -4,6 +4,7 @@ import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailNotification } from '../../../booking/email/utils'
 import { recordActivity } from '@/lib/activity-log'
+import { BUSINESS_NOTIFICATION_EMAIL, sendEmailViaZoho } from '@/lib/email/zoho-config'
 
 type BookingLookSelection = {
   id: string
@@ -55,6 +56,52 @@ type RescheduleHistoryEntry = {
   notes?: string | null
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function textToHtml(value: string): string {
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p style="font-size:16px; line-height:1.6; margin:0 0 16px;">${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
+    .join('')
+}
+
+function formatNairobiDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Africa/Nairobi',
+  }).format(date)
+}
+
+function applyRescheduleEmailTokens(input: string, booking: any, oldTimeSlot: string, newTimeSlot: string) {
+  const replacements: Record<string, string> = {
+    '{name}': booking.name || '',
+    '{firstName}': String(booking.name || '').trim().split(/\s+/)[0] || booking.name || '',
+    '{email}': booking.email || '',
+    '{serviceName}': booking.service || '',
+    '{oldAppointment}': formatNairobiDateTime(oldTimeSlot),
+    '{newAppointment}': formatNairobiDateTime(newTimeSlot),
+    '{location}': booking.location || '',
+  }
+  return Object.entries(replacements).reduce(
+    (next, [token, value]) => next.split(token).join(value),
+    input
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
@@ -67,12 +114,16 @@ export async function POST(request: NextRequest) {
       newDate,
       newTimeSlot,
       sendEmail = false,
+      emailSubject,
+      emailBody,
       notes,
     } = body as {
       bookingId: string
       newDate: string
       newTimeSlot: string
       sendEmail?: boolean
+      emailSubject?: string
+      emailBody?: string
       notes?: string
     }
 
@@ -228,28 +279,43 @@ export async function POST(request: NextRequest) {
 
     if (sendEmail) {
       try {
-        const emailResult = await sendEmailNotification({
-          name: booking.name,
-          email: booking.email,
-          phone: booking.phone,
-          service: booking.service || '',
-          date: booking.date,
-          timeSlot: booking.timeSlot,
-          location: booking.location || '',
-          isFirstTimeClient: booking.discountType === 'first-time',
-          originalPrice: booking.originalPrice,
-          discount: booking.discount,
-          finalPrice: booking.finalPrice,
-          deposit: booking.deposit,
-          bookingId: booking.id,
-          manageToken: booking.manageToken || undefined,
-          policyWindowHours: booking.cancellationWindowHours || CLIENT_MANAGE_WINDOW_HOURS,
-          notes: typeof booking.notes === 'string' ? booking.notes : undefined,
-          desiredLook: typeof booking.desiredLook === 'string' && booking.desiredLook.trim().length > 0
-            ? booking.desiredLook
-            : 'Not specified',
-          desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
-        })
+        const customSubject = typeof emailSubject === 'string' ? emailSubject.trim() : ''
+        const customBody = typeof emailBody === 'string' ? emailBody.trim() : ''
+        const emailResult = customSubject && customBody
+          ? await sendEmailViaZoho({
+              to: [booking.email, BUSINESS_NOTIFICATION_EMAIL],
+              subject: applyRescheduleEmailTokens(customSubject, booking, historyEntry.fromTimeSlot, historyEntry.toTimeSlot),
+              html: `
+                <div style="font-family: Georgia, serif; padding:24px; background:#FDF9F4; color:#7C4B31;">
+                  <div style="max-width:640px; margin:0 auto; background:#FFFFFF; border:1px solid #E8D5C4; border-radius:18px; padding:28px;">
+                    ${textToHtml(applyRescheduleEmailTokens(customBody, booking, historyEntry.fromTimeSlot, historyEntry.toTimeSlot))}
+                  </div>
+                </div>
+              `,
+              text: applyRescheduleEmailTokens(customBody, booking, historyEntry.fromTimeSlot, historyEntry.toTimeSlot),
+            })
+          : await sendEmailNotification({
+              name: booking.name,
+              email: booking.email,
+              phone: booking.phone,
+              service: booking.service || '',
+              date: booking.date,
+              timeSlot: booking.timeSlot,
+              location: booking.location || '',
+              isFirstTimeClient: booking.discountType === 'first-time',
+              originalPrice: booking.originalPrice,
+              discount: booking.discount,
+              finalPrice: booking.finalPrice,
+              deposit: booking.deposit,
+              bookingId: booking.id,
+              manageToken: booking.manageToken || undefined,
+              policyWindowHours: booking.cancellationWindowHours || CLIENT_MANAGE_WINDOW_HOURS,
+              notes: typeof booking.notes === 'string' ? booking.notes : undefined,
+              desiredLook: typeof booking.desiredLook === 'string' && booking.desiredLook.trim().length > 0
+                ? booking.desiredLook
+                : 'Not specified',
+              desiredLookStatus: booking.desiredLookStatus === 'recommended' ? 'recommended' : 'custom',
+            })
 
         if (!emailResult?.success) {
           console.warn('Reschedule email may not have been delivered:', emailResult?.error)

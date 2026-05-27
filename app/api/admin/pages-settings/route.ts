@@ -21,6 +21,7 @@ const DEFAULT_PAGES: PagesSettings = {
       navbar: false,
       footer: true,
     },
+    privacy: { href: '/privacy', label: 'Privacy Policy', navbar: false, footer: true },
     terms: { href: '/terms', label: 'Terms & Conditions', navbar: false, footer: true },
   },
   loginRegisterIcon: true,

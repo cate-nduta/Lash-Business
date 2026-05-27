@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
 import { loadPolicies } from '@/lib/policies-utils'
@@ -10,7 +10,7 @@ export const revalidate = 0
 export async function GET() {
   try {
     await requireAdminAuth()
-    const discounts = await readDataFile('discounts.json', {})
+    const discounts = await readDataFilePreferRemote('discounts.json', {})
     return NextResponse.json({
       ...discounts,
       depositNotice: normalizeDepositNotice((discounts as any)?.depositNotice),

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import FormattedText from '@/components/FormattedText'
 
 type ModelQuestionType = 'single' | 'multiple' | 'text'
 
@@ -347,12 +348,12 @@ export default function ModelSignupPage() {
         {/* Description */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-brown/10 p-8 mb-8">
           {introText.split(/\n\s*\n/).map((paragraph, index, paragraphs) => (
-            <p
+            <FormattedText
               key={`${paragraph.slice(0, 20)}-${index}`}
+              text={paragraph}
+              as="p"
               className={`text-brown/80 leading-relaxed ${index < paragraphs.length - 1 ? 'mb-4' : ''}`}
-            >
-              {paragraph}
-            </p>
+            />
           ))}
         </div>
 
@@ -361,7 +362,7 @@ export default function ModelSignupPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brown-dark mb-2">
               Model Confirmation Fee
             </p>
-            <p className="text-brown/80 leading-relaxed">{feeNoticeText}</p>
+            <FormattedText text={feeNoticeText} as="p" className="text-brown/80 leading-relaxed" />
             <p className="text-xs text-brown/60 mt-3">
               You will not be charged when submitting this application.
             </p>
@@ -527,6 +528,13 @@ export default function ModelSignupPage() {
                   <span className="text-sm text-brown/80">{item.label}</span>
                 </label>
               ))}
+              <p className="text-xs text-brown/60">
+                By applying, you agree that LashDiary may process your application details according to our{' '}
+                <Link href="/privacy" target="_blank" className="font-semibold underline hover:text-brown-dark">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </div>
 
             {/* Submit Button */}

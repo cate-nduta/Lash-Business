@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { normalizeServiceCatalog } from '@/lib/services-utils'
 
 export const runtime = 'nodejs'
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const raw = await readDataFile('services.json', {})
+    const raw = await readDataFilePreferRemote('services.json', {})
     const { catalog, changed } = normalizeServiceCatalog(raw)
 
     if (changed) {

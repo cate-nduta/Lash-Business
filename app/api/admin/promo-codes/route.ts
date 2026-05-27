@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
 import { normalizePromoCatalog } from '@/lib/promo-utils'
@@ -7,7 +7,7 @@ import { normalizePromoCatalog } from '@/lib/promo-utils'
 export async function GET() {
   try {
     await requireAdminAuth()
-    const raw = await readDataFile('promo-codes.json', {})
+    const raw = await readDataFilePreferRemote('promo-codes.json', {})
     const { catalog, changed, count } = normalizePromoCatalog(raw)
 
     if (changed) {

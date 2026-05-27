@@ -239,6 +239,7 @@ export default function AdminSettings() {
           ...settings,
           business: {
             ...settings.business,
+            logoUrl: settings.business.logoType === 'image' ? settings.business.logoUrl || '' : '',
             faviconUrl: settings.business.faviconUrl || '',
             logoColor: settings.business.logoColor || '#733D26',
           },
@@ -553,7 +554,14 @@ export default function AdminSettings() {
                 <button
                   type="button"
                   onClick={() => {
-                    handleInputChange('business', 'logoType', 'text')
+                    setSettings((prev) => ({
+                      ...prev,
+                      business: {
+                        ...prev.business,
+                        logoType: 'text',
+                        logoUrl: '',
+                      },
+                    }))
                     setHasUnsavedChanges(true)
                   }}
                   className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-colors ${

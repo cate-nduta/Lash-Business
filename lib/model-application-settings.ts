@@ -288,10 +288,14 @@ export async function loadBookingBusyIntervals(options: { excludeBookingReferenc
         reservation.bookingReference !== options.excludeBookingReference &&
         (!reservation.expiresAt || new Date(reservation.expiresAt).getTime() > now)
     )
-    .map((reservation) => {
+    .map((reservation: any) => {
       const start = new Date(reservation.timeSlot as string)
       if (Number.isNaN(start.getTime())) return null
-      return getInterval(start)
+      const durationMinutes =
+        typeof reservation?.totalDurationMinutes === 'number' && reservation.totalDurationMinutes > 0
+          ? reservation.totalDurationMinutes
+          : MODEL_APPOINTMENT_DURATION_MINUTES
+      return getInterval(start, durationMinutes)
     })
     .filter((interval): interval is BusyInterval => Boolean(interval))
 

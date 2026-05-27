@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { readFile } from 'fs/promises'
 import path from 'path'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 import { getCourseSlug } from '@/lib/courses-utils'
 
 interface Module {
@@ -99,7 +99,7 @@ const modules: Module[] = [
 export default async function CoursePage() {
   // Redirect to courses listing or default course
   // For now, redirect to the booking website course if it exists
-  const catalog = await readDataFile<{ courses: any[] }>('courses.json', { courses: [] })
+  const catalog = await readDataFilePreferRemote<{ courses: any[] }>('courses.json', { courses: [] })
   const bookingCourse = catalog.courses.find(c => 
     c.title.toLowerCase().includes('booking website') || 
     c.id === 'course-booking-website'
@@ -112,7 +112,7 @@ export default async function CoursePage() {
   }
 
   // Fallback: Load course info from data file (for backward compatibility)
-  const courseInfo = await readDataFile('course-info.json', {
+  const courseInfo = await readDataFilePreferRemote('course-info.json', {
     title: 'How to Build a Client-Booking Website',
     subtitle: 'That Accepts Payments (Without a Developer)',
     description: 'A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required!',

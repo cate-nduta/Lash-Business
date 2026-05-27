@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { readDataFile } from '@/lib/data-utils'
+import FormattedText from '@/components/FormattedText'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -52,9 +53,11 @@ export default async function BeforeYourAppointmentPage() {
             Before Your Appointment
             <span className="absolute -top-2 -right-6 text-2xl opacity-50 hidden lg:inline-block">✨</span>
           </h1>
-          <p className="text-brown text-lg leading-relaxed">
-            {guidelines.introText || "Follow these guidelines to ensure the best results and a smooth, comfortable experience. Your lashes will thank you! 🤎"}
-          </p>
+          <FormattedText
+            text={guidelines.introText || "Follow these guidelines to ensure the best results and a smooth, comfortable experience. Your lashes will thank you! 🤎"}
+            as="p"
+            className="text-brown text-lg leading-relaxed"
+          />
         </div>
 
         <div className="bg-white rounded-3xl shadow-soft border border-brown-light/30 p-6 sm:p-10 space-y-8 relative overflow-hidden">
@@ -75,7 +78,7 @@ export default async function BeforeYourAppointmentPage() {
                 guidelines.doItems.map((item, index) => (
                   <li key={index} className="flex items-start gap-3">
                     <span className="text-emerald-600 font-bold mt-1 flex-shrink-0">•</span>
-                    <span>{item}</span>
+                    <FormattedText text={item} />
                   </li>
                 ))
               ) : (
@@ -99,7 +102,7 @@ export default async function BeforeYourAppointmentPage() {
                 guidelines.dontItems.map((item, index) => (
                   <li key={index} className="flex items-start gap-3">
                     <span className="text-rose-600 font-bold mt-1 flex-shrink-0">•</span>
-                    <span>{item}</span>
+                    <FormattedText text={item} />
                   </li>
                 ))
               ) : (

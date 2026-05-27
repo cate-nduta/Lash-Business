@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import nodemailer from 'nodemailer'
 import { normalizePromoCatalog } from '@/lib/promo-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Promo code is required' }, { status: 400 })
     }
 
-    const raw = await readDataFile('promo-codes.json', {})
+    const raw = await readDataFilePreferRemote('promo-codes.json', {})
     const { catalog, changed } = normalizePromoCatalog(raw)
     if (changed) {
       await writeDataFile('promo-codes.json', catalog)
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: If this is a welcome discount, check if email has already used one
     if (isWelcomeDiscount && email) {
-      const welcomeDiscountData = await readDataFile<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
+      const welcomeDiscountData = await readDataFilePreferRemote<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
         'welcome-discount-recipients.json',
         { recipients: [] }
       )
@@ -232,10 +232,10 @@ export async function POST(request: NextRequest) {
 
       const referralsFile = 'referrals-tracking.json'
       const legacyReferralsFile = 'salon-referrals.json'
-      const referralsData = await readDataFile<{ referrals: any[] }>(referralsFile, { referrals: [] })
+      const referralsData = await readDataFilePreferRemote<{ referrals: any[] }>(referralsFile, { referrals: [] })
       let referrals = Array.isArray(referralsData.referrals) ? [...referralsData.referrals] : []
       if (referrals.length === 0) {
-        const legacyData = await readDataFile<{ referrals: any[] }>(legacyReferralsFile, { referrals: [] })
+        const legacyData = await readDataFilePreferRemote<{ referrals: any[] }>(legacyReferralsFile, { referrals: [] })
         if (Array.isArray(legacyData.referrals) && legacyData.referrals.length > 0) {
           referrals = [...legacyData.referrals]
         }
@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
       
       // SECURITY: If this is a welcome discount being used, mark it in the tracking file
       if (isWelcomeDiscount && email) {
-        const welcomeDiscountData = await readDataFile<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
+        const welcomeDiscountData = await readDataFilePreferRemote<{ recipients: Array<{ email: string; receivedAt: string; promoCode?: string; usedAt?: string }> }>(
           'welcome-discount-recipients.json',
           { recipients: [] }
         )

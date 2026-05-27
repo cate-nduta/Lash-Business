@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { FAQItem } from '@/lib/faq-utils'
+import FormattedText from '@/components/FormattedText'
 
 interface FAQSectionProps {
   questions: FAQItem[]
@@ -45,9 +46,7 @@ export default function FAQSection({ questions }: FAQSectionProps) {
               }`}
             >
               <div className="px-5 py-4 bg-brown-light/5 border-t border-brown-light/20">
-                <p className="text-brown text-base leading-relaxed whitespace-pre-line">
-                  {item.answer}
-                </p>
+                <FormattedText text={item.answer} as="p" className="text-brown text-base leading-relaxed" />
               </div>
             </div>
           </div>

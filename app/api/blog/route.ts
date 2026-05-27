@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPublishedBlogPosts } from '@/lib/blog-utils'
 
-export const revalidate = 60 // Revalidate every 60 seconds
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
     const posts = await getPublishedBlogPosts()
     return NextResponse.json({ posts }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {

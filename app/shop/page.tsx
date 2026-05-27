@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
+import FormattedText from '@/components/FormattedText'
 
 interface Product {
   id: string
@@ -268,7 +269,7 @@ export default function Shop() {
               <div className="cartoon-sticker top-2 right-2 opacity-20 hidden sm:block">
                 <div className="sticker-sparkle"></div>
               </div>
-              <p className="text-brown-dark text-sm whitespace-pre-line">{shopNotice}</p>
+              <FormattedText text={shopNotice} as="p" className="text-brown-dark text-sm" />
             </div>
           ) : null}
         </div>

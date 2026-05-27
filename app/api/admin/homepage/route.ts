@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const homepage = await readDataFile('homepage.json', {})
+    const homepage = await readDataFilePreferRemote('homepage.json', {})
     return NextResponse.json(homepage)
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

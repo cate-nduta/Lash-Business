@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 
 function normalizeBaseUrl(): string {
   const raw =
@@ -82,12 +82,77 @@ interface EmailSubscriber {
   status?: 'active' | 'unsubscribed'
 }
 
-function createNewServiceEmailTemplate(service: NewService, subscriberName?: string) {
+export interface NewServiceAnnouncementContent {
+  subject?: string
+  headline?: string
+  subheading?: string
+  intro?: string
+  closing?: string
+  buttonLabel?: string
+}
+
+const DEFAULT_NEW_SERVICE_EMAIL: Required<NewServiceAnnouncementContent> = {
+  subject: 'New Service Available 🤎',
+  headline: 'New Service Available!',
+  subheading: "We're excited to share something special with you",
+  intro: "We're thrilled to announce our newest service: **{{serviceName}}**!",
+  closing:
+    "Ready to book? Visit our services page to see all available options and schedule your appointment. We can't wait to see you!",
+  buttonLabel: 'View All Services',
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function textToHtml(value: string) {
+  return escapeHtml(value)
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#7C4B31;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br />')
+}
+
+function applyTokens(value: string, tokens: Record<string, string>) {
+  return value.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, tokenName) => tokens[tokenName] ?? match)
+}
+
+function normalizeContent(content?: NewServiceAnnouncementContent): Required<NewServiceAnnouncementContent> {
+  return {
+    subject: content?.subject?.trim() || DEFAULT_NEW_SERVICE_EMAIL.subject,
+    headline: content?.headline?.trim() || DEFAULT_NEW_SERVICE_EMAIL.headline,
+    subheading: content?.subheading?.trim() || DEFAULT_NEW_SERVICE_EMAIL.subheading,
+    intro: content?.intro?.trim() || DEFAULT_NEW_SERVICE_EMAIL.intro,
+    closing: content?.closing?.trim() || DEFAULT_NEW_SERVICE_EMAIL.closing,
+    buttonLabel: content?.buttonLabel?.trim() || DEFAULT_NEW_SERVICE_EMAIL.buttonLabel,
+  }
+}
+
+function createNewServiceEmailTemplate(
+  service: NewService,
+  subscriberName?: string,
+  content?: NewServiceAnnouncementContent,
+) {
   const { background, card, accent, textPrimary, textSecondary, brand } = EMAIL_STYLES
   const name = subscriberName || 'there'
   const priceFormatted = `KSH ${service.price.toLocaleString()}`
   const durationText = service.duration ? `${service.duration} minutes` : 'Varies'
   const servicesUrl = `${BASE_URL}/services`
+  const normalizedContent = normalizeContent(content)
+  const tokens = {
+    subscriberName: name,
+    serviceName: service.name,
+    categoryName: service.categoryName,
+    price: priceFormatted,
+    duration: durationText,
+    servicesUrl,
+  }
+  const introHtml = textToHtml(applyTokens(normalizedContent.intro, tokens))
+  const closingHtml = textToHtml(applyTokens(normalizedContent.closing, tokens))
 
   return `
 <!DOCTYPE html>
@@ -95,7 +160,7 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Service Available - ${service.name}</title>
+  <title>${escapeHtml(normalizedContent.subject)}</title>
 </head>
 <body style="margin:0; padding:0; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color:${background};">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:${background}; padding:32px 16px;">
@@ -104,26 +169,26 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background-color:${card}; border-radius:16px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
           <tr>
             <td style="padding:40px 32px; background:linear-gradient(135deg, ${brand} 0%, ${accent} 100%); text-align:center;">
-              <h1 style="margin:0; font-size:28px; color:#FFFFFF; font-weight:600;">New Service Available!</h1>
-              <p style="margin:12px 0 0 0; font-size:16px; color:#FFFFFF; opacity:0.95;">We're excited to share something special with you</p>
+              <h1 style="margin:0; font-size:28px; color:#FFFFFF; font-weight:600;">${escapeHtml(applyTokens(normalizedContent.headline, tokens))}</h1>
+              <p style="margin:12px 0 0 0; font-size:16px; color:#FFFFFF; opacity:0.95;">${escapeHtml(applyTokens(normalizedContent.subheading, tokens))}</p>
             </td>
           </tr>
 
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 20px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                Hi ${name}!
+                Hi ${escapeHtml(name)}!
               </p>
               <p style="margin:0 0 24px 0; font-size:16px; line-height:1.6; color:${textPrimary};">
-                We're thrilled to announce our newest service: <strong style="color:${brand};">${service.name}</strong>!
+                ${introHtml}
               </p>
 
               <div style="border:2px solid ${accent}; border-radius:14px; padding:24px; background:${background}; margin-bottom:24px;">
-                <h2 style="margin:0 0 16px 0; font-size:22px; color:${brand}; font-weight:600;">${service.name}</h2>
+                <h2 style="margin:0 0 16px 0; font-size:22px; color:${brand}; font-weight:600;">${escapeHtml(service.name)}</h2>
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:15px; line-height:1.8;">
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary}; width:100px;">Category</td>
-                    <td style="padding:6px 0; color:${textPrimary}; font-weight:500;">${service.categoryName}</td>
+                    <td style="padding:6px 0; color:${textPrimary}; font-weight:500;">${escapeHtml(service.categoryName)}</td>
                   </tr>
                   <tr>
                     <td style="padding:6px 0; color:${textSecondary};">Price</td>
@@ -139,11 +204,11 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
               </div>
 
               <div style="text-align:center; margin:32px 0;">
-                <a href="${servicesUrl}" style="display:inline-block; padding:14px 32px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:16px; box-shadow:0 4px 12px rgba(124,75,49,0.3);">View All Services</a>
+                <a href="${servicesUrl}" style="display:inline-block; padding:14px 32px; background:${brand}; color:#FFFFFF; border-radius:999px; text-decoration:none; font-weight:600; font-size:16px; box-shadow:0 4px 12px rgba(124,75,49,0.3);">${escapeHtml(applyTokens(normalizedContent.buttonLabel, tokens))}</a>
               </div>
 
               <p style="margin:24px 0 0 0; font-size:14px; line-height:1.6; color:${textSecondary};">
-                Ready to book? Visit our services page to see all available options and schedule your appointment. We can't wait to see you!
+                ${closingHtml}
               </p>
             </td>
           </tr>
@@ -167,7 +232,10 @@ function createNewServiceEmailTemplate(service: NewService, subscriberName?: str
   `.trim()
 }
 
-export async function sendNewServiceAnnouncement(service: NewService): Promise<{
+export async function sendNewServiceAnnouncement(
+  service: NewService,
+  content?: NewServiceAnnouncementContent,
+): Promise<{
   success: boolean
   sent: number
   failed: number
@@ -185,7 +253,7 @@ export async function sendNewServiceAnnouncement(service: NewService): Promise<{
 
   try {
     // Get all active subscribers
-    const subscribersData = await readDataFile('email-subscribers.json', { subscribers: [] })
+    const subscribersData = await readDataFilePreferRemote('email-subscribers.json', { subscribers: [] })
     const subscribers: EmailSubscriber[] = Array.isArray(subscribersData.subscribers)
       ? subscribersData.subscribers.filter(
           (sub: EmailSubscriber) => sub.status !== 'unsubscribed' && sub.email
@@ -202,7 +270,7 @@ export async function sendNewServiceAnnouncement(service: NewService): Promise<{
       }
     }
 
-    const emailSubject = `New Service Available 🤎`
+    const emailSubject = normalizeContent(content).subject
     let sent = 0
     let failed = 0
     const errors: string[] = []
@@ -210,7 +278,7 @@ export async function sendNewServiceAnnouncement(service: NewService): Promise<{
     // Send emails to all subscribers
     for (const subscriber of subscribers) {
       try {
-        const htmlContent = createNewServiceEmailTemplate(service, subscriber.name)
+        const htmlContent = createNewServiceEmailTemplate(service, subscriber.name, content)
 
         await zohoTransporter.sendMail({
           from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,

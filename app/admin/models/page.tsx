@@ -210,6 +210,7 @@ export default function AdminModels() {
   const [rejectionMessage, setRejectionMessage] = useState('')
   const [appointmentDate, setAppointmentDate] = useState('')
   const [appointmentTime, setAppointmentTime] = useState({ hours: '10', minutes: '00', ampm: 'AM' })
+  const [appointmentDurationMinutes, setAppointmentDurationMinutes] = useState(75)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [sendingRejection, setSendingRejection] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -507,6 +508,7 @@ export default function AdminModels() {
           appointmentDateTime: formattedDateTime,
           appointmentDate: appointmentDate,
           appointmentTime: appointmentTime,
+          appointmentDurationMinutes,
         }),
       })
 
@@ -522,6 +524,7 @@ export default function AdminModels() {
         setEmailMessage('')
         setAppointmentDate('')
         setAppointmentTime({ hours: '10', minutes: '00', ampm: 'AM' })
+        setAppointmentDurationMinutes(75)
         updateStatus(selectedApplication.id, 'selected')
       } else {
         const data = await response.json()
@@ -569,7 +572,13 @@ export default function AdminModels() {
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-4xl font-display text-brown-dark mb-6">Model Applications Management</h1>
+          <h1 className="text-4xl font-display text-brown-dark mb-3">Model Applications Management</h1>
+          <Link
+            href="/admin/models/applied"
+            className="mb-6 inline-flex rounded-lg bg-brown-dark px-4 py-2 text-sm font-semibold text-white hover:bg-brown"
+          >
+            Applied models
+          </Link>
 
           <div className="mb-8 rounded-lg border-2 border-brown-light bg-pink-light/30 p-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -856,203 +865,16 @@ export default function AdminModels() {
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex gap-4 mb-6 border-b border-brown-light">
-            <span
-              onClick={() => setFilter('all')}
-              className={`pb-2 px-4 font-semibold transition-colors cursor-pointer ${
-                filter === 'all'
-                  ? 'text-brown-dark border-b-2 border-brown-dark'
-                  : 'text-brown/60 hover:text-brown-dark'
-              }`}
+          <div className="rounded-lg border border-brown-light bg-pink-light/20 p-5 text-brown/80">
+            <p className="font-semibold text-brown-dark">Model applications are now on their own page.</p>
+            <p className="mt-1 text-sm">Use Applied models to review All, Pending, Selected, and Rejected applications.</p>
+            <Link
+              href="/admin/models/applied"
+              className="mt-3 inline-flex rounded-lg bg-brown-dark px-4 py-2 text-sm font-semibold text-white hover:bg-brown"
             >
-              All ({applications.length})
-            </span>
-            <span
-              onClick={() => setFilter('pending')}
-              className={`pb-2 px-4 font-semibold transition-colors cursor-pointer ${
-                filter === 'pending'
-                  ? 'text-brown-dark border-b-2 border-brown-dark'
-                  : 'text-brown/60 hover:text-brown-dark'
-              }`}
-            >
-              Pending ({applications.filter((a) => a.status === 'pending').length})
-            </span>
-            <span
-              onClick={() => setFilter('selected')}
-              className={`pb-2 px-4 font-semibold transition-colors cursor-pointer ${
-                filter === 'selected'
-                  ? 'text-brown-dark border-b-2 border-brown-dark'
-                  : 'text-brown/60 hover:text-brown-dark'
-              }`}
-            >
-              Selected ({applications.filter((a) => a.status === 'selected').length})
-            </span>
-            <span
-              onClick={() => setFilter('rejected')}
-              className={`pb-2 px-4 font-semibold transition-colors cursor-pointer ${
-                filter === 'rejected'
-                  ? 'text-brown-dark border-b-2 border-brown-dark'
-                  : 'text-brown/60 hover:text-brown-dark'
-              }`}
-            >
-              Rejected ({applications.filter((a) => a.status === 'rejected').length})
-            </span>
+              Applied models
+            </Link>
           </div>
-
-          {/* Applications List */}
-          {filteredApplications.length === 0 ? (
-            <div className="text-center py-12 text-brown/60">
-              <p>No {filter === 'all' ? '' : filter} applications found.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredApplications.map((app) => (
-                <div
-                  key={app.id}
-                  className="border-2 border-brown-light rounded-lg p-6 bg-pink-light/30"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold text-brown-dark mb-2">
-                        {app.firstName} {app.lastName}
-                      </h3>
-                      <div className="space-y-1 text-sm text-brown/80">
-                        <p><strong>Email:</strong> {app.email}</p>
-                        {app.phone && <p><strong>Phone:</strong> {app.phone}</p>}
-                        {app.instagram && <p><strong>Instagram:</strong> {app.instagram}</p>}
-                        <p><strong>Submitted:</strong> {new Date(app.submittedAt).toLocaleDateString()}</p>
-                        <p>
-                          <strong>Status:</strong>{' '}
-                          <span
-                            className={`font-semibold ${
-                              app.status === 'selected'
-                                ? 'text-green-600'
-                                : app.status === 'rejected'
-                                ? 'text-red-600'
-                                : 'text-amber-600'
-                            }`}
-                          >
-                            {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
-                          </span>
-                        </p>
-                        {app.modelFee?.enabled && (
-                          <p>
-                            <strong>Model fee:</strong>{' '}
-                            {formatModelFeeAmount(app.modelFee.amount, app.modelFee.currency)} ·{' '}
-                            <span
-                              className={`font-semibold ${
-                                app.modelFee.paymentStatus === 'paid'
-                                  ? 'text-green-600'
-                                  : app.modelFee.paymentStatus === 'waived'
-                                  ? 'text-blue-600'
-                                  : 'text-amber-600'
-                              }`}
-                            >
-                              {app.modelFee.paymentStatus === 'paid'
-                                ? 'Paid'
-                                : app.modelFee.paymentStatus === 'waived'
-                                ? 'Waived'
-                                : 'Pending payment'}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {app.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setSelectedApplication(app)
-                              setShowEmailModal(true)
-                            }}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-                          >
-                            Send Selection Email
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedApplication(app)
-                              setShowRejectionModal(true)
-                            }}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      {app.status === 'selected' && (
-                        <button
-                          onClick={() => updateStatus(app.id, 'pending')}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-                        >
-                          Mark as Pending
-                        </button>
-                      )}
-                      {app.status === 'rejected' && (
-                        <button
-                          onClick={() => updateStatus(app.id, 'pending')}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-                        >
-                          Mark as Pending
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-brown-light">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="font-semibold text-brown-dark mb-1">Availability:</p>
-                        <p className="text-brown/80 whitespace-pre-wrap">{formatModelSlotLabel(app.availability)}</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-brown-dark mb-1">Lash Experience:</p>
-                        <p className="text-brown/80">
-                          Has had extensions: {app.hasLashExtensions || 'Not specified'}
-                        </p>
-                        <p className="text-brown/80">
-                          Previous client: {app.hasAppointmentBefore || 'Not specified'}
-                        </p>
-                        <p className="text-brown/80">
-                          Comfortable with long sessions: {app.comfortableLongSessions || 'Not specified'}
-                        </p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <p className="font-semibold text-brown-dark mb-1">Allergies/Sensitivities:</p>
-                        <p className="text-brown/80 whitespace-pre-wrap">{app.allergies || 'None specified'}</p>
-                      </div>
-                      {app.customAnswers && (
-                        <div className="md:col-span-2">
-                          <p className="font-semibold text-brown-dark mb-1">Application Answers:</p>
-                          <div className="space-y-1 text-brown/80">
-                            {(app.modelQuestions || modelQuestions).map((question) => (
-                              <p key={question.id}>
-                                <strong>{question.label}:</strong> {formatAnswer(app.customAnswers?.[question.id])}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(app.consentItems || consentItems).length > 0 && (
-                        <div className="md:col-span-2">
-                          <p className="font-semibold text-brown-dark mb-1">Consent & Agreement:</p>
-                          <div className="space-y-1 text-brown/80">
-                            {(app.consentItems || consentItems).map((item) => (
-                              <p key={item.id}>
-                                <strong>{app.consentAccepted?.[item.id] ? 'Agreed' : 'Not agreed'}:</strong> {item.label}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -1139,6 +961,25 @@ export default function AdminModels() {
               <p className="text-xs text-brown/60 mt-1 mb-4">
                 Leave this empty to use the model's chosen application slot.
               </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-brown-dark mb-2">
+                  Appointment Duration <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="15"
+                    step="15"
+                    value={appointmentDurationMinutes}
+                    onChange={(event) => setAppointmentDurationMinutes(Math.max(Number(event.target.value) || 75, 15))}
+                    className="w-32 px-4 py-2 border-2 border-brown-light rounded-lg bg-white focus:ring-2 focus:ring-brown focus:border-brown"
+                  />
+                  <span className="text-sm text-brown/80">minutes</span>
+                </div>
+                <p className="text-xs text-brown/60 mt-1">
+                  This changes the “During the Appointment” text and the Google Calendar event length.
+                </p>
+              </div>
               <div className="mb-4 rounded-lg border border-brown-light bg-pink-light/30 p-3">
                 <p className="text-sm font-semibold text-brown-dark">Model fee</p>
                 <p className="text-sm text-brown/80">
@@ -1175,6 +1016,7 @@ export default function AdminModels() {
                   setEmailMessage('')
                   setAppointmentDate('')
                   setAppointmentTime({ hours: '10', minutes: '00', ampm: 'AM' })
+                  setAppointmentDurationMinutes(75)
                 }}
                 className="px-4 py-2 border-2 border-brown-light rounded-lg text-brown-dark font-semibold hover:bg-brown-light transition-colors"
               >

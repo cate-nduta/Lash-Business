@@ -7,6 +7,7 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES, type Currency, type ExchangeRates } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import Link from 'next/link'
+import FormattedText from '@/components/FormattedText'
 
 interface DisplayService {
   id: string
@@ -302,80 +303,12 @@ export default function Services() {
                 {activeCategory.showNotice && activeCategory.notice.trim().length > 0 && (
                   <div className="bg-[var(--color-surface)] border-l-4 border-[var(--color-primary)] rounded-r-xl p-6 shadow-soft text-left">
                     <h2 className="text-xl font-semibold text-[var(--color-primary)] mb-2">Please note</h2>
-                    <p className="text-[var(--color-text)] whitespace-pre-line">
-                      {(() => {
-                        const notice = activeCategory.notice
-                        // Create a more sophisticated parser that handles links properly
-                        const parts: (string | { type: 'link'; text: string; href: string })[] = []
-                        let lastIndex = 0
-                        
-                        // Find all occurrences of linkable text
-                        const patterns = [
-                          { regex: /pre-appointment\s+guidelines?/gi, href: '/before-your-appointment' },
-                          { regex: /\bpolicies\b/gi, href: '/policies' },
-                        ]
-                        
-                        const matches: Array<{ index: number; length: number; text: string; href: string }> = []
-                        
-                        patterns.forEach(({ regex, href }) => {
-                          let match
-                          regex.lastIndex = 0 // Reset regex
-                          while ((match = regex.exec(notice)) !== null) {
-                            matches.push({
-                              index: match.index,
-                              length: match[0].length,
-                              text: match[0],
-                              href,
-                            })
-                          }
-                        })
-                        
-                        // Sort matches by index
-                        matches.sort((a, b) => a.index - b.index)
-                        
-                        // Build parts array
-                        matches.forEach((match) => {
-                          // Add text before the match
-                          if (match.index > lastIndex) {
-                            parts.push(notice.substring(lastIndex, match.index))
-                          }
-                          // Add the link
-                          parts.push({
-                            type: 'link',
-                            text: match.text,
-                            href: match.href,
-                          })
-                          lastIndex = match.index + match.length
-                        })
-                        
-                        // Add remaining text
-                        if (lastIndex < notice.length) {
-                          parts.push(notice.substring(lastIndex))
-                        }
-                        
-                        // If no matches, just return the notice as-is
-                        if (parts.length === 0) {
-                          parts.push(notice)
-                        }
-                        
-                        return parts.map((part, index) => {
-                          if (typeof part === 'object' && part.type === 'link') {
-                            return (
-                              <Link
-                                key={index}
-                                href={part.href}
-                                className="text-[var(--color-primary)] font-semibold hover:underline"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {part.text}
-                              </Link>
-                            )
-                          }
-                          return <span key={index}>{typeof part === 'string' ? part : String(part)}</span>
-                        })
-                      })()}
-                    </p>
+                    <FormattedText
+                      text={activeCategory.notice}
+                      as="p"
+                      className="text-[var(--color-text)]"
+                      autoLink
+                    />
                   </div>
                 )}
 
@@ -424,9 +357,11 @@ export default function Services() {
                               </span>
                             </div>
                             {fullService?.description && (
-                              <p className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors whitespace-pre-line">
-                                {fullService.description}
-                              </p>
+                              <FormattedText
+                                text={fullService.description}
+                                as="p"
+                                className="text-[var(--color-text)]/80 leading-relaxed mb-2 group-hover:text-[var(--color-text)] transition-colors"
+                              />
                             )}
                             {displayService.duration && (
                               <p className="text-sm font-semibold text-[var(--color-primary)]/80 mb-3">

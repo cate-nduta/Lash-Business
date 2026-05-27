@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useInView } from 'react-intersection-observer'
 import NewsletterPopup from '@/components/NewsletterPopup'
+import FormattedText from '@/components/FormattedText'
 
 interface HomepageData {
   hero: {
@@ -239,7 +240,11 @@ export default function Home() {
             hero: {
               ...homepageData.hero,
               buttons: Array.isArray(homepageData.hero?.buttons)
-                ? homepageData.hero.buttons.filter((btn: { text: string; url: string; primary?: boolean; external?: boolean }) => btn.text && btn.url) // Filter out empty buttons
+                ? homepageData.hero.buttons.filter((btn: { text: string; url: string; primary?: boolean; external?: boolean }) => {
+                    const text = btn.text?.trim().toLowerCase()
+                    const url = btn.url?.trim().toLowerCase()
+                    return btn.text && btn.url && text !== 'view gallery' && url !== '/gallery'
+                  })
                 : []
             }
           }
@@ -727,12 +732,6 @@ export default function Home() {
                   <span aria-hidden className="group-hover:translate-x-1 transition-transform duration-300 text-bounce">→</span>
                 </span>
               </Link>
-              <Link
-                href="/gallery"
-                className={`${lockHeroButtonMotion ? '' : 'btn-fun hover-lift hover-sparkle'} inline-flex items-center justify-center gap-2 bg-[var(--color-surface)]/70 hover:bg-[var(--color-surface)] text-[var(--color-text)] font-semibold text-sm sm:text-base px-6 py-3 sm:py-4 rounded-full shadow-lg border border-[var(--color-primary)]/25 w-full sm:w-auto touch-manipulation relative`}
-              >
-                <span className="relative z-10">View Gallery</span>
-              </Link>
             </div>
           )}
           {fridaySlotsActivated && (homepageData?.showFridayBooking !== false) && (
@@ -818,9 +817,11 @@ export default function Home() {
                       {meetArtist.credentials}
                     </p>
                   )}
-                  <div className="text-base md:text-lg leading-relaxed text-[var(--color-text)]/85 whitespace-pre-line">
-                    {meetArtist.bio}
-                  </div>
+                  <FormattedText
+                    text={meetArtist.bio}
+                    as="div"
+                    className="text-base md:text-lg leading-relaxed text-[var(--color-text)]/85"
+                  />
                 </div>
               </div>
             </div>
@@ -872,9 +873,11 @@ export default function Home() {
                   <h3 className="text-2xl font-display text-[var(--color-text)] mb-3 group-hover:text-[var(--color-primary)] transition-colors duration-300">
                     {feature.title}
                   </h3>
-                  <p className="text-[var(--color-text)]/80 leading-relaxed group-hover:text-[var(--color-text)] transition-colors duration-300">
-                    {feature.description}
-                  </p>
+                  <FormattedText
+                    text={feature.description}
+                    as="p"
+                    className="text-[var(--color-text)]/80 leading-relaxed group-hover:text-[var(--color-text)] transition-colors duration-300"
+                  />
                 </div>
               </div>
             ))}
@@ -1007,9 +1010,11 @@ export default function Home() {
               </div>
               <div className="col-span-1 lg:col-span-3 p-8 sm:p-12 space-y-6">
                 {tsubokiMassage.description && (
-                  <p className="text-lg text-[var(--color-text)]/85 leading-relaxed">
-                    {tsubokiMassage.description}
-                  </p>
+                  <FormattedText
+                    text={tsubokiMassage.description}
+                    as="p"
+                    className="text-lg text-[var(--color-text)]/85 leading-relaxed"
+                  />
                 )}
                 {tsubokiMassage.benefits && tsubokiMassage.benefits.length > 0 && (
                   <div className="space-y-3">
@@ -1023,7 +1028,7 @@ export default function Home() {
                           className="flex items-start gap-3 text-[var(--color-text)]/85"
                         >
                           <span className="text-lg">🌸</span>
-                          <span>{benefit}</span>
+                          <FormattedText text={benefit} />
                         </li>
                       ))}
                     </ul>
@@ -1034,7 +1039,7 @@ export default function Home() {
                     <p className="text-sm font-semibold tracking-[0.2em] uppercase text-[var(--color-text)]/60 mb-2">
                       Why it matters
                     </p>
-                    <p>{tsubokiMassage.whyItMatters}</p>
+                    <FormattedText text={tsubokiMassage.whyItMatters} as="p" />
                   </div>
                 )}
               </div>
@@ -1091,9 +1096,11 @@ export default function Home() {
                 )}
                 {ourStudio.description && (
                   <div className="flex flex-col justify-center text-center lg:text-left flex-1">
-                  <div className="text-base md:text-lg leading-relaxed text-[var(--color-text)]/85 whitespace-pre-line">
-                    {ourStudio.description}
-                  </div>
+                  <FormattedText
+                    text={ourStudio.description}
+                    as="div"
+                    className="text-base md:text-lg leading-relaxed text-[var(--color-text)]/85"
+                  />
                 </div>
                 )}
               </div>
@@ -1222,9 +1229,11 @@ export default function Home() {
                           {faq.title || 'Frequently Asked Questions'}
                         </h3>
                       </div>
-                      <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
-                        {faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
-                      </p>
+                      <FormattedText
+                        text={faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
+                        as="p"
+                        className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed"
+                      />
                     </div>
                     <div className="flex-shrink-0">
                       <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
@@ -1254,9 +1263,11 @@ export default function Home() {
                           {faq.title || 'Frequently Asked Questions'}
                         </h3>
                       </div>
-                      <p className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed">
-                        {faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
-                      </p>
+                      <FormattedText
+                        text={faq.description || "Have questions? We've got answers. Explore our FAQ to learn more about lash extensions, appointments, and everything in between."}
+                        as="p"
+                        className="text-[var(--color-text)]/70 text-base sm:text-lg leading-relaxed"
+                      />
                     </div>
                     <div className="flex-shrink-0">
                       <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold shadow-lg group-hover:bg-[var(--color-primary-dark)] transition-all duration-300 group-hover:scale-105">
@@ -1279,9 +1290,11 @@ export default function Home() {
             <h2 className="text-3xl md:text-4xl font-display text-brown-dark mb-4">
               {homepageData.modelSignup.title || 'Model Casting Call'}
             </h2>
-            <p className="text-lg text-brown/70 mb-8 max-w-2xl mx-auto">
-              {homepageData.modelSignup.description || 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.'}
-            </p>
+            <FormattedText
+              text={homepageData.modelSignup.description || 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.'}
+              as="p"
+              className="text-lg text-brown/70 mb-8 max-w-2xl mx-auto"
+            />
             <Link
               href="/modelsignup"
               className="inline-block bg-brown-dark hover:bg-brown text-white font-semibold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
@@ -1307,9 +1320,11 @@ export default function Home() {
                 </h2>
               )}
               {cta.description && (
-                <p className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl">
-                  {cta.description}
-                </p>
+                <FormattedText
+                  text={cta.description}
+                  as="p"
+                  className="text-base md:text-lg text-[var(--color-on-primary)]/85 max-w-3xl"
+                />
               )}
             <div className="flex flex-wrap justify-center gap-4 pt-4">
               {cta.buttonText && (

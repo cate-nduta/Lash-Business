@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type ServiceCatalog } from '@/lib/services-utils'
 import { Currency, convertCurrency, type ExchangeRates } from '@/lib/currency-utils'
 import { type ServiceCartItem } from '@/contexts/ServiceCartContext'
+import FormattedText from '@/components/FormattedText'
 
 const serviceDescriptions: Record<string, string> = {
   'Classic Lashes': 'One extension applied to each natural lash for a natural, elegant look. Perfect for everyday wear.',
@@ -107,7 +108,7 @@ export default function BookingServicePicker({
       {activeCategory?.showNotice && activeCategory.notice.trim().length > 0 && (
         <div className="bg-white border-l-4 border-[var(--color-primary)] rounded-r-xl p-4 text-sm text-brown-dark/90">
           <p className="font-semibold text-[var(--color-primary)] mb-1">Please note</p>
-          <p className="whitespace-pre-line">{activeCategory.notice}</p>
+          <FormattedText text={activeCategory.notice} as="p" autoLink />
         </div>
       )}
 
@@ -148,9 +149,11 @@ export default function BookingServicePicker({
                       </span>
                     </div>
                     {description && (
-                      <p className="text-sm text-brown-dark/80 leading-relaxed mb-2 whitespace-pre-line">
-                        {description}
-                      </p>
+                      <FormattedText
+                        text={description}
+                        as="p"
+                        className="text-sm text-brown-dark/80 leading-relaxed mb-2"
+                      />
                     )}
                     {service.duration > 0 && (
                       <p className="text-xs font-semibold text-[var(--color-primary)]/80">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFile, readDataFilePreferRemote } from '@/lib/data-utils'
 import { getMinimumNoticeHours, isSlotAfterMinimumNotice } from '@/lib/booking-notice-utils'
 import { getCalendarClient } from '@/lib/google-calendar-client'
 import {
@@ -56,7 +56,7 @@ type AvailabilityData = {
 
 async function loadAvailabilityData(): Promise<AvailabilityData | null> {
   try {
-    return await readDataFile<AvailabilityData>('availability.json', {})
+    return await readDataFilePreferRemote<AvailabilityData>('availability.json', {})
   } catch (error) {
     console.warn('Error loading availability data, using defaults:', error)
     return null

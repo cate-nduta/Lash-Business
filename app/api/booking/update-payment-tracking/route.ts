@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const bookings = await readDataFile<any[]>('bookings.json', [])
+    const bookingsData = await readDataFile<any[] | { bookings?: any[] }>('bookings.json', { bookings: [] })
+    const bookings = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || []
     const booking = bookings.find(b => b.bookingId === bookingId)
 
     if (!booking) {
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     const bookingIndex = bookings.findIndex(b => b.bookingId === bookingId)
     if (bookingIndex !== -1) {
       bookings[bookingIndex] = booking
-      await writeDataFile('bookings.json', bookings)
+      await writeDataFile('bookings.json', Array.isArray(bookingsData) ? bookings : { ...bookingsData, bookings })
     }
 
     return NextResponse.json({ 

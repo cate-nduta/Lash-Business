@@ -9,6 +9,7 @@ import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAUL
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import PaystackInlinePayment from '@/components/PaystackInlinePayment'
 import BookingServicePicker from '@/components/BookingServicePicker'
+import FormattedText from '@/components/FormattedText'
 import {
   clearBookingDraft,
   loadBookingDraft,
@@ -2777,16 +2778,9 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           <div className="mt-6 mb-8" />
           {bannerEnabled && bannerMessage && (
             <div className="max-w-2xl mx-auto mb-6 rounded-xl border border-brown-light bg-white/90 px-5 py-4 text-sm md:text-base text-brown-dark/80 shadow-sm">
-              <p>
-                {bannerMessage.split('\n').map((line, index, array) => (
-                  <span key={index}>
-                    {line}
-                    {index < array.length - 1 && <br />}
-                  </span>
-                ))}
-              </p>
+              <FormattedText text={bannerMessage} as="p" />
               {bookingWindow?.note && bookingWindow.note.trim().length > 0 && (
-                <p className="mt-3 text-xs md:text-sm text-brown-dark/70">{bookingWindow.note.trim()}</p>
+                <FormattedText text={bookingWindow.note.trim()} as="p" className="mt-3 text-xs md:text-sm text-brown-dark/70" />
               )}
             </div>
           )}
@@ -2799,9 +2793,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-base font-semibold text-black">
-                    {depositNoticeText}
-                  </p>
+                  <FormattedText text={depositNoticeText} as="p" className="text-base font-semibold text-black" />
                 </div>
               </div>
             </div>
@@ -3608,6 +3600,15 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     className="text-brown-dark underline font-semibold hover:text-brown"
                   >
                     Policies
+                  </a>
+                  ,{' '}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brown-dark underline font-semibold hover:text-brown"
+                  >
+                    Privacy Policy
                   </a>
                   {' '}and I have read and agree to follow the{' '}
                   <a

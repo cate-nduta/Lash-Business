@@ -1,4 +1,5 @@
 import { loadTerms } from '@/lib/terms-utils'
+import FormattedText from '@/components/FormattedText'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,7 @@ export default async function TermsPage() {
               className="bg-white border-2 border-brown-light rounded-2xl shadow-soft p-6 md:p-8 space-y-4"
             >
               <h2 className="text-2xl font-display text-brown-dark">{section.title}</h2>
-              <p className="text-base leading-relaxed text-gray-700 whitespace-pre-line">{section.body}</p>
+              <FormattedText text={section.body} as="p" className="text-base leading-relaxed text-gray-700" />
             </section>
           ))}
         </div>

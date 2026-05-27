@@ -6,7 +6,8 @@ import { getCalendarClientWithWrite } from '@/lib/google-calendar-client'
 import { sendEmailNotification } from '@/app/api/booking/email/utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
-import { redeemGiftCard } from '@/lib/gift-card-utils'
+import { createGiftCard, redeemGiftCard } from '@/lib/gift-card-utils'
+import { sendGiftCardPurchaseEmail } from '@/app/api/gift-cards/email/utils'
 import {
   getBookingDurationMinutes,
   hasAppointmentConflict,
@@ -122,8 +123,16 @@ export async function POST(request: NextRequest) {
           await handleInvoicePayment(verifiedTransaction, metadata)
           break
 
+        case 'invoice_remaining_balance':
+          await handleInvoicePayment(verifiedTransaction, metadata)
+          break
+
         case 'gift_card':
           await handleGiftCardPayment(verifiedTransaction, metadata)
+          break
+
+        case 'shop_order':
+          await handleShopOrderPayment(verifiedTransaction, metadata)
           break
 
         case 'booking':
@@ -432,27 +441,63 @@ async function handleInvoicePayment(transaction: any, metadata: any) {
     const invoiceId = metadata.invoice_id
     if (!invoiceId) return
 
-    const invoices = await readDataFile<any[]>('labs-invoices.json', [])
-    const invoice = invoices.find(i => i.invoiceId === invoiceId)
+    const isRemainingBalance = metadata.payment_type === 'invoice_remaining_balance' || metadata.payment_stage === 'final_20'
 
-    if (!invoice) {
-      console.error('Invoice not found:', invoiceId)
+    const invoices = await readDataFile<any[]>('labs-invoices.json', [])
+    const invoice = invoices.find(i => i.invoiceId === invoiceId || i.invoiceNumber === metadata.invoice_number)
+
+    if (invoice) {
+      const now = transaction.paidAt || new Date().toISOString()
+      if (isRemainingBalance) {
+        invoice.secondPaid = true
+        invoice.secondPaidAt = now
+        invoice.remainingBalancePaidAt = now
+        invoice.remainingBalanceTransactionId = transaction.reference
+        invoice.status = 'paid'
+      } else if (invoice.invoiceType === 'downpayment' || metadata.payment_stage === 'upfront_80') {
+        invoice.upfrontPaid = true
+        invoice.upfrontPaidAt = now
+        invoice.upfrontTransactionId = transaction.reference
+        invoice.status = invoice.secondPaid ? 'paid' : 'sent'
+      } else {
+        invoice.status = 'paid'
+      }
+      invoice.paidAt = invoice.status === 'paid' ? now : invoice.paidAt
+      invoice.paymentMethod = 'paystack'
+      invoice.transactionId = transaction.reference
+      invoice.updatedAt = now
+
+      const invoiceIndex = invoices.findIndex(i => i.invoiceId === invoice.invoiceId)
+      if (invoiceIndex !== -1) {
+        invoices[invoiceIndex] = invoice
+        await writeDataFile('labs-invoices.json', invoices)
+      }
+
+      console.log('Labs invoice payment processed:', invoiceId)
       return
     }
 
-    // Update invoice status
-    invoice.status = 'paid'
-    invoice.paidAt = transaction.paidAt || new Date().toISOString()
-    invoice.paymentMethod = 'paystack'
-    invoice.transactionId = transaction.reference
+    const clientInvoices = await readDataFile<any[]>('invoices.json', [])
+    const clientInvoice = clientInvoices.find(i => i.id === invoiceId || i.invoiceNumber === metadata.invoice_number)
+    if (clientInvoice) {
+      const now = transaction.paidAt || new Date().toISOString()
+      clientInvoice.status = 'paid'
+      clientInvoice.paidAt = now
+      clientInvoice.paymentMethod = 'paystack'
+      clientInvoice.paymentReference = transaction.reference
+      clientInvoice.updatedAt = now
 
-    const invoiceIndex = invoices.findIndex(i => i.invoiceId === invoiceId)
-    if (invoiceIndex !== -1) {
-      invoices[invoiceIndex] = invoice
-      await writeDataFile('labs-invoices.json', invoices)
+      const invoiceIndex = clientInvoices.findIndex(i => i.id === clientInvoice.id)
+      if (invoiceIndex !== -1) {
+        clientInvoices[invoiceIndex] = clientInvoice
+        await writeDataFile('invoices.json', clientInvoices)
+      }
+
+      console.log('Client invoice payment processed:', invoiceId)
+      return
     }
 
-    console.log('Invoice payment processed:', invoiceId)
+    console.error('Invoice not found:', invoiceId)
   } catch (error) {
     console.error('Error handling invoice payment:', error)
   }
@@ -463,13 +508,118 @@ async function handleInvoicePayment(transaction: any, metadata: any) {
  */
 async function handleGiftCardPayment(transaction: any, metadata: any) {
   try {
-    const giftCardId = metadata.gift_card_id
-    if (!giftCardId) return
+    const existingGiftCards = await readDataFile<{ cards?: any[] }>('gift-cards.json', { cards: [] })
+    const existingCard = (existingGiftCards.cards || []).find(
+      (card) => card.paymentReference === transaction.reference || card.transactionId === transaction.reference
+    )
+    if (existingCard) {
+      console.log('Gift card payment already processed:', transaction.reference)
+      return
+    }
 
-    // TODO: Implement gift card creation after payment
-    console.log('Gift card payment processed:', giftCardId)
+    const amount = Number(metadata.gift_card_amount || transaction.amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      console.error('Invalid gift card amount for payment:', transaction.reference)
+      return
+    }
+
+    const purchaserEmail = transaction.customer?.email || metadata.purchaser_email || ''
+    const purchaserName =
+      metadata.purchaser_name ||
+      [transaction.customer?.first_name, transaction.customer?.last_name].filter(Boolean).join(' ') ||
+      (purchaserEmail ? purchaserEmail.split('@')[0] : 'Gift Card Purchaser')
+
+    const card = await createGiftCard({
+      amount,
+      purchasedBy: {
+        name: purchaserName,
+        email: purchaserEmail,
+      },
+      recipient: {
+        name: metadata.recipient_name || undefined,
+        email: metadata.recipient_email || undefined,
+        message: metadata.message || undefined,
+      },
+    })
+
+    const giftCards = await readDataFile<{ cards?: any[] }>('gift-cards.json', { cards: [] })
+    const savedCard = (giftCards.cards || []).find((item) => item.id === card.id)
+    if (savedCard) {
+      savedCard.paymentReference = transaction.reference
+      savedCard.transactionId = transaction.reference
+      savedCard.paymentStatus = 'paid'
+      await writeDataFile('gift-cards.json', { ...giftCards, cards: giftCards.cards || [] })
+    }
+
+    try {
+      await sendGiftCardPurchaseEmail(card)
+    } catch (emailError) {
+      console.error('Error sending gift card purchase email:', emailError)
+    }
+
+    console.log('Gift card payment processed:', card.id)
   } catch (error) {
     console.error('Error handling gift card payment:', error)
+  }
+}
+
+/**
+ * Handle shop order payment
+ */
+async function handleShopOrderPayment(transaction: any, metadata: any) {
+  try {
+    const orderId = metadata.order_id
+    if (!orderId) {
+      console.warn('No shop order ID in payment metadata')
+      return
+    }
+
+    const shopData = await readDataFile<{ products?: any[]; orders?: any[]; updatedAt?: string | null }>(
+      'shop-products.json',
+      { products: [], orders: [], updatedAt: null }
+    )
+    const orders = Array.isArray(shopData.orders) ? shopData.orders : []
+    const products = Array.isArray(shopData.products) ? shopData.products : []
+    const order = orders.find((item) => item.id === orderId)
+
+    if (!order) {
+      console.error('Shop order not found:', orderId)
+      return
+    }
+
+    if (order.paymentStatus === 'paid') {
+      console.log('Shop order payment already processed:', orderId)
+      return
+    }
+
+    const now = transaction.paidAt || new Date().toISOString()
+    order.paymentStatus = 'paid'
+    order.paymentMethod = 'paystack'
+    order.paymentOrderTrackingId = transaction.reference
+    order.paymentTransactionId = transaction.reference
+    order.paidAt = now
+    order.status = order.status === 'pending_payment' ? 'pending' : order.status || 'pending'
+
+    if (Array.isArray(order.items)) {
+      order.items.forEach((item: any) => {
+        const product = products.find((candidate) => candidate.id === item.productId)
+        if (product && typeof product.quantity === 'number') {
+          product.quantity = Math.max(product.quantity - Number(item.quantity || 0), 0)
+          product.updatedAt = now
+        }
+      })
+    }
+
+    await writeDataFile('shop-products.json', {
+      ...shopData,
+      products,
+      orders,
+      updatedAt: now,
+    })
+
+    console.log('Shop order payment processed:', orderId)
+  } catch (error) {
+    console.error('Error handling shop order payment:', error)
   }
 }
 
@@ -487,7 +637,8 @@ async function handleBookingPayment(transaction: any, metadata: any) {
 
     // Check if booking already exists (legacy support)
     try {
-      const bookings = await readDataFile<any[]>('bookings.json', [])
+      const bookingsData = await readDataFile<any[] | { bookings?: any[] }>('bookings.json', { bookings: [] })
+      const bookings = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || []
       const existingBooking = bookings.find(b => 
         b && (
           b.bookingReference === bookingReference || 
@@ -508,7 +659,7 @@ async function handleBookingPayment(transaction: any, metadata: any) {
         const bookingIndex = bookings.findIndex(b => b.bookingId === existingBooking.bookingId)
         if (bookingIndex !== -1) {
           bookings[bookingIndex] = existingBooking
-          await writeDataFile('bookings.json', bookings)
+          await writeDataFile('bookings.json', Array.isArray(bookingsData) ? bookings : { ...bookingsData, bookings })
         }
 
         // Send confirmation email if booking was just paid (not already paid)
@@ -564,11 +715,29 @@ async function handleBookingPayment(transaction: any, metadata: any) {
         bookingReference: string
         bookingData: any
         createdAt: string
+        expiresAt?: string
       }>>('pending-bookings.json', [])
 
       const pendingBooking = pendingBookings.find(pb => pb.bookingReference === bookingReference)
 
       if (pendingBooking) {
+        const pendingExpiry = pendingBooking.expiresAt ? new Date(pendingBooking.expiresAt).getTime() : null
+        if (pendingExpiry !== null && (!Number.isFinite(pendingExpiry) || pendingExpiry <= Date.now())) {
+          const updatedPending = pendingBookings.filter(pb => pb.bookingReference !== bookingReference)
+          await writeDataFile('pending-bookings.json', updatedPending)
+
+          const reservations = await readDataFile<Array<{
+            bookingReference: string
+            date: string
+            timeSlot: string
+          }>>('pending-booking-reservations.json', [])
+          const updatedReservations = reservations.filter(r => r.bookingReference !== bookingReference)
+          await writeDataFile('pending-booking-reservations.json', updatedReservations)
+
+          console.warn('Expired pending booking payment received; booking was not created:', bookingReference)
+          return
+        }
+
         // Create the actual booking directly in webhook (no fetch needed)
         console.log('📝 Processing pending booking:', bookingReference)
         await createBookingDirectlyInWebhook(pendingBooking.bookingData, bookingReference, transaction)
@@ -741,6 +910,8 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
       discountType: bookingData.discountType || null,
       salonReferral: bookingData.salonReferral || null,
       isFirstTimeClient: bookingData.isFirstTimeClient || false,
+      createdByAdmin: bookingData.createdByAdmin === true,
+      assistedBooking: bookingData.createdByAdmin === true,
     }
 
     bookings.push(newBooking)
@@ -1319,8 +1490,8 @@ async function handleBookingBalancePayment(transaction: any, metadata: any) {
       return
     }
 
-    // Calculate payment amount (convert from subunits if needed)
-    const amountPaid = transaction.amount / 100 // Paystack amounts are in subunits
+    // verifyTransaction already converts Paystack subunits into the main currency amount.
+    const amountPaid = Number(transaction.amount || 0)
 
     // Update booking deposit
     const currentDeposit = booking.deposit || 0

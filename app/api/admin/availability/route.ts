@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export const revalidate = 0
@@ -34,7 +34,7 @@ function normalizeBookingWindow(value: unknown): Record<string, unknown> {
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const availability = await readDataFile('availability.json', {})
+    const availability = await readDataFilePreferRemote('availability.json', {})
     return NextResponse.json(availability)
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
     const incoming = await request.json()
-    const existing = await readDataFile<Record<string, unknown>>('availability.json', {})
+    const existing = await readDataFilePreferRemote<Record<string, unknown>>('availability.json', {})
 
     // Merge so admin panel (partial payload) does not wipe fullyBookedDates, minimumBookingDate, etc.
     const availability: Record<string, unknown> = {

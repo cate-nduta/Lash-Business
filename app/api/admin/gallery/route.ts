@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
-    const gallery = await readDataFile('gallery.json', [])
+    const gallery = await readDataFilePreferRemote('gallery.json', [])
     return NextResponse.json(gallery)
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

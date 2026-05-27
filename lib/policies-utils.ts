@@ -1,4 +1,4 @@
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFile, readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { PolicyData, PolicySection, PolicyVariables } from '@/lib/policies-types'
 import { DEFAULT_POLICIES } from '@/lib/policies-constants'
 
@@ -45,7 +45,7 @@ function formatVariableToken(key: string, value: string | number) {
 
 async function getDiscountDepositPercentage(): Promise<number | null> {
   try {
-    const discounts = await readDataFile<{ depositPercentage?: number }>('discounts.json', {})
+    const discounts = await readDataFilePreferRemote<{ depositPercentage?: number }>('discounts.json', {})
     const value = Number(discounts?.depositPercentage)
     if (Number.isFinite(value)) {
       return value

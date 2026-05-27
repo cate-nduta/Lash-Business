@@ -2,13 +2,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth } from '@/lib/admin-auth'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
 
-    const data = await readDataFile('email-templates.json', { templates: [] })
+    const data = await readDataFilePreferRemote('email-templates.json', { templates: [] })
     return NextResponse.json(data)
   } catch (error: any) {
     if (error.message === 'Unauthorized') {

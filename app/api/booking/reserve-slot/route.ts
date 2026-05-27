@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       date,
       timeSlot,
       bookingReference,
+      totalDurationMinutes,
     } = body
 
     if (!date || !timeSlot || !bookingReference) {
@@ -43,7 +44,12 @@ export async function POST(request: NextRequest) {
       loadBookingBusyIntervals({ excludeBookingReference: bookingReference }),
       loadModelApplicationBusyIntervals(),
     ])
-    if (hasAppointmentConflict(requestedStart, MODEL_APPOINTMENT_DURATION_MINUTES, [...bookingBusyIntervals, ...modelBusyIntervals])) {
+    const requestedDurationMinutes =
+      Number.isFinite(Number(totalDurationMinutes)) && Number(totalDurationMinutes) > 0
+        ? Math.round(Number(totalDurationMinutes))
+        : MODEL_APPOINTMENT_DURATION_MINUTES
+
+    if (hasAppointmentConflict(requestedStart, requestedDurationMinutes, [...bookingBusyIntervals, ...modelBusyIntervals])) {
       return NextResponse.json(
         { error: 'This time slot overlaps with an existing booking or model appointment. Please select another time.' },
         { status: 409 }
@@ -57,6 +63,7 @@ export async function POST(request: NextRequest) {
       timeSlot: string
       reservedAt: string
       expiresAt: string // 15 minutes from now
+      totalDurationMinutes?: number
     }>>('pending-booking-reservations.json', [])
 
     // Remove expired reservations
@@ -98,6 +105,7 @@ export async function POST(request: NextRequest) {
       } else {
         // Same reference - extend reservation
         existingReservation.expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        existingReservation.totalDurationMinutes = requestedDurationMinutes
         const index = activeReservations.findIndex(r => r.bookingReference === bookingReference)
         if (index !== -1) {
           activeReservations[index] = existingReservation
@@ -118,6 +126,7 @@ export async function POST(request: NextRequest) {
       timeSlot,
       reservedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
+      totalDurationMinutes: requestedDurationMinutes,
     })
 
     await writeDataFile('pending-booking-reservations.json', activeReservations)

@@ -5,6 +5,11 @@ import { getSupabaseAdminClient } from './supabase-admin'
 const dataDir = path.join(process.cwd(), 'data')
 const useSupabase = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
 const DOCUMENTS_TABLE = 'app_documents'
+const SUPABASE_READ_TIMEOUT_MS = 3000
+/** After a failed Supabase read in dev, skip remote reads for this long. */
+const SUPABASE_DEV_COOLDOWN_MS = 5 * 60 * 1000
+
+let supabaseReadCooldownUntil = 0
 
 // Detect production environment (Vercel, Netlify, etc.)
 const isProduction = process.env.NODE_ENV === 'production' || 
@@ -17,68 +22,81 @@ function getDocumentKey(filename: string) {
   return filename.endsWith('.json') ? filename.slice(0, -5) : filename
 }
 
-export async function readDataFile<T>(filename: string, fallback: T | Record<string, unknown> = {}): Promise<T> {
-  // In production, try Supabase first
-  if (isProduction && useSupabase) {
-    const supabase = getSupabaseAdminClient()
-    if (supabase) {
-      try {
-        const key = getDocumentKey(filename)
-        const { data, error } = await supabase
-          .from(DOCUMENTS_TABLE)
-          .select('value')
-          .eq('key', key)
-          .maybeSingle()
-
-        if (error) {
-          console.error(`[readDataFile] Supabase read error for ${filename}:`, error)
-          return fallback as T
-        }
-
-        if (data?.value) {
-          return data.value as T
-        }
-      } catch (error) {
-        console.error(`[readDataFile] Error reading from Supabase for ${filename}:`, error)
-        return fallback as T
-      }
-    }
-  }
-
-  // Development mode or fallback: try Supabase if configured
-  if (useSupabase) {
-    const supabase = getSupabaseAdminClient()
-    if (supabase) {
-      try {
-        const key = getDocumentKey(filename)
-        const { data, error } = await supabase
-          .from(DOCUMENTS_TABLE)
-          .select('value')
-          .eq('key', key)
-          .maybeSingle()
-
-        if (!error && data?.value) {
-          return data.value as T
-        }
-        
-        // If Supabase read fails, fall through to file system
-        if (error) {
-          console.warn(`[readDataFile] Supabase read error, falling back to file system:`, error)
-        }
-      } catch (error) {
-        console.warn(`[readDataFile] Supabase error, falling back to file system:`, error)
-      }
-    }
-  }
-
-  // Fallback to local file system (development only)
+async function readLocalDataFile<T>(filename: string): Promise<T | null> {
   try {
     const filePath = path.join(dataDir, filename)
     const fileContent = await fs.readFile(filePath, 'utf-8')
     return JSON.parse(fileContent) as T
-  } catch (error) {
-    return fallback as T
+  } catch {
+    return null
   }
+}
+
+async function readFromSupabase<T>(filename: string): Promise<T | null> {
+  if (!useSupabase) return null
+  if (!isProduction && Date.now() < supabaseReadCooldownUntil) return null
+
+  const supabase = getSupabaseAdminClient()
+  if (!supabase) return null
+
+  const key = getDocumentKey(filename)
+
+  try {
+    const query = supabase.from(DOCUMENTS_TABLE).select('value').eq('key', key).maybeSingle()
+    const { data, error } = await Promise.race([
+      query,
+      new Promise<{ data: null; error: { message: string } }>((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase read timeout')), SUPABASE_READ_TIMEOUT_MS)
+      ),
+    ])
+
+    if (error) {
+      if (!isProduction) {
+        supabaseReadCooldownUntil = Date.now() + SUPABASE_DEV_COOLDOWN_MS
+        console.warn(`[readDataFile] Supabase read error, falling back to file system:`, error)
+      } else {
+        console.error(`[readDataFile] Supabase read error for ${filename}:`, error)
+      }
+      return null
+    }
+
+    if (data?.value) {
+      return data.value as T
+    }
+  } catch (error) {
+    if (!isProduction) {
+      supabaseReadCooldownUntil = Date.now() + SUPABASE_DEV_COOLDOWN_MS
+      console.warn(`[readDataFile] Supabase error, falling back to file system:`, error)
+    } else {
+      console.error(`[readDataFile] Error reading from Supabase for ${filename}:`, error)
+    }
+  }
+
+  return null
+}
+
+export async function readDataFile<T>(filename: string, fallback: T | Record<string, unknown> = {}): Promise<T> {
+  // Remote data is the source of truth. This prevents blank local JSON files
+  // from masking real admin-saved content while developing locally.
+  const remote = await readFromSupabase<T>(filename)
+  if (remote !== null) return remote
+
+  if (!isProduction) {
+    const localFallback = await readLocalDataFile<T>(filename)
+    if (localFallback !== null) return localFallback
+  }
+
+  return fallback as T
+}
+
+export async function readDataFilePreferRemote<T>(filename: string, fallback: T | Record<string, unknown> = {}): Promise<T> {
+  const remote = await readFromSupabase<T>(filename)
+  if (remote !== null) return remote
+
+  const local = await readLocalDataFile<T>(filename)
+  if (local !== null) return local
+
+  return fallback as T
 }
 
 export async function writeDataFile<T>(filename: string, data: T): Promise<void> {

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export async function GET() {
   try {
     await requireAdminAuth()
-    const data = await readDataFile('expense-budgets.json', {})
+    const data = await readDataFilePreferRemote('expense-budgets.json', {})
     return NextResponse.json(data)
   } catch (error) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

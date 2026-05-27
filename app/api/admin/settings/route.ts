@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     let settings: any = {}
     try {
-      settings = await readDataFile<any>('settings.json', {})
+      settings = await readDataFilePreferRemote<any>('settings.json', {})
     } catch (error) {
       console.error('Error reading settings file:', error)
       // Return default settings if file doesn't exist
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
           address: business.address ?? '',
           description: business.description ?? '',
           logoType: business.logoType === 'image' ? 'image' : 'text',
-          logoUrl: business.logoUrl ?? '',
+          logoUrl: business.logoType === 'image' ? business.logoUrl ?? '' : '',
           logoText: business.logoText ?? '',
           logoColor: business.logoColor ?? '#733D26',
           faviconUrl: business.faviconUrl ?? '',
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         address: business.address || '',
         description: business.description || '',
         logoType: business.logoType === 'image' ? 'image' : 'text',
-        logoUrl: business.logoUrl || '',
+        logoUrl: business.logoType === 'image' ? business.logoUrl || '' : '',
         logoText: business.logoText || '',
         logoColor: business.logoColor || '#733D26',
         faviconUrl: business.faviconUrl || '',

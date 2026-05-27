@@ -18,7 +18,7 @@ interface LogoProps {
 const DEFAULT_SETTINGS: LogoSettings = {
   logoType: 'text',
   logoUrl: '',
-  logoText: '',
+  logoText: 'LashDiary',
   logoColor: '#733D26',
 }
 
@@ -27,20 +27,14 @@ export default function Logo({
   style,
   imageClassName,
 }: LogoProps) {
-  const [logoSettings, setLogoSettings] = useState<LogoSettings | null>(null)
+  const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_SETTINGS)
 
   useEffect(() => {
     let isMounted = true
-    let refreshInterval: ReturnType<typeof setInterval> | null = null
-
     const loadLogoSettings = async () => {
       try {
-        const response = await fetch(`/api/settings?ts=${Date.now()}`, {
+        const response = await fetch('/api/settings', {
           cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
         })
         if (!response.ok) {
           throw new Error(`Failed to load settings: ${response.status}`)
@@ -51,7 +45,7 @@ export default function Logo({
 
         const updatedSettings: LogoSettings = {
           logoType: business.logoType === 'image' ? 'image' : 'text',
-          logoUrl: business.logoUrl || '',
+          logoUrl: business.logoType === 'image' ? business.logoUrl || '' : '',
           logoText: typeof business.logoText === 'string' ? business.logoText : '',
           logoColor: business.logoColor || DEFAULT_SETTINGS.logoColor,
         }
@@ -71,15 +65,7 @@ export default function Logo({
       }
     }
 
-    // Load settings immediately
     loadLogoSettings()
-
-    // Refresh settings every 5 seconds to pick up changes quickly
-    refreshInterval = setInterval(() => {
-      if (isMounted) {
-        loadLogoSettings()
-      }
-    }, 5000)
 
     // Refresh when window gains focus (user returns to tab)
     const handleFocus = () => {
@@ -108,9 +94,6 @@ export default function Logo({
 
     return () => {
       isMounted = false
-      if (refreshInterval) {
-        clearInterval(refreshInterval)
-      }
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('settingsUpdated', handleSettingsUpdate)
@@ -126,10 +109,6 @@ export default function Logo({
       ...(style || {}),
     }
   }, [logoSettings, style])
-
-  if (!logoSettings) {
-    return null
-  }
 
   // Show image logo only if logoType is 'image' AND logoUrl exists
   if (logoSettings.logoType === 'image' && logoSettings.logoUrl) {

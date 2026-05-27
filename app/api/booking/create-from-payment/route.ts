@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       bookingReference: string
       bookingData: any
       createdAt: string
+      expiresAt?: string
     }>>('pending-bookings.json', [])
 
     const pendingBooking = pendingBookings.find(pb => pb.bookingReference === bookingReference)
@@ -52,6 +53,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Pending booking not found' },
         { status: 404 }
+      )
+    }
+
+    const pendingExpiry = pendingBooking.expiresAt ? new Date(pendingBooking.expiresAt).getTime() : null
+    if (pendingExpiry !== null && (!Number.isFinite(pendingExpiry) || pendingExpiry <= Date.now())) {
+      const updatedPending = pendingBookings.filter(pb => pb.bookingReference !== bookingReference)
+      await writeDataFile('pending-bookings.json', updatedPending)
+
+      const reservations = await readDataFile<Array<{
+        bookingReference: string
+        date: string
+        timeSlot: string
+      }>>('pending-booking-reservations.json', [])
+      const updatedReservations = reservations.filter(r => r.bookingReference !== bookingReference)
+      await writeDataFile('pending-booking-reservations.json', updatedReservations)
+
+      return NextResponse.json(
+        { error: 'This deposit link has expired and the slot has been released. Please reserve the slot again.' },
+        { status: 410 }
       )
     }
 

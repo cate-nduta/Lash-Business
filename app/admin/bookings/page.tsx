@@ -79,6 +79,8 @@ interface Booking {
   homeAddressDetails?: string | null
   serviceSubtotal?: number | null
   homeVisitFee?: number | null
+  createdByAdmin?: boolean
+  assistedBooking?: boolean
 }
 
 function visitTypeLabel(booking: Booking): string {
@@ -94,6 +96,46 @@ function isHomeVisitBooking(
   if (area && details) return true
   const loc = typeof b.location === 'string' ? b.location.trim() : ''
   return loc.startsWith('Home visit —')
+}
+
+const formatEmailDate = (dateString: string) =>
+  new Date(`${dateString}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+const formatEmailTime = (timeString: string) =>
+  new Date(timeString).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
+function buildRescheduleEmailDraft(booking: Booking, newDate: string, newTimeSlot: string) {
+  const clientName = booking.name?.split(/\s+/)[0] || booking.name || 'there'
+  const oldDate = booking.date ? formatEmailDate(booking.date) : 'your previous date'
+  const oldTime = booking.timeSlot ? formatEmailTime(booking.timeSlot) : 'your previous time'
+  const nextDate = newDate ? formatEmailDate(newDate) : 'the new date'
+  const nextTime = newTimeSlot ? formatEmailTime(newTimeSlot) : 'the new time'
+  const subject = `Your LashDiary appointment has been rescheduled`
+  const body = `Hi ${clientName},
+
+Your LashDiary appointment has been rescheduled.
+
+Previous appointment:
+${oldDate} at ${oldTime}
+
+New appointment:
+${nextDate} at ${nextTime}
+
+Service: ${booking.service || 'Lash service'}
+Location: ${booking.location || 'LashDiary Studio'}
+
+Please reply to this email if anything does not look right.`
+
+  return { subject, body }
 }
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -141,6 +183,9 @@ export default function AdminBookings() {
   const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState('')
   const [loadingRescheduleSlots, setLoadingRescheduleSlots] = useState(false)
   const [sendRescheduleEmail, setSendRescheduleEmail] = useState(true)
+  const [rescheduleEmailSubject, setRescheduleEmailSubject] = useState('')
+  const [rescheduleEmailBody, setRescheduleEmailBody] = useState('')
+  const [rescheduleEmailEdited, setRescheduleEmailEdited] = useState(false)
   const [rescheduleError, setRescheduleError] = useState<string | null>(null)
   const [processingReschedule, setProcessingReschedule] = useState(false)
   const [rescheduleInfo, setRescheduleInfo] = useState<string | null>(null)
@@ -1071,6 +1116,10 @@ export default function AdminBookings() {
 
     setRescheduleDate(initialDate)
     setSendRescheduleEmail(true)
+    const draft = buildRescheduleEmailDraft(selectedBooking, initialDate, selectedBooking.timeSlot)
+    setRescheduleEmailSubject(draft.subject)
+    setRescheduleEmailBody(draft.body)
+    setRescheduleEmailEdited(false)
     setRescheduleError(null)
     setRescheduleInfo(infoMessage)
     loadRescheduleSlots(initialDate, selectedBooking)
@@ -1084,6 +1133,9 @@ export default function AdminBookings() {
     setSelectedRescheduleSlot('')
     setRescheduleDate('')
     setRescheduleInfo(null)
+    setRescheduleEmailSubject('')
+    setRescheduleEmailBody('')
+    setRescheduleEmailEdited(false)
   }
 
   const openCancellationModal = () => {
@@ -1181,6 +1233,8 @@ export default function AdminBookings() {
           newDate: rescheduleDate,
           newTimeSlot: selectedRescheduleSlot,
           sendEmail: sendRescheduleEmail,
+          emailSubject: sendRescheduleEmail ? rescheduleEmailSubject : undefined,
+          emailBody: sendRescheduleEmail ? rescheduleEmailBody : undefined,
         }),
       })
 
@@ -1206,6 +1260,17 @@ export default function AdminBookings() {
       setProcessingReschedule(false)
     }
   }
+
+  useEffect(() => {
+    if (!showRescheduleModal || !selectedBooking || !sendRescheduleEmail || rescheduleEmailEdited) return
+    const draft = buildRescheduleEmailDraft(
+      selectedBooking,
+      rescheduleDate || selectedBooking.date,
+      selectedRescheduleSlot || selectedBooking.timeSlot
+    )
+    setRescheduleEmailSubject(draft.subject)
+    setRescheduleEmailBody(draft.body)
+  }, [showRescheduleModal, selectedBooking, rescheduleDate, selectedRescheduleSlot, sendRescheduleEmail, rescheduleEmailEdited])
 
   // Update payment amount field when booking ID changes (not just booking object)
   const selectedBookingId = selectedBooking?.id
@@ -1968,6 +2033,14 @@ export default function AdminBookings() {
               {/* Appointment Details */}
               <div className="bg-pink-light/30 rounded-lg p-6 border-2 border-brown-light">
                 <h3 className="text-xl font-semibold text-brown-dark mb-4">Appointment Details</h3>
+                {(selectedBooking.assistedBooking || selectedBooking.createdByAdmin) && (
+                  <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-blue-900">Admin assisted booking</p>
+                    <p className="text-xs text-blue-800">
+                      This appointment was created from the assisted booking panel and confirmed after the client paid their deposit.
+                    </p>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Service</p>
@@ -2725,9 +2798,58 @@ export default function AdminBookings() {
                   />
                   <span>
                     Send updated confirmation email to the client and owner.
-                    <span className="block text-xs text-gray-500">Uses the same template as a new booking confirmation.</span>
+                    <span className="block text-xs text-gray-500">You can edit this reschedule email before sending.</span>
                   </span>
                 </label>
+                {sendRescheduleEmail && (
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-1">Email subject</label>
+                      <input
+                        value={rescheduleEmailSubject}
+                        onChange={(event) => {
+                          setRescheduleEmailSubject(event.target.value)
+                          setRescheduleEmailEdited(true)
+                        }}
+                        className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-brown-dark mb-1">Email message</label>
+                      <textarea
+                        value={rescheduleEmailBody}
+                        onChange={(event) => {
+                          setRescheduleEmailBody(event.target.value)
+                          setRescheduleEmailEdited(true)
+                        }}
+                        rows={8}
+                        className="w-full px-3 py-2 border-2 border-brown-light rounded-lg bg-white text-brown-dark"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedBooking) return
+                          const draft = buildRescheduleEmailDraft(
+                            selectedBooking,
+                            rescheduleDate || selectedBooking.date,
+                            selectedRescheduleSlot || selectedBooking.timeSlot
+                          )
+                          setRescheduleEmailSubject(draft.subject)
+                          setRescheduleEmailBody(draft.body)
+                          setRescheduleEmailEdited(false)
+                        }}
+                        className="rounded-lg border border-brown-light px-3 py-2 text-xs font-semibold text-brown-dark hover:bg-pink-light/40"
+                      >
+                        Reset suggested copy
+                      </button>
+                      <p className="text-xs text-gray-500">
+                        This edited email is only used for this reschedule.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bg-blue-50 border-2 border-blue-100 rounded-lg p-4 text-sm text-blue-900">

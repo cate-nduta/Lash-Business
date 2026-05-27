@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     let settings: any = {}
     try {
-      settings = await readDataFile<any>('settings.json', {})
+      settings = await readDataFilePreferRemote<any>('settings.json', {})
     } catch (error) {
       console.error('Error reading settings file:', error)
       return NextResponse.json({
@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       business: {
         eyepatchImageUrl: business.eyepatchImageUrl ?? '',
-        logoType: business.logoType ?? 'text',
-        logoUrl: business.logoUrl ?? '',
+        logoType: business.logoType === 'image' ? 'image' : 'text',
+        logoUrl: business.logoType === 'image' ? business.logoUrl ?? '' : '',
         logoText: business.logoText ?? '',
         logoColor: business.logoColor ?? '#733D26',
       },

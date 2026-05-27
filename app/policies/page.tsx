@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { loadPolicies, applyPolicyVariables } from '@/lib/policies-utils'
 import { loadFAQ } from '@/lib/faq-utils'
 import FAQSection from '@/components/FAQSection'
+import FormattedText from '@/components/FormattedText'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -44,9 +45,11 @@ export default async function PoliciesPage() {
             Our Policies
             <span className="absolute -top-2 -right-6 text-2xl opacity-50 hidden lg:inline-block">📋</span>
           </h1>
-          <p className="text-brown text-lg leading-relaxed">
-            {introText || 'These guidelines keep appointments running smoothly and ensure every client—and partner—enjoys the signature LashDiary experience. Reach out if you have any questions or need clarification.'}
-          </p>
+          <FormattedText
+            text={introText || 'These guidelines keep appointments running smoothly and ensure every client—and partner—enjoys the signature LashDiary experience. Reach out if you have any questions or need clarification.'}
+            as="p"
+            className="text-brown text-lg leading-relaxed"
+          />
         </div>
 
         <div className="bg-white rounded-3xl shadow-soft border border-brown-light/30 p-6 sm:p-10 space-y-8 relative overflow-hidden">
@@ -61,13 +64,17 @@ export default async function PoliciesPage() {
               <div>
                 <h2 className="text-2xl font-display text-brown-dark">{section.title}</h2>
                 {section.description && section.description.trim().length > 0 && (
-                  <p className="text-brown/80 leading-relaxed">{applyPolicyVariables(section.description, variables)}</p>
+                  <FormattedText
+                    text={applyPolicyVariables(section.description, variables)}
+                    as="p"
+                    className="text-brown/80 leading-relaxed"
+                  />
                 )}
               </div>
               <ul className="space-y-2 text-brown text-base leading-relaxed list-disc list-inside">
                 {section.items.map((item, idx) => (
                   <li key={idx} className="pl-1">
-                    {applyPolicyVariables(item, variables)}
+                    <FormattedText text={applyPolicyVariables(item, variables)} />
                   </li>
                 ))}
               </ul>

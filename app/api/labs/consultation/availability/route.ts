@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote } from '@/lib/data-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +56,7 @@ function getDayOfWeek(year: number, month: number, day: number): number {
 export async function GET(request: NextRequest) {
   try {
     // Load availability settings - support both old and new structure
-    const availabilityData: any = await readDataFile('labs-consultation-availability.json', {
+    const availabilityData: any = await readDataFilePreferRemote('labs-consultation-availability.json', {
       availableDays: {
         monday: true,
         tuesday: true,
@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
     })
 
     // Load consultations and showcase bookings in parallel (non-blocking)
-    const consultationsPromise = readDataFile<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
-    const showcaseBookingsPromise = readDataFile<Array<{ appointmentDate?: string; appointmentTime?: string; timeSlot?: string; status?: string }>>('labs-showcase-bookings.json', [])
+    const consultationsPromise = readDataFilePreferRemote<{ consultations: any[] }>('labs-consultations.json', { consultations: [] })
+    const showcaseBookingsPromise = readDataFilePreferRemote<Array<{ appointmentDate?: string; appointmentTime?: string; timeSlot?: string; status?: string }>>('labs-showcase-bookings.json', [])
     
     // Generate available dates FIRST (fast, synchronous calculation)
     const availableDates: string[] = []

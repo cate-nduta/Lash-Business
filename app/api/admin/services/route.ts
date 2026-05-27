@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
 import { normalizeServiceCatalog, type ServiceCatalog, type Service } from '@/lib/services-utils'
-import { sendNewServiceAnnouncement } from '@/lib/email/new-service-announcement'
+import {
+  sendNewServiceAnnouncement,
+  type NewServiceAnnouncementContent,
+} from '@/lib/email/new-service-announcement'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -12,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     await requireAdminAuth()
-    const raw = await readDataFile('services.json', {})
+    const raw = await readDataFilePreferRemote('services.json', {})
     const { catalog, changed } = normalizeServiceCatalog(raw)
 
     if (changed) {
@@ -44,6 +47,22 @@ function getAllServices(catalog: ServiceCatalog): Array<Service & { categoryName
   return allServices
 }
 
+function getEmailContent(payload: unknown): NewServiceAnnouncementContent | undefined {
+  if (!payload || typeof payload !== 'object') return undefined
+  const value = (payload as { newServiceEmail?: unknown }).newServiceEmail
+  if (!value || typeof value !== 'object') return undefined
+
+  const source = value as Record<string, unknown>
+  return {
+    subject: typeof source.subject === 'string' ? source.subject : undefined,
+    headline: typeof source.headline === 'string' ? source.headline : undefined,
+    subheading: typeof source.subheading === 'string' ? source.subheading : undefined,
+    intro: typeof source.intro === 'string' ? source.intro : undefined,
+    closing: typeof source.closing === 'string' ? source.closing : undefined,
+    buttonLabel: typeof source.buttonLabel === 'string' ? source.buttonLabel : undefined,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireAdminAuth()
@@ -55,9 +74,10 @@ export async function POST(request: NextRequest) {
     
     // Check if email notifications are enabled
     const notifySubscribers = payload.notifySubscribers === true
+    const newServiceEmail = getEmailContent(payload)
 
     // Get old catalog to detect new services
-    const oldRaw = await readDataFile('services.json', {})
+    const oldRaw = await readDataFilePreferRemote('services.json', {})
     const { catalog: oldCatalog } = normalizeServiceCatalog(oldRaw)
 
     // Find new services
@@ -82,7 +102,7 @@ export async function POST(request: NextRequest) {
               priceUSD: service.priceUSD,
               duration: service.duration,
               categoryName: service.categoryName,
-            })
+            }, newServiceEmail)
             emailResult = result
             console.log(`New service announcement sent: ${service.name} - Sent: ${result.sent}, Failed: ${result.failed}`)
           }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminAuth, getAdminUser } from '@/lib/admin-auth'
 import { recordActivity } from '@/lib/activity-log'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     await requireAdminAuth()
-    const courseInfo = await readDataFile('course-info.json', {
+    const courseInfo = await readDataFilePreferRemote('course-info.json', {
       title: 'How to Build a Client-Booking Website',
       subtitle: 'That Accepts Payments (Without a Developer)',
       description: 'A complete step-by-step text-based course that teaches you how to build a professional booking website from scratch. No coding experience required!',
