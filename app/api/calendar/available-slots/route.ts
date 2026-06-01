@@ -155,12 +155,8 @@ function getDayOfWeek(year: number, month: number, day: number): number {
   return weekdayMap[weekdayName] ?? 0
 }
 
-// Generate time slots for a specific date
-// Monday-Thursday: Use weekdays time slots (shared)
-// Friday: Use friday-specific time slots
-// Saturday: Use saturday-specific time slots
-// Sunday: Use sunday-specific time slots
-// dateStr should be in YYYY-MM-DD format
+// Generate time slots for a specific date.
+// Each day can have its own slots; legacy "weekdays" is only used as fallback for old saved data.
 async function generateTimeSlotsForDate(dateStr: string, availabilityData?: AvailabilityData | null): Promise<string[]> {
   const slots: string[] = []
   
@@ -172,8 +168,6 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
   const dayOfWeek = getDayOfWeek(year, month, day)
   const isSunday = dayOfWeek === 0
   const isSaturday = dayOfWeek === 6
-  const isFriday = dayOfWeek === 5
-  const isMondayToThursday = dayOfWeek >= 1 && dayOfWeek <= 4 // Monday=1, Tuesday=2, Wednesday=3, Thursday=4
   const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
   
   // Load availability data from availability.json first to check if Saturday is enabled
@@ -232,24 +226,7 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
       ]
-  } else if (isFriday) {
-    // Friday: Use friday-specific slots
-    timeSlots =
-      (availabilityData?.timeSlots?.friday && availabilityData.timeSlots.friday.length > 0
-        ? availabilityData.timeSlots.friday
-        : undefined) ??
-      (availabilityData?.timeSlots?.weekdays && availabilityData.timeSlots.weekdays.length > 0
-        ? availabilityData.timeSlots.weekdays
-        : undefined) ??
-      [
-      { hour: 9, minute: 30, label: '9:30 AM' },
-      { hour: 12, minute: 0, label: '12:00 PM' },
-      { hour: 14, minute: 30, label: '2:30 PM' },
-      { hour: 16, minute: 30, label: '4:30 PM' },
-      ]
-  } else if (isMondayToThursday) {
-    // Monday-Thursday: Use weekdays slots (shared across all four days)
-    // Check for individual day slots first (for backward compatibility), then fall back to weekdays
+  } else {
     const daySpecificSlots = availabilityData?.timeSlots?.[dayKey as keyof typeof availabilityData.timeSlots]
     timeSlots =
       (Array.isArray(daySpecificSlots) && daySpecificSlots.length > 0
@@ -263,14 +240,6 @@ async function generateTimeSlotsForDate(dateStr: string, availabilityData?: Avai
       { hour: 14, minute: 30, label: '2:30 PM' },
       { hour: 16, minute: 30, label: '4:30 PM' },
         ])
-  } else {
-    // Fallback (shouldn't happen, but just in case)
-    timeSlots = [
-      { hour: 9, minute: 30, label: '9:30 AM' },
-      { hour: 12, minute: 0, label: '12:00 PM' },
-      { hour: 14, minute: 30, label: '2:30 PM' },
-      { hour: 16, minute: 30, label: '4:30 PM' },
-    ]
   }
   
   for (const slot of timeSlots) {

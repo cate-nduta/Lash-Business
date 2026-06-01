@@ -74,6 +74,10 @@ interface HomepageData {
   giftCardSection?: {
     enabled?: boolean
   }
+  testimonialsSection?: {
+    enabled?: boolean
+  }
+  sectionOrder?: string[]
   modelSignup?: {
     enabled?: boolean
     title?: string
@@ -149,6 +153,35 @@ const createDefaultCountdownBanner = () => ({
   buttonUrl: '',
 })
 
+const DEFAULT_SECTION_ORDER = [
+  'meetArtist',
+  'features',
+  'giftCard',
+  'tsubokiMassage',
+  'ourStudio',
+  'testimonials',
+  'faq',
+  'modelSignup',
+  'cta',
+]
+
+const SECTION_LABELS: Record<string, string> = {
+  meetArtist: 'Meet Your Lash Tech',
+  features: 'Why Choose LashDiary',
+  giftCard: 'Gift Card',
+  tsubokiMassage: 'Japanese Facial Massage',
+  ourStudio: 'Our Studio',
+  testimonials: 'Testimonials',
+  faq: 'FAQ Link',
+  modelSignup: 'Model Signup',
+  cta: 'Final Call To Action',
+}
+
+const normalizeSectionOrder = (value: unknown) => {
+  const provided = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  return [...provided.filter((item) => DEFAULT_SECTION_ORDER.includes(item)), ...DEFAULT_SECTION_ORDER.filter((item) => !provided.includes(item))]
+}
+
 export default function AdminHomepage() {
   const [homepage, setHomepage] = useState<HomepageData>({
     hero: { title: '', subtitle: '', highlight: '', badge: '', desktopImage: '', mobileImage: '', imageAlt: '', imageOverlayOpacity: 35, hideTextOnImage: false, buttonPosition: 'center', imageVersion: 0, buttons: [] },
@@ -171,6 +204,8 @@ export default function AdminHomepage() {
     tsubokiMassage: createDefaultMassage(),
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
+    testimonialsSection: { enabled: true },
+    sectionOrder: DEFAULT_SECTION_ORDER,
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
@@ -197,6 +232,8 @@ export default function AdminHomepage() {
     tsubokiMassage: createDefaultMassage(),
     countdownBanner: createDefaultCountdownBanner(),
     giftCardSection: { enabled: true },
+    testimonialsSection: { enabled: true },
+    sectionOrder: DEFAULT_SECTION_ORDER,
     modelSignup: { enabled: false, title: 'Model Casting Call', description: 'Interested in becoming a LashDiary model? Apply for a free full set in exchange for content creation.', buttonText: 'Apply Now' },
     cta: { title: '', description: '', buttonText: '' },
     showFridayBooking: true,
@@ -226,6 +263,18 @@ export default function AdminHomepage() {
     setHomepage((prev) => {
       const current = prev.countdownBanner ?? createDefaultCountdownBanner()
       return { ...prev, countdownBanner: { ...current, ...partial } }
+    })
+  }
+  const moveHomepageSection = (sectionId: string, direction: 'up' | 'down') => {
+    setHomepage((prev) => {
+      const order = normalizeSectionOrder(prev.sectionOrder)
+      const index = order.indexOf(sectionId)
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (index < 0 || targetIndex < 0 || targetIndex >= order.length) return prev
+      const next = [...order]
+      const [item] = next.splice(index, 1)
+      next.splice(targetIndex, 0, item)
+      return { ...prev, sectionOrder: next }
     })
   }
   const hasUnsavedChanges =
@@ -324,6 +373,10 @@ export default function AdminHomepage() {
           giftCardSection: {
             enabled: data.giftCardSection?.enabled !== false,
           },
+          testimonialsSection: {
+            enabled: data.testimonialsSection?.enabled !== false,
+          },
+          sectionOrder: normalizeSectionOrder(data.sectionOrder),
           modelSignup: {
             enabled: data.modelSignup?.enabled ?? false,
             title: data.modelSignup?.title ?? 'Model Casting Call',
@@ -1377,6 +1430,60 @@ export default function AdminHomepage() {
                 />
                 <span className="text-sm font-medium text-brown-dark">Show gift card section on homepage</span>
               </label>
+            </div>
+          </div>
+
+          {/* Homepage Section Order */}
+          <div className="mb-8 pb-8 border-b-2 border-brown-light">
+            <h2 className="text-2xl font-semibold text-brown-dark mb-4">Homepage Section Order</h2>
+            <p className="text-sm text-brown mb-4">
+              Choose which homepage sections show and move them up or down. The hero stays at the top.
+            </p>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={homepage.testimonialsSection?.enabled !== false}
+                  onChange={(e) =>
+                    setHomepage((prev) => ({
+                      ...prev,
+                      testimonialsSection: { enabled: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 text-brown-dark focus:ring-brown border-brown-light rounded"
+                />
+                <span className="text-sm font-medium text-brown-dark">Show testimonials section on homepage</span>
+              </label>
+              <div className="rounded-xl border border-brown-light bg-pink-light/20 p-4 space-y-2">
+                {normalizeSectionOrder(homepage.sectionOrder).map((sectionId, index, order) => (
+                  <div key={sectionId} className="flex items-center justify-between gap-3 rounded-lg bg-white px-4 py-3 border border-brown-light">
+                    <div>
+                      <p className="font-semibold text-brown-dark">{index + 1}. {SECTION_LABELS[sectionId] || sectionId}</p>
+                      {sectionId === 'testimonials' && homepage.testimonialsSection?.enabled === false && (
+                        <p className="text-xs text-brown/60">Hidden until enabled above</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => moveHomepageSection(sectionId, 'up')}
+                        disabled={index === 0}
+                        className="px-3 py-1 rounded border border-brown-light text-sm font-semibold text-brown-dark disabled:opacity-40"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveHomepageSection(sectionId, 'down')}
+                        disabled={index === order.length - 1}
+                        className="px-3 py-1 rounded border border-brown-light text-sm font-semibold text-brown-dark disabled:opacity-40"
+                      >
+                        Down
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

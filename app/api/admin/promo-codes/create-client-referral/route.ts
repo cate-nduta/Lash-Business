@@ -1,0 +1,192 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminAuth } from '@/lib/admin-auth'
+import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
+import { normalizePromoCatalog, type PromoCode } from '@/lib/promo-utils'
+import { loadPolicies } from '@/lib/policies-utils'
+import { getReferralDefaultsFromPolicies } from '@/lib/referral-utils'
+import {
+  sendAdminReferralGeneratedEmail,
+  sendFriendInviteEmail,
+  sendReferralInstructionsEmail,
+  zohoTransporter,
+} from '@/lib/email/client-referral'
+import { recordActivity } from '@/lib/activity-log'
+import { getAdminUser } from '@/lib/admin-auth'
+
+function generateReferralCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let value = ''
+  for (let i = 0; i < 6; i += 1) {
+    value += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return `REF-${value}`
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await requireAdminAuth()
+    const currentUser = await getAdminUser()
+    const performedBy = currentUser?.username || 'owner'
+
+    const body = await request.json()
+    const referrerEmail = (body?.referrerEmail || '').toString().trim().toLowerCase()
+    const referrerName = (body?.referrerName || '').toString().trim()
+    const friendEmailRaw = body?.friendEmail
+    const friendEmail = typeof friendEmailRaw === 'string' ? friendEmailRaw.trim().toLowerCase() : null
+    const sendEmail = body?.sendEmail !== false
+    const friendReferralLimit =
+      typeof body.friendReferralLimit === 'number' && Number.isFinite(body.friendReferralLimit)
+        ? Math.max(1, Math.min(10, Math.round(body.friendReferralLimit)))
+        : 3
+    const referralValidDays =
+      typeof body.referralValidDays === 'number' && Number.isFinite(body.referralValidDays)
+        ? Math.max(1, Math.min(365, Math.round(body.referralValidDays)))
+        : 30
+
+    if (!referrerEmail || !referrerEmail.includes('@')) {
+      return NextResponse.json({ error: 'A valid referrer email is required.' }, { status: 400 })
+    }
+
+    const policies = await loadPolicies()
+    const defaults = getReferralDefaultsFromPolicies(policies.variables)
+
+    const friendDiscountEnabled =
+      body.friendDiscountEnabled === false ? false : defaults.friendDiscountEnabled
+    const friendDiscountPercent =
+      typeof body.friendDiscountPercent === 'number' && Number.isFinite(body.friendDiscountPercent)
+        ? Math.max(0, Math.min(100, body.friendDiscountPercent))
+        : defaults.friendDiscountPercent
+    const referrerRewardPercent =
+      typeof body.referrerRewardPercent === 'number' && Number.isFinite(body.referrerRewardPercent)
+        ? Math.max(0, Math.min(100, body.referrerRewardPercent))
+        : defaults.referrerRewardPercent
+
+    const emailSettings = {
+      friendDiscountEnabled,
+      friendDiscountPercent,
+      referrerRewardPercent,
+      friendReferralLimit,
+      referralValidDays,
+    }
+
+    const raw = await readDataFilePreferRemote('promo-codes.json', {})
+    const { catalog } = normalizePromoCatalog(raw)
+    const promoCodes = [...catalog.promoCodes]
+
+    let promo: PromoCode | undefined = promoCodes.find(
+      (entry) =>
+        entry.isReferral === true &&
+        !entry.isSalonReferral &&
+        (entry.referrerEmail || '').toLowerCase() === referrerEmail &&
+        entry.active !== false &&
+        ((typeof entry.friendUsesRemaining === 'number' && entry.friendUsesRemaining > 0) ||
+          entry.referrerRewardAvailable === true),
+    )
+
+    let reused = false
+
+    if (promo) {
+      reused = true
+      const redeemed = Math.max(0, promo.friendRedemptionCount ?? 0)
+      if ((promo.friendUsesRemaining ?? 0) <= 0 && promo.referrerRewardAvailable === false) {
+        promo.friendUsesRemaining = Math.max(0, friendReferralLimit - redeemed)
+      }
+    } else {
+      const now = new Date()
+      const validUntil = new Date(now)
+      validUntil.setDate(validUntil.getDate() + referralValidDays)
+
+      promo = {
+        code: generateReferralCode(),
+        description: `Referral from ${referrerName || referrerEmail}`,
+        discountType: 'percentage',
+        discountValue: friendDiscountPercent,
+        minPurchase: 0,
+        maxDiscount: null,
+        validFrom: now.toISOString().split('T')[0],
+        validUntil: validUntil.toISOString().split('T')[0],
+        usageLimit: null,
+        usedCount: 0,
+        active: true,
+        isReferral: true,
+        referrerEmail,
+        referrerName: referrerName || null,
+        friendReferralLimit,
+        friendRedemptionCount: 0,
+        referrerRewardRedeemedCount: 0,
+        referralValidDays,
+        friendUsesRemaining: friendReferralLimit,
+        referrerRewardAvailable: false,
+        friendDiscountEnabled,
+        friendDiscountPercent,
+        referrerRewardPercent,
+        allowFirstTimeClient: true,
+        autoGenerated: true,
+        instructionsSentAt: null,
+      }
+      promoCodes.push(promo)
+    }
+
+    promo.friendDiscountEnabled = friendDiscountEnabled
+    promo.friendDiscountPercent = friendDiscountPercent
+    promo.referrerRewardPercent = referrerRewardPercent
+    promo.friendReferralLimit = friendReferralLimit
+    promo.referralValidDays = referralValidDays
+    promo.friendRedemptionCount = promo.friendRedemptionCount ?? 0
+    promo.referrerRewardRedeemedCount = promo.referrerRewardRedeemedCount ?? 0
+    promo.friendUsesRemaining = Math.max(0, friendReferralLimit - (promo.friendRedemptionCount ?? 0))
+    promo.referrerName = referrerName || promo.referrerName || null
+    promo.discountValue = friendDiscountPercent
+    const validUntil = new Date()
+    validUntil.setDate(validUntil.getDate() + referralValidDays)
+    promo.validUntil = validUntil.toISOString().split('T')[0]
+
+    if (sendEmail && zohoTransporter) {
+      try {
+        await sendReferralInstructionsEmail(referrerEmail, referrerName, promo.code, emailSettings)
+        promo.instructionsSentAt = new Date().toISOString()
+        if (friendEmail) {
+          await sendFriendInviteEmail(friendEmail, promo.code, referrerName, emailSettings)
+        }
+        await sendAdminReferralGeneratedEmail({
+          referrerEmail,
+          referrerName,
+          code: promo.code,
+          reused,
+          settings: emailSettings,
+          friendEmail,
+        })
+      } catch (emailError) {
+        console.error('Failed to send referral email:', emailError)
+        return NextResponse.json(
+          { error: 'Referral code saved but email could not be sent. Check SMTP settings.' },
+          { status: 500 },
+        )
+      }
+    }
+
+    await writeDataFile('promo-codes.json', { promoCodes })
+
+    await recordActivity({
+      module: 'promo_codes',
+      action: reused ? 'update' : 'create',
+      performedBy,
+      summary: `${reused ? 'Updated' : 'Created'} client referral code ${promo.code} for ${referrerEmail}`,
+      targetId: promo.code,
+      targetType: 'client_referral',
+    })
+
+    return NextResponse.json({
+      success: true,
+      promoCode: promo,
+      reused,
+      emailSent: Boolean(sendEmail && zohoTransporter),
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    console.error('Error creating client referral:', error)
+    return NextResponse.json({ error: 'Failed to create client referral' }, { status: 500 })
+  }
+}

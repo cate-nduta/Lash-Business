@@ -11,6 +11,18 @@ interface HomepageData {
   }
 }
 
+interface SocialLink {
+  platform: string
+  label: string
+  url: string
+  enabled?: boolean
+}
+
+interface ContactData {
+  email?: string
+  socialLinks?: SocialLink[]
+}
+
 const readStoredPagesSettings = (): PagesSettings | null => {
   if (typeof window === 'undefined') return null
   try {
@@ -24,6 +36,7 @@ const readStoredPagesSettings = (): PagesSettings | null => {
 export default function Footer() {
   const [modelSignupEnabled, setModelSignupEnabled] = useState(false)
   const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(() => readStoredPagesSettings())
+  const [contactData, setContactData] = useState<ContactData>({})
 
   useEffect(() => {
     const checkModelSignup = async () => {
@@ -71,6 +84,32 @@ export default function Footer() {
     }
   }, [])
 
+  useEffect(() => {
+    const loadContactSettings = async () => {
+      try {
+        const response = await fetch(`/api/contact?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { Pragma: 'no-cache', 'Cache-Control': 'no-cache' },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        setContactData({
+          email: typeof data?.email === 'string' ? data.email : '',
+          socialLinks: Array.isArray(data?.socialLinks)
+            ? data.socialLinks.filter((link: SocialLink) => link.enabled !== false && link.url?.trim())
+            : [],
+        })
+      } catch {
+        // Footer falls back to the default email if contact settings cannot load.
+      }
+    }
+
+    void loadContactSettings()
+    const onContactSettingsChanged = () => void loadContactSettings()
+    window.addEventListener('contact-settings-updated', onContactSettingsChanged)
+    return () => window.removeEventListener('contact-settings-updated', onContactSettingsChanged)
+  }, [])
+
   const footerLinks = pagesSettings
     ? Object.entries(pagesSettings.pages)
         .filter(([, p]) => p.footer)
@@ -86,6 +125,9 @@ export default function Footer() {
     if (href === '/contact') return 'Contact Us'
     return label
   }
+  const socialLinks = contactData.socialLinks ?? []
+  const contactEmail = contactData.email || 'hello@lashdiary.co.ke'
+
   return (
     <footer className="bg-pink-light border-t border-brown-light mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -127,19 +169,21 @@ export default function Footer() {
               Connect
             </h4>
             <ul className="space-y-2 text-sm text-gray-600 mb-6">
+              {socialLinks.map((link) => (
+                <li key={`${link.platform}-${link.url}`}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-brown transition-colors"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
               <li>
-                <a 
-                  href="https://instagram.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="hover:text-brown transition-colors"
-                >
-                  Instagram
-                </a>
-              </li>
-              <li>
-                <a href="mailto:hello@lashdiary.co.ke" className="hover:text-brown transition-colors">
-                  hello@lashdiary.co.ke
+                <a href={`mailto:${contactEmail}`} className="hover:text-brown transition-colors">
+                  {contactEmail}
                 </a>
               </li>
               {modelSignupEnabled && (

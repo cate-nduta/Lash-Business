@@ -6,11 +6,12 @@ import { getCalendarClientWithWrite } from '@/lib/google-calendar-client'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 import { sendEmailNotification } from '../../booking/email/utils'
-import { readDataFile, writeDataFile } from '@/lib/data-utils'
+import { readDataFile, readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getMinimumNoticeHours } from '@/lib/booking-notice-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
-import { redeemGiftCard } from '@/lib/gift-card-utils'
+import { findGiftCardByCode, redeemGiftCard } from '@/lib/gift-card-utils'
+import { redeemPromoCodeForBooking } from '@/lib/promo-redemption-utils'
 import {
   sanitizeEmail,
   sanitizeNotes,
@@ -23,9 +24,18 @@ import {
 import type { ClientData, ClientUsersData, ClientProfile, LashHistory } from '@/types/client'
 import {
   computeBookingTotalsKES,
+  computeDepositKES,
   computeHomeVisitFeeKES,
+  normalizeDepositPercentage,
   sumServiceDetailsSubtotalKES,
 } from '@/lib/home-visit-pricing'
+import { normalizePromoCatalog } from '@/lib/promo-utils'
+import { loadPolicies } from '@/lib/policies-utils'
+import {
+  getFriendBookingDiscount,
+  getReferralDefaultsFromPolicies,
+  getReferrerBookingDiscount,
+} from '@/lib/referral-utils'
 import {
   hasAppointmentConflict,
   loadBookingBusyIntervals,
@@ -85,6 +95,63 @@ const isFillServiceName = (value?: string | null) => {
   if (!value || typeof value !== 'string') return false
   const normalized = value.toLowerCase()
   return normalized.includes('fill')
+}
+
+async function computePromoDiscountKES(params: {
+  promoCode: string
+  email: string
+  serviceSubtotalKES: number
+}) {
+  const promoRaw = await readDataFilePreferRemote('promo-codes.json', {})
+  const { catalog } = normalizePromoCatalog(promoRaw)
+  const promo = catalog.promoCodes.find(
+    (entry) => entry.code.toLowerCase() === params.promoCode.toLowerCase() && entry.active !== false,
+  )
+  if (!promo) {
+    throw new Error('Promo code is no longer valid. Please remove it and try again.')
+  }
+
+  let discountType = promo.discountType
+  let discountValue = Number(promo.discountValue) || 0
+
+  if (promo.isReferral && !promo.isSalonReferral) {
+    const policies = await loadPolicies()
+    const defaults = getReferralDefaultsFromPolicies(policies.variables)
+    const isReferrer = (promo.referrerEmail || '').toLowerCase() === params.email.toLowerCase()
+    const referralDiscount = isReferrer
+      ? getReferrerBookingDiscount(promo, defaults)
+      : getFriendBookingDiscount(promo, defaults)
+    discountType = referralDiscount.discountType
+    discountValue = referralDiscount.discountValue
+  } else if (promo.isSalonReferral) {
+    if (promo.discountType === 'fixed') {
+      discountValue = Number(promo.clientDiscountAmount ?? promo.discountValue ?? 0)
+    } else {
+      discountValue = Number(promo.clientDiscountPercent ?? promo.discountValue ?? 0)
+    }
+  }
+
+  const subtotal = Math.max(0, Math.round(params.serviceSubtotalKES))
+  let discount =
+    discountType === 'fixed'
+      ? Math.round(discountValue)
+      : Math.round(subtotal * (Math.max(0, discountValue) / 100))
+
+  if (promo.maxDiscount && discount > promo.maxDiscount) {
+    discount = promo.maxDiscount
+  }
+
+  return Math.min(Math.max(0, discount), subtotal)
+}
+
+function isServerFridayNightBooking(params: {
+  date: string
+  availability: { timeSlots?: { friday?: unknown[] }; fridayNightEnabled?: boolean }
+}) {
+  if (params.availability.fridayNightEnabled === false) return false
+  const parsed = parseDateOnly(params.date)
+  if (!parsed || parsed.getDay() !== 5) return false
+  return Array.isArray(params.availability.timeSlots?.friday) && params.availability.timeSlots.friday.length > 0
 }
 
 const isWithinBookingWindow = (dateStr: string, bookingWindow?: any) => {
@@ -246,12 +313,10 @@ export async function POST(request: NextRequest) {
       isFirstTimeClient,
       originalPrice,
       discount,
-      finalPrice,
-      deposit,
-      paymentType, // 'deposit' or 'full'
       mpesaCheckoutRequestID: rawMpesaCheckoutRequestID,
       promoCode: rawPromoCode,
       promoCodeType,
+      clientReferral: rawClientReferral,
       salonReferral: rawSalonReferral,
       giftCardCode: rawGiftCardCode,
       desiredLook: rawDesiredLook,
@@ -265,6 +330,8 @@ export async function POST(request: NextRequest) {
 
     const availabilityForHome = await readDataFile<{
       homeCalls?: { enabled?: boolean; feeKES?: number }
+      timeSlots?: { friday?: unknown[] }
+      fridayNightEnabled?: boolean
     }>('availability.json', {})
     const homeCallsEnabled = availabilityForHome?.homeCalls?.enabled === true
     const requestVisitHome =
@@ -427,10 +494,29 @@ export async function POST(request: NextRequest) {
         serviceSubtotalKES = Math.max(0, Math.round(orig - feeSent))
       }
     }
-    const discountKES = Math.min(
+    let discountKES = Math.min(
       Math.max(0, Math.round(Number(discount) || 0)),
       serviceSubtotalKES,
     )
+    if (promoCode) {
+      try {
+        discountKES = await computePromoDiscountKES({
+          promoCode,
+          email,
+          serviceSubtotalKES,
+        })
+      } catch (promoError) {
+        return NextResponse.json(
+          {
+            error:
+              promoError instanceof Error
+                ? promoError.message
+                : 'Promo code could not be applied. Please remove it and try again.',
+          },
+          { status: 400 },
+        )
+      }
+    }
     const homeVisitFeeKES = computeHomeVisitFeeKES({
       isHomeVisit,
       homeCalls: availabilityForHome?.homeCalls,
@@ -447,6 +533,40 @@ export async function POST(request: NextRequest) {
     const bookingFinalPrice = pricingTotals.finalPriceKES
     const bookingHomeVisitFee = pricingTotals.homeVisitFeeKES
     const bookingServiceSubtotal = pricingTotals.serviceSubtotalKES
+    const discountsConfig = await readDataFilePreferRemote<{
+      depositPercentage?: number
+      fridayNightDepositPercentage?: number
+      fridayNightEnabled?: boolean
+      paymentRequirement?: 'deposit' | 'full'
+    }>('discounts.json', {})
+    const serverDepositPercentage = isServerFridayNightBooking({
+      date,
+      availability: {
+        timeSlots: availabilityForHome.timeSlots,
+        fridayNightEnabled: discountsConfig.fridayNightEnabled,
+      },
+    })
+      ? normalizeDepositPercentage(discountsConfig.fridayNightDepositPercentage, 50)
+      : normalizeDepositPercentage(discountsConfig.depositPercentage, 40)
+    const giftCardCode = typeof rawGiftCardCode === 'string' && rawGiftCardCode.trim() ? rawGiftCardCode.trim() : null
+    const bookingDepositBeforeGiftCard = computeDepositKES({
+      finalPriceKES: bookingFinalPrice,
+      depositPercentage: serverDepositPercentage,
+      paymentRequirement: discountsConfig.paymentRequirement === 'full' ? 'full' : 'deposit',
+    })
+    let giftCardAmountToApply = 0
+    if (giftCardCode && bookingDepositBeforeGiftCard > 0) {
+      const giftCard = await findGiftCardByCode(giftCardCode)
+      if (giftCard?.status === 'active') {
+        giftCardAmountToApply = Math.min(bookingDepositBeforeGiftCard, Math.max(0, Math.round(giftCard.amount)))
+      }
+    }
+    const bookingDeposit = computeDepositKES({
+      finalPriceKES: bookingFinalPrice,
+      depositPercentage: serverDepositPercentage,
+      giftCardAmountKES: giftCardAmountToApply,
+      paymentRequirement: discountsConfig.paymentRequirement === 'full' ? 'full' : 'deposit',
+    })
 
     const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
     const desiredLookNormalized = desiredLook || 'Custom'
@@ -600,7 +720,7 @@ export async function POST(request: NextRequest) {
                 : ''
             }
             ${notes ? `Special Notes: ${notes}` : ''}
-            Deposit: KSH ${deposit || 0}
+            Deposit: KSH ${bookingDeposit}
             ${mpesaCheckoutRequestID ? `M-Pesa Checkout ID: ${mpesaCheckoutRequestID}` : ''}
           `,
           start: {
@@ -660,10 +780,9 @@ export async function POST(request: NextRequest) {
     // Redeem gift card if provided
     let giftCardRedeemed = false
     let giftCardRemainingBalance = 0
-    const giftCardCode = typeof rawGiftCardCode === 'string' && rawGiftCardCode.trim() ? rawGiftCardCode.trim() : null
-    if (giftCardCode && deposit > 0) {
+    if (giftCardCode && giftCardAmountToApply > 0) {
       try {
-        const redeemResult = await redeemGiftCard(giftCardCode, deposit, bookingId, email)
+        const redeemResult = await redeemGiftCard(giftCardCode, giftCardAmountToApply, bookingId, email)
         if (redeemResult.success) {
           giftCardRedeemed = true
           giftCardRemainingBalance = redeemResult.remainingBalance || 0
@@ -676,7 +795,7 @@ export async function POST(request: NextRequest) {
 
     // Check if booking is free (0 KSH) - if so, create immediately without payment
     const finalPriceAmount = Number(bookingFinalPrice || bookingOriginalPrice || 0)
-    const depositAmount = Number(deposit || 0)
+    const depositAmount = Number(bookingDeposit || 0)
     const isFree = finalPriceAmount === 0 && depositAmount === 0
 
     // Send email notifications ONLY for free services (price = 0)
@@ -699,7 +818,7 @@ export async function POST(request: NextRequest) {
         originalPrice: bookingOriginalPrice,
         discount: bookingDiscount,
         finalPrice: bookingFinalPrice,
-        deposit: deposit || 0,
+        deposit: bookingDeposit,
         bookingId,
         manageToken,
         policyWindowHours,
@@ -788,10 +907,35 @@ export async function POST(request: NextRequest) {
         homeVisitFee: bookingHomeVisitFee,
         discount: bookingDiscount,
         finalPrice: bookingFinalPrice,
-        deposit: deposit || 0,
+        deposit: bookingDeposit,
         discountType: body.discountType || null,
         promoCode: promoCode || null,
         referralType: promoCodeType || null,
+        clientReferral:
+          rawClientReferral && typeof rawClientReferral === 'object'
+            ? {
+                code: sanitizeOptionalText((rawClientReferral as any).code, {
+                  fieldName: 'Client referral code',
+                  maxLength: 40,
+                  optional: true,
+                }),
+                referrerName: sanitizeOptionalText((rawClientReferral as any).referrerName, {
+                  fieldName: 'Referrer name',
+                  maxLength: 120,
+                  optional: true,
+                  allowSymbols: true,
+                }),
+                referrerEmail: sanitizeOptionalText((rawClientReferral as any).referrerEmail, {
+                  fieldName: 'Referrer email',
+                  maxLength: 160,
+                  optional: true,
+                  allowSymbols: true,
+                  toLowerCase: true,
+                }),
+                appliesToFriend: (rawClientReferral as any).appliesToFriend === true,
+                appliesToReferrer: (rawClientReferral as any).appliesToReferrer === true,
+              }
+            : null,
         salonReferral: salonReferral || null,
         giftCardCode: giftCardCode || null,
         paymentMethod: body.paymentMethod || 'paystack',
@@ -840,7 +984,7 @@ export async function POST(request: NextRequest) {
     try {
       const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
       const bookings = bookingsData.bookings || []
-      const hasDeposit = (deposit || 0) > 0
+      const hasDeposit = bookingDeposit > 0
       const createdAt = new Date().toISOString()
       const originalServicePrice = Number(bookingServiceSubtotal || bookingFinalPrice || 0)
       const promoCodeData = body.promoCodeData || null
@@ -897,10 +1041,35 @@ export async function POST(request: NextRequest) {
         homeVisitFee: bookingHomeVisitFee,
         discount: bookingDiscount,
         finalPrice: bookingFinalPrice,
-        deposit: deposit || 0,
+        deposit: bookingDeposit,
         discountType: body.discountType || null,
         promoCode: promoCode || null,
         referralType: promoCodeType || null,
+        clientReferralDetails:
+          rawClientReferral && typeof rawClientReferral === 'object'
+            ? {
+                code: sanitizeOptionalText((rawClientReferral as any).code, {
+                  fieldName: 'Client referral code',
+                  maxLength: 40,
+                  optional: true,
+                }),
+                referrerName: sanitizeOptionalText((rawClientReferral as any).referrerName, {
+                  fieldName: 'Referrer name',
+                  maxLength: 120,
+                  optional: true,
+                  allowSymbols: true,
+                }),
+                referrerEmail: sanitizeOptionalText((rawClientReferral as any).referrerEmail, {
+                  fieldName: 'Referrer email',
+                  maxLength: 160,
+                  optional: true,
+                  allowSymbols: true,
+                  toLowerCase: true,
+                }),
+                appliesToFriend: (rawClientReferral as any).appliesToFriend === true,
+                appliesToReferrer: (rawClientReferral as any).appliesToReferrer === true,
+              }
+            : null,
         salonReferral: salonReferral || null,
         giftCardCode: giftCardCode || null,
         giftCardRedeemed: giftCardRedeemed || false,
@@ -911,6 +1080,7 @@ export async function POST(request: NextRequest) {
         paymentOrderTrackingId: body.paymentOrderTrackingId || body.pesapalOrderTrackingId || null,
         paymentTransactionId: null,
         paidAt: null,
+        promoCodeRedeemedAt: null as string | null,
         createdAt,
         testimonialRequested: false,
         testimonialRequestedAt: null,
@@ -959,6 +1129,11 @@ export async function POST(request: NextRequest) {
                 status: 'pending',
               }
             : null,
+      }
+
+      const promoRedemptionResult = await redeemPromoCodeForBooking(newBooking)
+      if ('success' in promoRedemptionResult && promoRedemptionResult.success) {
+        newBooking.promoCodeRedeemedAt = new Date().toISOString()
       }
 
       bookings.push(newBooking)

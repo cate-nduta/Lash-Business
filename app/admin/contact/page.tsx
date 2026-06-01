@@ -36,7 +36,7 @@ export default function AdminContact() {
     showStayUpdatedSection: true,
     showReadyToBookSection: true,
     showSocialMediaSection: true,
-    socialLinks: [] as { platform: string; label: string; url: string }[],
+    socialLinks: [] as { platform: string; label: string; url: string; enabled?: boolean }[],
     headerTitle: 'Get In Touch',
     headerSubtitle: 'Visit us at our studio or reach out with any questions. We can\'t wait to welcome you and curate a stunning lash look.',
     businessHoursTitle: 'Business Hours',
@@ -105,7 +105,18 @@ export default function AdminContact() {
           showStayUpdatedSection: data.showStayUpdatedSection !== undefined ? Boolean(data.showStayUpdatedSection) : true,
           showReadyToBookSection: data.showReadyToBookSection !== undefined ? Boolean(data.showReadyToBookSection) : true,
           showSocialMediaSection: data.showSocialMediaSection !== undefined ? Boolean(data.showSocialMediaSection) : true,
-          socialLinks: Array.isArray(data.socialLinks) ? data.socialLinks.filter((s: { url?: string }) => s?.url?.trim()) : (data.instagramUrl || data.instagram ? [{ platform: 'instagram', label: 'Instagram', url: data.instagramUrl || `https://instagram.com/${(data.instagram || '').replace('@', '')}` }] : []),
+          socialLinks: Array.isArray(data.socialLinks)
+            ? data.socialLinks
+                .filter((s: { url?: string }) => s?.url?.trim())
+                .map((s: { platform?: string; label?: string; url: string; enabled?: boolean }) => ({
+                  platform: s.platform || 'instagram',
+                  label: s.label || 'Instagram',
+                  url: s.url,
+                  enabled: s.enabled !== false,
+                }))
+            : (data.instagramUrl || data.instagram
+              ? [{ platform: 'instagram', label: 'Instagram', url: data.instagramUrl || `https://instagram.com/${(data.instagram || '').replace('@', '')}`, enabled: true }]
+              : []),
         }
         setContact(sanitizedContact)
         setOriginalContact(sanitizedContact)
@@ -387,7 +398,8 @@ export default function AdminContact() {
               <p className="text-xs text-brown-dark/70 mb-3">Add multiple social media platforms. Each will appear in the Contact Information card and the Follow Us section.</p>
               <div className="space-y-3">
                 {(contact.socialLinks || []).map((link, index) => (
-                  <div key={index} className="flex flex-wrap gap-2 items-start p-3 bg-pink-light/20 rounded-lg">
+                  <div key={index} className={`space-y-3 p-3 rounded-lg border ${link.enabled === false ? 'border-gray-200 bg-gray-50 opacity-80' : 'border-brown-light/40 bg-pink-light/20'}`}>
+                    <div className="flex flex-wrap gap-2 items-start">
                     <select
                       value={link.platform}
                       onChange={(e) => {
@@ -434,11 +446,25 @@ export default function AdminContact() {
                     >
                       Remove
                     </button>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm text-brown-dark cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={link.enabled !== false}
+                        onChange={(e) => {
+                          const next = [...(contact.socialLinks || [])]
+                          next[index] = { ...next[index], enabled: e.target.checked }
+                          setContact({ ...contact, socialLinks: next })
+                        }}
+                        className="w-4 h-4 text-brown focus:ring-brown border-brown-light rounded"
+                      />
+                      <span>Enable this {link.label || 'social link'} on the website</span>
+                    </label>
                   </div>
                 ))}
                 <button
                   type="button"
-                  onClick={() => setContact({ ...contact, socialLinks: [...(contact.socialLinks || []), { platform: 'instagram', label: 'Instagram', url: '' }] })}
+                  onClick={() => setContact({ ...contact, socialLinks: [...(contact.socialLinks || []), { platform: 'instagram', label: 'Instagram', url: '', enabled: true }] })}
                   className="px-4 py-2 border-2 border-dashed border-brown-light text-brown-dark rounded-lg hover:bg-pink-light/30 transition-colors"
                 >
                   + Add social media link

@@ -8,6 +8,7 @@ import UnsavedChangesDialog from '@/components/UnsavedChangesDialog'
 import AdminBackButton from '@/components/AdminBackButton'
 import FormattedText from '@/components/FormattedText'
 import { type ServiceCatalog, type ServiceCategory, type Service } from '@/lib/services-utils'
+import { WEEKDAY_OPTIONS, formatAvailableDays, type WeekdayKey } from '@/lib/service-availability-utils'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { convertCurrency, DEFAULT_EXCHANGE_RATES } from '@/lib/currency-utils'
 
@@ -34,6 +35,7 @@ const blankService = (): Service => ({
 const blankCategory = (): ServiceCategory => ({
   id: generateId('category'),
   name: 'New Category',
+  availableDays: [],
   showNotice: false,
   notice: '',
   services: [blankService()],
@@ -296,6 +298,22 @@ const updateCategory = (categoryId: string, updater: (category: ServiceCategory)
       category.id === categoryId ? updater(category) : category,
     ),
   }))
+}
+
+const toggleCategoryDay = (categoryId: string, day: WeekdayKey) => {
+  updateCategory(categoryId, (category) => {
+    const currentDays = Array.isArray(category.availableDays) ? category.availableDays : []
+    const nextDays = currentDays.includes(day)
+      ? currentDays.filter((entry) => entry !== day)
+      : [...currentDays, day]
+
+    return {
+      ...category,
+      availableDays: WEEKDAY_OPTIONS.map((option) => option.key).filter((entry) =>
+        nextDays.includes(entry),
+      ),
+    }
+  })
 }
 
 const removeCategory = (categoryId: string) => {
@@ -636,6 +654,41 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
                   >
                     Delete Category
                   </button>
+                </div>
+              </div>
+
+              <div className="border border-brown-light rounded-xl bg-white p-4 space-y-3">
+                <div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="text-sm font-semibold text-brown-dark">
+                      Client booking days for this category
+                    </label>
+                    <span className="text-xs text-brown-dark/60">
+                      {formatAvailableDays(activeCategory.availableDays)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-brown-dark/60">
+                    Leave all days unchecked to allow this category on any available booking day.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {WEEKDAY_OPTIONS.map((day) => {
+                      const selected = activeCategory.availableDays?.includes(day.key) ?? false
+                      return (
+                        <button
+                          key={day.key}
+                          type="button"
+                          onClick={() => toggleCategoryDay(activeCategory.id, day.key)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            selected
+                              ? 'border-brown-dark bg-brown-dark text-white'
+                              : 'border-brown-light bg-white text-brown-dark hover:bg-pink-light/60'
+                          }`}
+                        >
+                          {day.shortLabel}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
 

@@ -1,3 +1,5 @@
+import { normalizeAvailableDays, type WeekdayKey } from '@/lib/service-availability-utils'
+
 export type Service = {
   id: string
   name: string
@@ -11,6 +13,7 @@ export type Service = {
 export type ServiceCategory = {
   id: string
   name: string
+  availableDays?: WeekdayKey[]
   showNotice: boolean
   notice: string
   services: Service[]
@@ -101,6 +104,7 @@ export const normalizeServiceCatalog = (
       categories.push({
         id: categoryId,
         name,
+        availableDays: [],
         showNotice: false,
         notice: '',
         services,
@@ -116,6 +120,7 @@ export const normalizeServiceCatalog = (
       categories.push({
         id: ensureUniqueId(undefined, 'Services', usedCategoryIds, 'category'),
         name: 'Services',
+        availableDays: [],
         showNotice: false,
         notice: '',
         services: [],
@@ -162,6 +167,7 @@ export const normalizeServiceCatalog = (
       categories.push({
         id: categoryId,
         name: typeof category?.name === 'string' && category.name.trim().length > 0 ? category.name.trim() : 'Category',
+        availableDays: normalizeAvailableDays(category?.availableDays),
         showNotice: Boolean(category?.showNotice),
         notice: typeof category?.notice === 'string' ? category.notice : '',
         services,

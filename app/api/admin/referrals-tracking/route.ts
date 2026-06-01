@@ -146,27 +146,35 @@ export async function GET() {
     }
 
     const partnerCodes = promoCatalog.promoCodes
-      .filter((promo) => promo.isSalonReferral)
+      .filter((promo) => promo.isSalonReferral || (promo.isReferral && !promo.isSalonReferral))
       .map((promo) => ({
         code: promo.code,
-        salonName: promo.salonName || '',
-        salonEmail: promo.salonEmail || '',
-        salonPartnerType: promo.salonPartnerType || 'salon',
+        salonName: promo.isSalonReferral ? promo.salonName || '' : promo.referrerName || 'Client referral',
+        salonEmail: promo.isSalonReferral ? promo.salonEmail || '' : promo.referrerEmail || '',
+        salonPartnerType: promo.isSalonReferral ? promo.salonPartnerType || 'salon' : 'client',
         discountType: promo.discountType,
         clientDiscountPercent:
-          promo.clientDiscountPercent ??
+          (promo.isSalonReferral
+            ? promo.clientDiscountPercent
+            : promo.friendDiscountPercent) ??
           (promo.discountType === 'percentage' && (promo.discountValue ?? 0) > 0 ? promo.discountValue : null),
         clientDiscountAmount:
-          promo.clientDiscountAmount ??
+          (promo.isSalonReferral ? promo.clientDiscountAmount : null) ??
           (promo.discountType === 'fixed' && (promo.discountValue ?? 0) > 0 ? promo.discountValue : null),
-        salonCommissionType: promo.salonCommissionType ?? 'percentage',
-        salonCommissionPercent: promo.salonCommissionPercent ?? null,
-        salonCommissionAmount: promo.salonCommissionAmount ?? null,
-        salonUsageLimit: promo.salonUsageLimit ?? promo.usageLimit ?? null,
-        salonUsedCount: promo.salonUsedCount ?? promo.usedCount ?? 0,
-        commissionTotal: promo.commissionTotal ?? 0,
-        commissionPaid: promo.commissionPaid ?? 0,
-      terminatedAt: promo.terminatedAt ?? null,
+        salonCommissionType: promo.isSalonReferral ? promo.salonCommissionType ?? 'percentage' : 'percentage',
+        salonCommissionPercent: promo.isSalonReferral ? promo.salonCommissionPercent ?? null : promo.referrerRewardPercent ?? null,
+        salonCommissionAmount: promo.isSalonReferral ? promo.salonCommissionAmount ?? null : null,
+        salonUsageLimit: promo.isSalonReferral ? promo.salonUsageLimit ?? promo.usageLimit ?? null : promo.friendReferralLimit ?? null,
+        salonUsedCount: promo.isSalonReferral ? promo.salonUsedCount ?? promo.usedCount ?? 0 : promo.friendRedemptionCount ?? 0,
+        commissionTotal: promo.isSalonReferral ? promo.commissionTotal ?? 0 : 0,
+        commissionPaid: promo.isSalonReferral ? promo.commissionPaid ?? 0 : 0,
+        referrerRewardPercent: promo.referrerRewardPercent ?? null,
+        availableRewardPercent: Math.max(
+          0,
+          ((promo.friendRedemptionCount ?? 0) - (promo.referrerRewardRedeemedCount ?? 0)) *
+            (promo.referrerRewardPercent ?? 0),
+        ),
+        terminatedAt: promo.terminatedAt ?? null,
         active: promo.active !== false,
       }))
 

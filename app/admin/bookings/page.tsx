@@ -25,6 +25,14 @@ interface Booking {
   deposit: number
   discountType?: string
   promoCode?: string
+  referralType?: string | null
+  clientReferralDetails?: {
+    code?: string | null
+    referrerName?: string | null
+    referrerEmail?: string | null
+    appliesToFriend?: boolean
+    appliesToReferrer?: boolean
+  } | null
   mpesaCheckoutRequestID?: string
   createdAt: string
   testimonialRequested?: boolean
@@ -2195,6 +2203,25 @@ export default function AdminBookings() {
                         )}:
                       </span>
                       <span className="text-green-600 font-semibold">-{formatCurrencyContext(convertBookingPrice(selectedBooking.discount))}</span>
+                    </div>
+                  )}
+                  {selectedBooking.clientReferralDetails && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm">
+                      <p className="font-semibold text-green-900">Client Referral</p>
+                      <p className="text-green-800">
+                        Code: <span className="font-semibold">{selectedBooking.clientReferralDetails.code || selectedBooking.promoCode || 'N/A'}</span>
+                      </p>
+                      <p className="text-green-800">
+                        Referred by:{' '}
+                        <span className="font-semibold">
+                          {selectedBooking.clientReferralDetails.referrerName ||
+                            selectedBooking.clientReferralDetails.referrerEmail ||
+                            'Unknown client'}
+                        </span>
+                      </p>
+                      {selectedBooking.clientReferralDetails.referrerEmail && selectedBooking.clientReferralDetails.referrerName && (
+                        <p className="text-green-700">{selectedBooking.clientReferralDetails.referrerEmail}</p>
+                      )}
                     </div>
                   )}
                   

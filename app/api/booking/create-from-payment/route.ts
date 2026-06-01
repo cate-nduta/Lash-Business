@@ -6,6 +6,7 @@ import { sendEmailNotification } from '@/app/api/booking/email/utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
 import { redeemGiftCard } from '@/lib/gift-card-utils'
+import { redeemPromoCodeForBooking } from '@/lib/promo-redemption-utils'
 import {
   getBookingDurationMinutes,
   hasAppointmentConflict,
@@ -201,11 +202,21 @@ export async function POST(request: NextRequest) {
       paymentOrderTrackingId: paymentReference,
       paymentTransactionId: paymentReference,
       paidAt: new Date().toISOString(),
+      discountType: bookingData.discountType || null,
+      promoCode: bookingData.promoCode || null,
+      referralType: bookingData.referralType || null,
+      clientReferralDetails: bookingData.clientReferral || bookingData.clientReferralDetails || null,
+      promoCodeRedeemedAt: null as string | null,
       status: 'confirmed', // Only confirmed after payment
       calendarEventId: eventId,
       createdAt,
       manageToken,
       // ... other booking fields
+    }
+
+    const promoRedemptionResult = await redeemPromoCodeForBooking(newBooking)
+    if ('success' in promoRedemptionResult && promoRedemptionResult.success) {
+      newBooking.promoCodeRedeemedAt = new Date().toISOString()
     }
 
     bookings.push(newBooking)

@@ -7,6 +7,7 @@ import { sendEmailNotification } from '@/app/api/booking/email/utils'
 import { updateFullyBookedState } from '@/lib/availability-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
 import { createGiftCard, redeemGiftCard } from '@/lib/gift-card-utils'
+import { redeemPromoCodeForBooking } from '@/lib/promo-redemption-utils'
 import { sendGiftCardPurchaseEmail } from '@/app/api/gift-cards/email/utils'
 import {
   getBookingDurationMinutes,
@@ -908,10 +909,18 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
       lastFullSetDate: bookingData.lastFullSetDate || null,
       promoCode: bookingData.promoCode || null,
       discountType: bookingData.discountType || null,
+      referralType: bookingData.referralType || null,
+      clientReferralDetails: bookingData.clientReferral || bookingData.clientReferralDetails || null,
+      promoCodeRedeemedAt: null as string | null,
       salonReferral: bookingData.salonReferral || null,
       isFirstTimeClient: bookingData.isFirstTimeClient || false,
       createdByAdmin: bookingData.createdByAdmin === true,
       assistedBooking: bookingData.createdByAdmin === true,
+    }
+
+    const promoRedemptionResult = await redeemPromoCodeForBooking(newBooking)
+    if ('success' in promoRedemptionResult && promoRedemptionResult.success) {
+      newBooking.promoCodeRedeemedAt = new Date().toISOString()
     }
 
     bookings.push(newBooking)

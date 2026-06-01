@@ -9,6 +9,8 @@ interface Testimonial {
   id: string
   name: string
   email?: string
+  service?: string
+  bookingId?: string
   photoUrl?: string | null
   testimonial: string
   rating?: number
@@ -215,6 +217,9 @@ export default function AdminTestimonials() {
                           <div>
                               <h3 className="text-xl font-semibold text-brown-dark">{testimonial.name}</h3>
                             {testimonial.email && <p className="text-sm text-brown">{testimonial.email}</p>}
+                            {testimonial.service && (
+                              <p className="text-sm font-semibold text-brown-dark">Service: {testimonial.service}</p>
+                            )}
                             {testimonial.rating && (
                               <div className="flex gap-1 mt-1">
                                 {[1, 2, 3, 4, 5].map((star) => (
@@ -303,6 +308,9 @@ export default function AdminTestimonials() {
                               </span>
                             </div>
                             {testimonial.email && <p className="text-sm text-brown">{testimonial.email}</p>}
+                            {testimonial.service && (
+                              <p className="text-sm font-semibold text-brown-dark">Service: {testimonial.service}</p>
+                            )}
                             {testimonial.rating && (
                               <div className="flex gap-1 mt-1">
                                 {[1, 2, 3, 4, 5].map((star) => (

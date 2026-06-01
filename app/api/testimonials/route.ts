@@ -8,6 +8,10 @@ interface Testimonial {
   id: string
   name: string
   email?: string
+  service?: string
+  bookingId?: string
+  modelApplicationId?: string
+  source?: 'booking' | 'model' | 'manual'
   testimonial: string
   rating: number
   photoUrl?: string | null
@@ -63,6 +67,10 @@ export async function POST(request: NextRequest) {
 
     let name = ''
     let email = ''
+    let service = ''
+    let bookingId = ''
+    let modelApplicationId = ''
+    let source = ''
     let testimonialText = ''
     let ratingValue = 0
     let photoUrl: string | null = null
@@ -71,6 +79,10 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData()
       name = String(formData.get('name') || '').trim()
       email = String(formData.get('email') || '').trim()
+      service = String(formData.get('service') || '').trim()
+      bookingId = String(formData.get('bookingId') || '').trim()
+      modelApplicationId = String(formData.get('modelApplicationId') || '').trim()
+      source = String(formData.get('source') || '').trim()
       testimonialText = String(formData.get('testimonial') || '').trim()
       ratingValue = Number(formData.get('rating') || 0)
 
@@ -105,14 +117,18 @@ export async function POST(request: NextRequest) {
       const body = await request.json()
       name = String(body?.name || '').trim()
       email = String(body?.email || '').trim()
+      service = String(body?.service || '').trim()
+      bookingId = String(body?.bookingId || '').trim()
+      modelApplicationId = String(body?.modelApplicationId || '').trim()
+      source = String(body?.source || '').trim()
       testimonialText = String(body?.testimonial || body?.message || '').trim()
       ratingValue = Number(body?.rating || 0)
       photoUrl = body?.photoUrl ? String(body.photoUrl) : null
     }
 
-    if (!name || !testimonialText || !ratingValue) {
+    if (!name || !service || !testimonialText || !ratingValue) {
       return NextResponse.json(
-        { success: false, error: 'Name, testimonial, and rating are required.' },
+        { success: false, error: 'Name, lash service, testimonial, and rating are required.' },
         { status: 400 },
       )
     }
@@ -128,6 +144,10 @@ export async function POST(request: NextRequest) {
       id: `testimonial-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       name,
       email: email || undefined,
+      service: service || undefined,
+      bookingId: bookingId || undefined,
+      modelApplicationId: modelApplicationId || undefined,
+      source: source === 'model' ? 'model' : bookingId ? 'booking' : 'manual',
       testimonial: testimonialText,
       rating: ratingValue,
       photoUrl,

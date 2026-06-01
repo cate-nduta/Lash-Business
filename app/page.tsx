@@ -74,6 +74,10 @@ interface HomepageData {
   giftCardSection?: {
     enabled?: boolean
   }
+  testimonialsSection?: {
+    enabled?: boolean
+  }
+  sectionOrder?: string[]
   faqSection?: {
     enabled?: boolean
     icon?: string
@@ -113,6 +117,24 @@ interface Testimonial {
   approved: boolean
   service?: string
   status?: 'pending' | 'approved' | 'rejected'
+}
+
+const DEFAULT_SECTION_ORDER = [
+  'meetArtist',
+  'features',
+  'giftCard',
+  'tsubokiMassage',
+  'ourStudio',
+  'testimonials',
+  'faq',
+  'modelSignup',
+  'cta',
+]
+
+const getSectionOrder = (sectionOrder: string[] | undefined, sectionId: string) => {
+  const order = Array.isArray(sectionOrder) ? sectionOrder : DEFAULT_SECTION_ORDER
+  const index = order.indexOf(sectionId)
+  return index === -1 ? DEFAULT_SECTION_ORDER.indexOf(sectionId) + 1 : index + 1
 }
 
 // Home page component
@@ -444,6 +466,8 @@ export default function Home() {
       enabled: homepageData?.giftCardSection?.enabled !== false,
     }
   }, [homepageData?.giftCardSection])
+  const testimonialsEnabled = homepageData?.testimonialsSection?.enabled !== false
+  const sectionOrder = homepageData?.sectionOrder
 
   useEffect(() => {
     if (!countdownBanner?.enabled || !countdownBanner.eventDate) {
@@ -524,7 +548,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       {/* Hero Section */}
       <section
         ref={heroRef}
@@ -763,7 +787,7 @@ export default function Home() {
 
       {/* Meet Your Lash Artist Section */}
       {meetArtist.enabled && (meetArtist.name || meetArtist.bio) && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--color-surface)] via-[color-mix(in srgb,var(--color-surface) 90%,var(--color-background) 10%)] to-[var(--color-background)]">
+        <section style={{ order: getSectionOrder(sectionOrder, 'meetArtist') }} className="relative py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--color-surface)] via-[color-mix(in srgb,var(--color-surface) 90%,var(--color-background) 10%)] to-[var(--color-background)]">
           <div className="absolute inset-0 pointer-events-none opacity-10" style={{
             backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 60%)',
             backgroundSize: '40% 40%',
@@ -831,7 +855,7 @@ export default function Home() {
 
       {/* Features Section */}
       {features.length > 0 && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+        <section style={{ order: getSectionOrder(sectionOrder, 'features') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div
             className="absolute inset-0 -z-10"
             style={{
@@ -888,7 +912,7 @@ export default function Home() {
 
       {/* Buy a Gift Card Section */}
       {giftCardSection.enabled && (
-      <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+      <section style={{ order: getSectionOrder(sectionOrder, 'giftCard') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[color-mix(in srgb,var(--color-secondary)_25%,var(--color-surface)_75%)] via-[color-mix(in srgb,var(--color-surface)_90%,var(--color-background)_10%)] to-[color-mix(in srgb,var(--color-background)_85%,var(--color-surface)_15%)]" />
         <div className="relative max-w-4xl mx-auto">
           <div className="text-center mb-12">
@@ -948,7 +972,7 @@ export default function Home() {
 
       {/* Japanese Facial Massage Section */}
       {tsubokiMassage.enabled && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+        <section style={{ order: getSectionOrder(sectionOrder, 'tsubokiMassage') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_55%)] opacity-60" />
           <div className="relative max-w-6xl mx-auto bg-white/85 border border-[var(--color-primary)]/20 rounded-3xl shadow-soft overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-5">
@@ -1050,7 +1074,7 @@ export default function Home() {
 
       {/* Our Studio Section */}
       {ourStudio.enabled && (ourStudio.description || (ourStudio.images && ourStudio.images.length > 0)) && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--color-surface)] via-[color-mix(in srgb,var(--color-surface) 90%,var(--color-background) 10%)] to-[var(--color-background)]">
+        <section style={{ order: getSectionOrder(sectionOrder, 'ourStudio') }} className="relative py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[var(--color-surface)] via-[color-mix(in srgb,var(--color-surface) 90%,var(--color-background) 10%)] to-[var(--color-background)]">
           <div className="absolute inset-0 pointer-events-none opacity-10" style={{
             backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 60%)',
             backgroundSize: '40% 40%',
@@ -1110,8 +1134,8 @@ export default function Home() {
       )}
 
       {/* Testimonials Section */}
-      {testimonials.length > 0 && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+      {testimonialsEnabled && testimonials.length > 0 && (
+        <section style={{ order: getSectionOrder(sectionOrder, 'testimonials') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div className="absolute inset-0 -z-10 bg-[color-mix(in srgb,var(--color-surface) 82%,var(--color-primary) 18%)]" />
           <div className="absolute inset-12 -z-10 rounded-[60px] bg-[color-mix(in srgb,var(--color-surface) 70%,var(--color-accent) 30%)]" />
           <div className="absolute inset-0 pointer-events-none" style={{
@@ -1145,6 +1169,11 @@ export default function Home() {
                           </span>
                         ))}
                       </div>
+                    )}
+                    {testimonial.service && (
+                      <p className="mb-3 inline-flex rounded-full bg-[var(--color-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--color-text)]/70">
+                        {testimonial.service}
+                      </p>
                     )}
                     <p className="text-[var(--color-text)]/80 mb-6 leading-relaxed italic">
                       {testimonial.status === 'approved' && (
@@ -1201,7 +1230,7 @@ export default function Home() {
 
       {/* FAQ Link Section */}
       {(homepageData?.faqSection?.enabled !== false) && (
-        <section className="relative py-16 px-4 sm:px-6 lg:px-8">
+        <section style={{ order: getSectionOrder(sectionOrder, 'faq') }} className="relative py-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
             {(() => {
               const faq = homepageData?.faqSection || {}
@@ -1285,7 +1314,7 @@ export default function Home() {
 
       {/* Model Signup Section */}
       {homepageData?.modelSignup?.enabled && (
-        <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-pink-50 via-white to-amber-50">
+        <section style={{ order: getSectionOrder(sectionOrder, 'modelSignup') }} className="relative py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-pink-50 via-white to-amber-50">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl md:text-4xl font-display text-brown-dark mb-4">
               {homepageData.modelSignup.title || 'Model Casting Call'}
@@ -1307,7 +1336,7 @@ export default function Home() {
 
       {/* CTA Section */}
       {(homepageData?.cta?.enabled !== false) && (cta.title || cta.description || cta.buttonText) && (
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
+        <section style={{ order: getSectionOrder(sectionOrder, 'cta') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
           <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-primary)] via-[color-mix(in srgb,var(--color-primary) 70%,var(--color-background) 30%)] to-[var(--color-primary-dark)]" />
           <div className="relative max-w-4xl mx-auto text-center text-[var(--color-on-primary)]">
             <div className="flex flex-col items-center gap-4">

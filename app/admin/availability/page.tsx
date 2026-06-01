@@ -51,15 +51,12 @@ interface HomeCallsSettings {
 
 interface AvailabilityData {
   businessHours: BusinessHours
-  timeSlots: {
-    weekdays?: TimeSlot[]
-    friday?: TimeSlot[]
-    saturday?: TimeSlot[]
-    sunday: TimeSlot[]
-  }
+  timeSlots: Record<TimeSlotDay, TimeSlot[]> & { weekdays?: TimeSlot[] }
   bookingWindow: BookingWindowState
   homeCalls: HomeCallsSettings
 }
+
+type TimeSlotDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
 const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
   fetch(input, { credentials: 'include', ...init })
@@ -86,13 +83,13 @@ export default function AdminAvailability() {
   })
   const [availability, setAvailability] = useState<AvailabilityData>({
     businessHours: {},
-    timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
+    timeSlots: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
     homeCalls: defaultHomeCalls(),
   })
   const [originalAvailability, setOriginalAvailability] = useState<AvailabilityData>({
     businessHours: {},
-    timeSlots: { weekdays: [], friday: [], saturday: [], sunday: [] },
+    timeSlots: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] },
     bookingWindow: createDefaultBookingWindow(),
     homeCalls: defaultHomeCalls(),
   })
@@ -104,7 +101,16 @@ export default function AdminAvailability() {
   const router = useRouter()
   const hasUnsavedChanges = JSON.stringify(availability) !== JSON.stringify(originalAvailability)
 
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  const days: TimeSlotDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  const dayLabels: Record<TimeSlotDay, string> = {
+    monday: 'Monday',
+    tuesday: 'Tuesday',
+    wednesday: 'Wednesday',
+    thursday: 'Thursday',
+    friday: 'Friday',
+    saturday: 'Saturday',
+    sunday: 'Sunday',
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -141,19 +147,25 @@ export default function AdminAvailability() {
       if (response.ok) {
         const data = await response.json()
         const businessHours: BusinessHours = data.businessHours || {}
-        // Normalize time slots - combine Monday-Thursday into weekdays if they exist separately
-        const weekdaysSlots: TimeSlot[] = 
-          Array.isArray(data?.timeSlots?.weekdays) ? data.timeSlots.weekdays :
-          Array.isArray(data?.timeSlots?.monday) ? data.timeSlots.monday :
-          Array.isArray(data?.timeSlots?.tuesday) ? data.timeSlots.tuesday :
-          Array.isArray(data?.timeSlots?.wednesday) ? data.timeSlots.wednesday :
-          Array.isArray(data?.timeSlots?.thursday) ? data.timeSlots.thursday :
-          []
+        const legacyWeekdaySlots: TimeSlot[] = Array.isArray(data?.timeSlots?.weekdays)
+          ? data.timeSlots.weekdays
+          : []
+        const getDaySlots = (day: TimeSlotDay): TimeSlot[] => {
+          if (Array.isArray(data?.timeSlots?.[day])) {
+            return data.timeSlots[day]
+          }
+          return ['monday', 'tuesday', 'wednesday', 'thursday'].includes(day)
+            ? legacyWeekdaySlots
+            : []
+        }
         const timeSlots = {
-          weekdays: weekdaysSlots,
-          friday: Array.isArray(data?.timeSlots?.friday) ? data.timeSlots.friday : [],
-          saturday: Array.isArray(data?.timeSlots?.saturday) ? data.timeSlots.saturday : [],
-          sunday: Array.isArray(data?.timeSlots?.sunday) ? data.timeSlots.sunday : [],
+          monday: getDaySlots('monday'),
+          tuesday: getDaySlots('tuesday'),
+          wednesday: getDaySlots('wednesday'),
+          thursday: getDaySlots('thursday'),
+          friday: getDaySlots('friday'),
+          saturday: getDaySlots('saturday'),
+          sunday: getDaySlots('sunday'),
         }
         const bookingWindow: BookingWindowState = {
           current: { ...(data?.bookingWindow?.current ?? {}) },
@@ -297,7 +309,7 @@ export default function AdminAvailability() {
     }))
   }
 
-  const addTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday') => {
+  const addTimeSlot = (type: TimeSlotDay) => {
     setAvailability((prev) => ({
       ...prev,
       timeSlots: {
@@ -307,7 +319,7 @@ export default function AdminAvailability() {
     }))
   }
 
-  const updateTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday', index: number, field: keyof TimeSlot, value: string | number) => {
+  const updateTimeSlot = (type: TimeSlotDay, index: number, field: keyof TimeSlot, value: string | number) => {
     setAvailability((prev) => {
       const updated = { ...prev }
       if (!updated.timeSlots[type]) {
@@ -329,7 +341,7 @@ export default function AdminAvailability() {
     })
   }
 
-  const removeTimeSlot = (type: 'weekdays' | 'friday' | 'saturday' | 'sunday', index: number) => {
+  const removeTimeSlot = (type: TimeSlotDay, index: number) => {
     setAvailability((prev) => ({
       ...prev,
       timeSlots: {
@@ -518,6 +530,82 @@ export default function AdminAvailability() {
         },
       }
     })
+  }
+
+  const renderTimeSlotSection = (day: TimeSlotDay) => {
+    const slots = availability.timeSlots[day] || []
+    const isEnabled = availability.businessHours[day]?.enabled || false
+
+    return (
+      <div key={day} className="bg-white rounded-lg shadow-lg p-8 mb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4">
+          <div>
+            <h2 className="text-2xl font-semibold text-brown-dark">{dayLabels[day]} Time Slots</h2>
+            <p className="text-sm text-brown-dark/70 mt-1">
+              These slots apply only to {dayLabels[day]}. Turn the day on/off in Business Hours above.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => addTimeSlot(day)}
+            className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
+          >
+            + Add Slot
+          </button>
+        </div>
+        {!isEnabled && (
+          <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-xl">
+            <p className="text-sm text-amber-900">
+              {dayLabels[day]} is currently closed in Business Hours, so clients will not see these slots until the
+              day is enabled.
+            </p>
+          </div>
+        )}
+        <div className="space-y-4">
+          {slots.map((slot, index) => (
+            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
+              <input
+                type="number"
+                value={slot.hour}
+                onChange={(e) => updateTimeSlot(day, index, 'hour', parseInt(e.target.value, 10) || 0)}
+                placeholder="Hour (0-23)"
+                min="0"
+                max="23"
+                className="px-3 py-2 border border-brown-light rounded bg-white"
+              />
+              <input
+                type="number"
+                value={slot.minute}
+                onChange={(e) => updateTimeSlot(day, index, 'minute', parseInt(e.target.value, 10) || 0)}
+                placeholder="Minute (0-59)"
+                min="0"
+                max="59"
+                className="px-3 py-2 border border-brown-light rounded bg-white"
+              />
+              <input
+                type="text"
+                value={slot.label}
+                onChange={(e) => updateTimeSlot(day, index, 'label', e.target.value)}
+                placeholder="Label (e.g., 9:30 AM)"
+                className="px-3 py-2 border border-brown-light rounded bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => removeTimeSlot(day, index)}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {slots.length === 0 && (
+            <p className="text-sm text-gray-500 italic">
+              No {dayLabels[day]} time slots configured. The booking system will use safe defaults until you add slots.
+            </p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -902,228 +990,13 @@ export default function AdminAvailability() {
           </div>
         </div>
 
-        {/* Monday-Thursday Time Slots (Shared) */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-            <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Monday-Thursday Time Slots</h2>
-              <button
-              onClick={() => addTimeSlot('weekdays')}
-                className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
-              >
-                + Add Slot
-              </button>
-            </div>
-            <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl shadow-sm">
-              <p className="text-sm text-blue-900">
-              <strong>Note:</strong> These time slots are shared across Monday, Tuesday, Wednesday, and Thursday. If no slots are configured, the system will use default slots.
-              </p>
-            </div>
-            <div className="space-y-4">
-            {(availability.timeSlots.weekdays || []).map((slot, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
-                  <input
-                    type="number"
-                    value={slot.hour}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'hour', parseInt(e.target.value) || 0)}
-                    placeholder="Hour (0-23)"
-                    min="0"
-                    max="23"
-                    className="px-3 py-2 border border-brown-light rounded bg-white"
-                  />
-                  <input
-                    type="number"
-                    value={slot.minute}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'minute', parseInt(e.target.value) || 0)}
-                    placeholder="Minute (0-59)"
-                    min="0"
-                    max="59"
-                    className="px-3 py-2 border border-brown-light rounded bg-white"
-                  />
-                  <input
-                    type="text"
-                    value={slot.label}
-                  onChange={(e) => updateTimeSlot('weekdays', index, 'label', e.target.value)}
-                    placeholder="Label (e.g., 9:30 AM)"
-                    className="px-3 py-2 border border-brown-light rounded bg-white"
-                  />
-                  <button
-                  onClick={() => removeTimeSlot('weekdays', index)}
-                    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            {(!availability.timeSlots.weekdays || availability.timeSlots.weekdays.length === 0) && (
-              <p className="text-sm text-gray-500 italic">No Monday-Thursday time slots configured. Will use default slots as fallback.</p>
-              )}
-            </div>
+        <div className="mb-4">
+          <h1 className="text-4xl font-display text-brown-dark mb-2">Time Slots By Day</h1>
+          <p className="text-sm text-brown-dark/70">
+            Set appointment start times separately for each day. Clients only see slots for the exact day they select.
+          </p>
         </div>
-
-        {/* Friday Time Slots */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Friday Time Slots</h2>
-            <button
-              onClick={() => addTimeSlot('friday')}
-              className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
-            >
-              + Add Slot
-            </button>
-          </div>
-          <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-xl shadow-sm">
-            <p className="text-sm text-blue-900">
-              <strong>Note:</strong> Friday has its own independent time slots. If no Friday slots are configured, the system will fall back to weekday slots or default slots.
-            </p>
-          </div>
-          <div className="space-y-4">
-            {(availability.timeSlots.friday || []).map((slot, index) => (
-              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
-                <input
-                  type="number"
-                  value={slot.hour}
-                  onChange={(e) => updateTimeSlot('friday', index, 'hour', parseInt(e.target.value) || 0)}
-                  placeholder="Hour (0-23)"
-                  min="0"
-                  max="23"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="number"
-                  value={slot.minute}
-                  onChange={(e) => updateTimeSlot('friday', index, 'minute', parseInt(e.target.value) || 0)}
-                  placeholder="Minute (0-59)"
-                  min="0"
-                  max="59"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="text"
-                  value={slot.label}
-                  onChange={(e) => updateTimeSlot('friday', index, 'label', e.target.value)}
-                  placeholder="Label (e.g., 9:30 AM)"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <button
-                  onClick={() => removeTimeSlot('friday', index)}
-                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-                >
-                  Remove
-                </button>
-          </div>
-        ))}
-            {(!availability.timeSlots.friday || availability.timeSlots.friday.length === 0) && (
-              <p className="text-sm text-gray-500 italic">No Friday time slots configured. Will use weekday slots or defaults as fallback.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Saturday Time Slots</h2>
-            <button
-              onClick={() => addTimeSlot('saturday')}
-              className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
-            >
-              + Add Slot
-            </button>
-          </div>
-          <div className="mb-4 p-4 bg-white border-l-4 border-[var(--color-accent)]/80 rounded-r-xl shadow-sm">
-            <p className="text-sm text-black">
-              <strong className="text-[var(--color-accent)]">Note:</strong> Saturday time slots will only be used when Saturday is enabled in Business Hours above. 
-              If no Saturday slots are configured, weekday slots will be used as a fallback.
-            </p>
-          </div>
-          <div className="space-y-4">
-            {(availability.timeSlots.saturday || []).map((slot, index) => (
-              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
-                <input
-                  type="number"
-                  value={slot.hour}
-                  onChange={(e) => updateTimeSlot('saturday', index, 'hour', parseInt(e.target.value) || 0)}
-                  placeholder="Hour (0-23)"
-                  min="0"
-                  max="23"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="number"
-                  value={slot.minute}
-                  onChange={(e) => updateTimeSlot('saturday', index, 'minute', parseInt(e.target.value) || 0)}
-                  placeholder="Minute (0-59)"
-                  min="0"
-                  max="59"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="text"
-                  value={slot.label}
-                  onChange={(e) => updateTimeSlot('saturday', index, 'label', e.target.value)}
-                  placeholder="Label (e.g., 9:30 AM)"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <button
-                  onClick={() => removeTimeSlot('saturday', index)}
-                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            {(!availability.timeSlots.saturday || availability.timeSlots.saturday.length === 0) && (
-              <p className="text-sm text-gray-500 italic">No Saturday time slots configured. Weekday slots will be used as fallback.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Sunday Time Slots</h2>
-            <button
-              onClick={() => addTimeSlot('sunday')}
-              className="bg-brown-dark text-white px-4 py-2 rounded-lg hover:bg-brown transition-colors"
-            >
-              + Add Slot
-            </button>
-          </div>
-          <div className="space-y-4">
-            {availability.timeSlots.sunday.map((slot, index) => (
-              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-pink-light rounded-lg">
-                <input
-                  type="number"
-                  value={slot.hour}
-                  onChange={(e) => updateTimeSlot('sunday', index, 'hour', parseInt(e.target.value) || 0)}
-                  placeholder="Hour (0-23)"
-                  min="0"
-                  max="23"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="number"
-                  value={slot.minute}
-                  onChange={(e) => updateTimeSlot('sunday', index, 'minute', parseInt(e.target.value) || 0)}
-                  placeholder="Minute (0-59)"
-                  min="0"
-                  max="59"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <input
-                  type="text"
-                  value={slot.label}
-                  onChange={(e) => updateTimeSlot('sunday', index, 'label', e.target.value)}
-                  placeholder="Label (e.g., 12:30 PM)"
-                  className="px-3 py-2 border border-brown-light rounded bg-white"
-                />
-                <button
-                  onClick={() => removeTimeSlot('sunday', index)}
-                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        {days.map((day) => renderTimeSlotSection(day))}
       </div>
 
       <UnsavedChangesDialog

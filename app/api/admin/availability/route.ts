@@ -6,6 +6,12 @@ import { requireAdminAuth } from '@/lib/admin-auth'
 export const revalidate = 0
 export const dynamic = 'force-dynamic'
 
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+}
+
 function normalizeBookingWindow(value: unknown): Record<string, unknown> {
   const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const minimumNoticeHours = Number(source.minimumNoticeHours)
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
     const availability = await readDataFilePreferRemote('availability.json', {})
-    return NextResponse.json(availability)
+    return NextResponse.json(availability, { headers: NO_STORE_HEADERS })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest) {
     revalidatePath('/api/calendar/available-slots')
     revalidatePath('/booking')
     revalidatePath('/api/booking/manage')
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, { headers: NO_STORE_HEADERS })
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

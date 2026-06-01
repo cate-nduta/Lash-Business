@@ -8,6 +8,7 @@ import { convertCurrency, DEFAULT_EXCHANGE_RATES, type Currency, type ExchangeRa
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import Link from 'next/link'
 import FormattedText from '@/components/FormattedText'
+import { formatCategoryAvailabilityNote } from '@/lib/service-availability-utils'
 
 interface DisplayService {
   id: string
@@ -61,6 +62,8 @@ const toDisplayServices = (category: ServiceCategory, currency: Currency, format
     }
   })
 
+const BOOKING_AVAILABILITY_PREFETCH_KEY = 'lashdiary-booking-availability-prefetch'
+
 export default function Services() {
   const { currency, formatCurrency } = useCurrency()
   const { addService, hasService, getTotalItems } = useServiceCart()
@@ -74,6 +77,29 @@ export default function Services() {
     triggerOnce: true,
     threshold: 0.1,
   })
+
+  const prefetchBookingAvailability = async () => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const response = await fetch(`/api/calendar/available-slots?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          Pragma: 'no-cache',
+        },
+      })
+      if (!response.ok) return
+
+      const data = await response.json()
+      window.sessionStorage.setItem(
+        BOOKING_AVAILABILITY_PREFETCH_KEY,
+        JSON.stringify({ savedAt: Date.now(), data }),
+      )
+    } catch {
+      // Booking still fetches availability directly if prefetch fails.
+    }
+  }
 
   // Load exchange rates
   useEffect(() => {
@@ -300,17 +326,32 @@ export default function Services() {
 
             {activeCategory ? (
               <div className="space-y-10">
-                {activeCategory.showNotice && activeCategory.notice.trim().length > 0 && (
+                {(() => {
+                  const availabilityNote = formatCategoryAvailabilityNote(activeCategory.availableDays)
+                  const manualNotice =
+                    activeCategory.showNotice && activeCategory.notice.trim().length > 0
+                      ? activeCategory.notice
+                      : ''
+
+                  if (!availabilityNote && !manualNotice) return null
+
+                  return (
                   <div className="bg-[var(--color-surface)] border-l-4 border-[var(--color-primary)] rounded-r-xl p-6 shadow-soft text-left">
                     <h2 className="text-xl font-semibold text-[var(--color-primary)] mb-2">Please note</h2>
-                    <FormattedText
-                      text={activeCategory.notice}
-                      as="p"
-                      className="text-[var(--color-text)]"
-                      autoLink
-                    />
+                    {availabilityNote && (
+                      <p className="font-semibold text-[var(--color-text)]">{availabilityNote}</p>
+                    )}
+                    {manualNotice && (
+                      <FormattedText
+                        text={manualNotice}
+                        as="p"
+                        className={`text-[var(--color-text)] ${availabilityNote ? 'mt-2' : ''}`}
+                        autoLink
+                      />
+                    )}
                   </div>
-                )}
+                  )
+                })()}
 
                 <div
                   ref={ref}
@@ -334,6 +375,7 @@ export default function Services() {
                           categoryName: activeCategory.name,
                         })
                         setAddedServiceId(displayService.id)
+                        void prefetchBookingAvailability()
                         setTimeout(() => setAddedServiceId(null), 2000)
                       }
                     }
@@ -395,6 +437,9 @@ export default function Services() {
                               {getTotalItems() > 0 && (
                                 <Link
                                   href="/booking"
+                                  onMouseEnter={() => void prefetchBookingAvailability()}
+                                  onFocus={() => void prefetchBookingAvailability()}
+                                  onClick={() => void prefetchBookingAvailability()}
                                   className="btn-fun px-4 py-2 bg-[var(--color-accent)] text-[var(--color-text)] rounded-lg font-semibold text-sm hover:bg-[var(--color-accent)]/80 transition-colors text-center border border-[var(--color-primary)]/20"
                                 >
                                   Book ({getTotalItems()})

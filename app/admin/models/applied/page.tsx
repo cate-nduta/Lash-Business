@@ -77,6 +77,14 @@ export default function AppliedModelsPage() {
   const [applications, setApplications] = useState<ModelApplication[]>([])
   const [filter, setFilter] = useState<FilterStatus>('all')
   const [updatingId, setUpdatingId] = useState('')
+  const [selectedApplication, setSelectedApplication] = useState<ModelApplication | null>(null)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [requestingReviewId, setRequestingReviewId] = useState('')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [appointmentDate, setAppointmentDate] = useState('')
+  const [appointmentTime, setAppointmentTime] = useState({ hours: '10', minutes: '00', ampm: 'AM' })
+  const [appointmentDurationMinutes, setAppointmentDurationMinutes] = useState(75)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const loadApplications = async () => {
@@ -118,7 +126,14 @@ export default function AppliedModelsPage() {
   }), [applications])
 
   const filteredApplications = useMemo(
-    () => applications.filter((application) => filter === 'all' || application.status === filter),
+    () =>
+      applications
+        .filter((application) => filter === 'all' || application.status === filter)
+        .sort((a, b) => {
+          const submittedA = new Date(a.submittedAt).getTime()
+          const submittedB = new Date(b.submittedAt).getTime()
+          return (Number.isNaN(submittedB) ? 0 : submittedB) - (Number.isNaN(submittedA) ? 0 : submittedA)
+        }),
     [applications, filter]
   )
 
@@ -138,6 +153,116 @@ export default function AppliedModelsPage() {
       setMessage({ type: 'error', text: getErrorMessage(error, 'Failed to update status') })
     } finally {
       setUpdatingId('')
+    }
+  }
+
+  const openSelectionEmail = (application: ModelApplication) => {
+    setSelectedApplication(application)
+    setEmailMessage('')
+    setAppointmentDate('')
+    setAppointmentTime({ hours: '10', minutes: '00', ampm: 'AM' })
+    setAppointmentDurationMinutes(75)
+    setShowEmailModal(true)
+  }
+
+  const closeSelectionEmail = () => {
+    setShowEmailModal(false)
+    setSelectedApplication(null)
+    setEmailMessage('')
+    setAppointmentDate('')
+    setAppointmentTime({ hours: '10', minutes: '00', ampm: 'AM' })
+    setAppointmentDurationMinutes(75)
+  }
+
+  const formatAppointmentDateTime = () => {
+    if (!appointmentDate) return ''
+
+    const date = new Date(appointmentDate)
+    if (Number.isNaN(date.getTime())) return ''
+
+    const day = date.getDate()
+    const getOrdinal = (value: number) => {
+      if (value > 3 && value < 21) return `${value}th`
+      switch (value % 10) {
+        case 1:
+          return `${value}st`
+        case 2:
+          return `${value}nd`
+        case 3:
+          return `${value}rd`
+        default:
+          return `${value}th`
+      }
+    }
+
+    const dateLabel = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      month: 'long',
+      year: 'numeric',
+    }).format(date)
+
+    return `${dateLabel.replace(String(day), getOrdinal(day))} at ${Number(appointmentTime.hours)}:${appointmentTime.minutes} ${appointmentTime.ampm}`
+  }
+
+  const sendSelectionEmail = async () => {
+    if (!selectedApplication) return
+
+    setSendingEmail(true)
+    try {
+      const response = await authorizedFetch('/api/admin/models/send-selection-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicationId: selectedApplication.id,
+          message: emailMessage,
+          appointmentDateTime: formatAppointmentDateTime(),
+          appointmentDate,
+          appointmentTime,
+          appointmentDurationMinutes,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send selection email')
+      }
+
+      await updateStatus(selectedApplication.id, 'selected')
+      setMessage({
+        type: 'success',
+        text: data.paymentRequired
+          ? 'Selection email sent with model fee payment link.'
+          : 'Selection email sent successfully.',
+      })
+      closeSelectionEmail()
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: getErrorMessage(error, 'Failed to send selection email') })
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const sendModelReviewRequest = async (application: ModelApplication) => {
+    setRequestingReviewId(application.id)
+    try {
+      const response = await authorizedFetch('/api/admin/models/send-testimonial-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId: application.id }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send model review request')
+      }
+      setMessage({
+        type: data.emailSent === false ? 'error' : 'success',
+        text: data.message || 'Model review request sent.',
+      })
+      await loadApplications()
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: getErrorMessage(error, 'Failed to send model review request') })
+    } finally {
+      setRequestingReviewId('')
     }
   }
 
@@ -269,13 +394,25 @@ export default function AppliedModelsPage() {
                           Mark pending
                         </button>
                       )}
-                      {application.status !== 'selected' && (
-                        <Link
-                          href="/admin/models"
-                          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+                      {application.status !== 'rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => openSelectionEmail(application)}
+                          disabled={updatingId === application.id}
+                          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                         >
-                          Select from model panel
-                        </Link>
+                          {application.status === 'selected' ? 'Resend selection email' : 'Send selection email'}
+                        </button>
+                      )}
+                      {application.status === 'selected' && (
+                        <button
+                          type="button"
+                          onClick={() => sendModelReviewRequest(application)}
+                          disabled={requestingReviewId === application.id}
+                          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {requestingReviewId === application.id ? 'Sending review request...' : 'Send review request'}
+                        </button>
                       )}
                       {application.status !== 'rejected' && (
                         <button
@@ -338,6 +475,132 @@ export default function AppliedModelsPage() {
           )}
         </div>
       </div>
+
+      {showEmailModal && selectedApplication && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+          onClick={closeSelectionEmail}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="mb-4 text-2xl font-display text-brown-dark">Send Selection Email</h2>
+            <p className="mb-4 text-brown/80">
+              Sending selection email to{' '}
+              <strong>{selectedApplication.firstName} {selectedApplication.lastName}</strong> ({selectedApplication.email})
+            </p>
+
+            <div className="mb-4 rounded-lg border border-brown-light bg-pink-light/30 p-3">
+              <p className="text-sm font-semibold text-brown-dark">Chosen model slot</p>
+              <p className="text-sm text-brown/80">{formatModelSlotLabel(selectedApplication.availability)}</p>
+              <p className="mt-1 text-xs text-brown/60">
+                This slot is included automatically. Use the override fields only if you need a different appointment time.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-brown-dark">
+                  Override Appointment Date <span className="text-gray-400 text-xs">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={appointmentDate}
+                  onChange={(event) => setAppointmentDate(event.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full rounded-lg border-2 border-brown-light bg-white px-4 py-2 focus:border-brown focus:ring-2 focus:ring-brown"
+                />
+              </div>
+
+              {appointmentDate && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-brown-dark">Override Time</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={appointmentTime.hours}
+                      onChange={(event) => setAppointmentTime({ ...appointmentTime, hours: event.target.value })}
+                      className="rounded-lg border-2 border-brown-light bg-white px-3 py-2"
+                    >
+                      {Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => (
+                        <option key={hour} value={hour.toString()}>{hour}</option>
+                      ))}
+                    </select>
+                    <span className="font-semibold text-brown-dark">:</span>
+                    <select
+                      value={appointmentTime.minutes}
+                      onChange={(event) => setAppointmentTime({ ...appointmentTime, minutes: event.target.value })}
+                      className="rounded-lg border-2 border-brown-light bg-white px-3 py-2"
+                    >
+                      {Array.from({ length: 60 }, (_, minute) => minute).map((minute) => (
+                        <option key={minute} value={minute.toString().padStart(2, '0')}>
+                          {minute.toString().padStart(2, '0')}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={appointmentTime.ampm}
+                      onChange={(event) => setAppointmentTime({ ...appointmentTime, ampm: event.target.value })}
+                      className="rounded-lg border-2 border-brown-light bg-white px-3 py-2"
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                  <p className="mt-1 text-xs text-brown/60">Preview: {formatAppointmentDateTime()}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-brown-dark">Appointment Duration</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="15"
+                    step="15"
+                    value={appointmentDurationMinutes}
+                    onChange={(event) => setAppointmentDurationMinutes(Math.max(Number(event.target.value) || 75, 15))}
+                    className="w-32 rounded-lg border-2 border-brown-light bg-white px-4 py-2"
+                  />
+                  <span className="text-sm text-brown/80">minutes</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-brown-dark">Additional Message</label>
+                <textarea
+                  value={emailMessage}
+                  onChange={(event) => setEmailMessage(event.target.value)}
+                  rows={4}
+                  className="w-full rounded-lg border-2 border-brown-light bg-white px-4 py-2 focus:border-brown focus:ring-2 focus:ring-brown"
+                  placeholder="Add any extra note for this model..."
+                />
+                <p className="mt-1 text-xs text-brown/60">
+                  The email automatically includes location, preparation guidelines, and the model fee payment link if enabled.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={sendSelectionEmail}
+                disabled={sendingEmail}
+                className="flex-1 rounded-lg bg-green-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+              >
+                {sendingEmail ? 'Sending...' : 'Send Email'}
+              </button>
+              <button
+                type="button"
+                onClick={closeSelectionEmail}
+                className="rounded-lg border-2 border-brown-light px-4 py-2 font-semibold text-brown-dark transition-colors hover:bg-brown-light"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

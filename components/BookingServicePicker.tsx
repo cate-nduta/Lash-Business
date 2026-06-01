@@ -5,6 +5,11 @@ import { type ServiceCatalog } from '@/lib/services-utils'
 import { Currency, convertCurrency, type ExchangeRates } from '@/lib/currency-utils'
 import { type ServiceCartItem } from '@/contexts/ServiceCartContext'
 import FormattedText from '@/components/FormattedText'
+import {
+  formatAvailableDays,
+  formatCategoryAvailabilityNote,
+  isAvailableOnSelectedDate,
+} from '@/lib/service-availability-utils'
 
 const serviceDescriptions: Record<string, string> = {
   'Classic Lashes': 'One extension applied to each natural lash for a natural, elegant look. Perfect for everyday wear.',
@@ -31,6 +36,7 @@ type BookingServicePickerProps = {
   formatPrice: (amount: number) => string
   addService: (service: ServiceCartItem) => void
   hasService: (serviceId: string) => boolean
+  selectedDate?: string
 }
 
 export default function BookingServicePicker({
@@ -41,6 +47,7 @@ export default function BookingServicePicker({
   formatPrice,
   addService,
   hasService,
+  selectedDate = '',
 }: BookingServicePickerProps) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [addedServiceId, setAddedServiceId] = useState<string | null>(null)
@@ -59,6 +66,12 @@ export default function BookingServicePicker({
     if (!activeCategoryId) return null
     return catalog.categories.find((c) => c.id === activeCategoryId) ?? null
   }, [catalog, activeCategoryId])
+
+  const activeCategoryAvailabilityNote = activeCategory
+    ? formatCategoryAvailabilityNote(activeCategory.availableDays)
+    : ''
+  const activeCategoryManualNotice =
+    activeCategory?.showNotice && activeCategory.notice.trim().length > 0 ? activeCategory.notice : ''
 
   const formatServicePrice = (priceKES: number, priceUSD?: number) => {
     let amount = priceKES
@@ -105,10 +118,20 @@ export default function BookingServicePicker({
         ))}
       </div>
 
-      {activeCategory?.showNotice && activeCategory.notice.trim().length > 0 && (
+      {(activeCategoryManualNotice || activeCategoryAvailabilityNote) && (
         <div className="bg-white border-l-4 border-[var(--color-primary)] rounded-r-xl p-4 text-sm text-brown-dark/90">
           <p className="font-semibold text-[var(--color-primary)] mb-1">Please note</p>
-          <FormattedText text={activeCategory.notice} as="p" autoLink />
+          {activeCategoryAvailabilityNote && (
+            <p className="font-semibold text-brown-dark">{activeCategoryAvailabilityNote}</p>
+          )}
+          {activeCategoryManualNotice && (
+            <FormattedText
+              text={activeCategoryManualNotice}
+              as="p"
+              className={activeCategoryAvailabilityNote ? 'mt-2' : undefined}
+              autoLink
+            />
+          )}
         </div>
       )}
 
@@ -117,6 +140,10 @@ export default function BookingServicePicker({
           {activeCategory.services.map((service) => {
             const isInCart = hasService(service.id)
             const justAdded = addedServiceId === service.id
+            const categoryAvailableDays = activeCategory.availableDays ?? []
+            const hasDayRestriction = categoryAvailableDays.length > 0
+            const canBookCategoryToday = isAvailableOnSelectedDate(categoryAvailableDays, selectedDate)
+            const addDisabled = hasDayRestriction && !canBookCategoryToday
             const description =
               service.description?.trim() || serviceDescriptions[service.name] || ''
             const priceLabel = formatServicePrice(service.price, service.priceUSD)
@@ -155,9 +182,22 @@ export default function BookingServicePicker({
                         className="text-sm text-brown-dark/80 leading-relaxed mb-2"
                       />
                     )}
-                    {service.duration > 0 && (
-                      <p className="text-xs font-semibold text-[var(--color-primary)]/80">
-                        Duration: {service.duration} min
+                    <div className="flex flex-wrap gap-2">
+                      {service.duration > 0 && (
+                        <p className="text-xs font-semibold text-[var(--color-primary)]/80">
+                          Duration: {service.duration} min
+                        </p>
+                      )}
+                      {hasDayRestriction && (
+                        <p className="text-xs font-semibold text-brown-dark/70">
+                          {formatAvailableDays(categoryAvailableDays)}
+                        </p>
+                      )}
+                    </div>
+                    {addDisabled && (
+                      <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 border border-amber-200">
+                        This category is not available on your selected date. Please choose{' '}
+                        {formatAvailableDays(categoryAvailableDays).replace(' only', '')}.
                       </p>
                     )}
                   </div>
@@ -179,9 +219,10 @@ export default function BookingServicePicker({
                       <button
                         type="button"
                         onClick={handleAdd}
-                        className="px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity min-h-[44px]"
+                        disabled={addDisabled}
+                        className="px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {justAdded ? '✓ Added!' : 'Add service'}
+                        {addDisabled ? 'Not on this date' : justAdded ? '✓ Added!' : 'Add service'}
                       </button>
                     )}
                   </div>

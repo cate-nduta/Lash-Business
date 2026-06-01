@@ -8,6 +8,7 @@ interface Testimonial {
   id: string
   name: string
   email?: string
+  service?: string
   photoUrl?: string | null
   testimonial: string
   rating?: number
@@ -114,6 +115,11 @@ export default function TestimonialsAll() {
                   })()}
                   {typeof testimonial.rating === 'number' && testimonial.rating > 0 && (
                     <StarRatingDisplay rating={testimonial.rating} size="md" className="mb-3" />
+                  )}
+                  {testimonial.service && (
+                    <p className="mb-3 inline-flex rounded-full bg-brown-light/40 px-3 py-1 text-xs font-semibold text-brown-dark">
+                      {testimonial.service}
+                    </p>
                   )}
                   <p className="text-gray-700 mb-4 leading-relaxed italic">
                     "{testimonial.testimonial}"

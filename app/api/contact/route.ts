@@ -8,6 +8,7 @@ export type SocialLink = {
   platform: string
   label: string
   url: string
+  enabled?: boolean
 }
 
 type ContactSettings = {
@@ -53,12 +54,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Migrate legacy instagram to socialLinks if socialLinks is empty
-    let socialLinks: SocialLink[] = Array.isArray(contact?.socialLinks) ? contact.socialLinks.filter((s: SocialLink) => s?.url?.trim()) : []
+    let socialLinks: SocialLink[] = Array.isArray(contact?.socialLinks)
+      ? contact.socialLinks
+          .filter((s: SocialLink) => s?.url?.trim())
+          .map((s: SocialLink) => ({ ...s, enabled: s.enabled !== false }))
+      : []
     if (socialLinks.length === 0 && (contact?.instagramUrl || contact?.instagram)) {
       socialLinks = [{
         platform: 'instagram',
         label: 'Instagram',
         url: contact.instagramUrl || `https://instagram.com/${(contact.instagram || '').replace('@', '')}`,
+        enabled: true,
       }]
     }
 

@@ -3,6 +3,17 @@ import { readDataFilePreferRemote, writeDataFile } from '@/lib/data-utils'
 import nodemailer from 'nodemailer'
 import { normalizePromoCatalog } from '@/lib/promo-utils'
 import { getSalonCommissionSettings } from '@/lib/discount-utils'
+import { loadPolicies } from '@/lib/policies-utils'
+import {
+  getAvailableReferrerRewardPercent,
+  getReferralDefaultsFromPolicies,
+  resolveFriendDiscountSettings,
+} from '@/lib/referral-utils'
+import {
+  sendAdminReferralUsedEmail,
+  sendReferrerRewardReadyEmail,
+  zohoTransporter as referralZoho,
+} from '@/lib/email/client-referral'
 
 const BUSINESS_NOTIFICATION_EMAIL =
   process.env.BUSINESS_NOTIFICATION_EMAIL ||
@@ -61,30 +72,11 @@ function trackEmailUsage(promo: any, email: string | null | undefined) {
   }
 }
 
-async function sendRewardReadyEmail(referrerEmail: string, code: string) {
-  if (!zohoTransporter) return
-
-  const html = `
-    <div style="font-family: Arial, sans-serif; padding: 24px; color: #2F1A16; background-color: #FFF8FB;">
-      <h2 style="margin-top: 0; color: #733D26;">Your friend just redeemed your LashDiary code!</h2>
-      <p>Your referral code <strong>${code}</strong> has been used by a friend.</p>
-      <p>That means your 10% loyalty reward is ready for your next appointment. Use the same code when booking to enjoy your discount.</p>
-      <div style="margin: 16px 0; padding: 16px; background: #F3F0FF; border-radius: 12px; border: 2px dashed #7A6CFF; text-align: center;">
-        <p style="margin: 0; font-size: 14px; color: #5143C5;">Your referral code:</p>
-        <p style="margin: 6px 0 0 0; font-size: 26px; font-weight: bold; letter-spacing: 2px;">${code}</p>
-      </div>
-      <p>Book whenever you're ready:</p>
-      <p><a href="${BASE_URL}/booking" style="color: #7A6CFF;">${BASE_URL.replace(/^https?:\/\//, '')}</a></p>
-      <p>Thank you for sharing the LashDiary glow!</p>
-    </div>
-  `
-
-  await zohoTransporter.sendMail({
-    from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
-    to: referrerEmail,
-    subject: 'Your Referral Reward is Ready 🤎',
-    html,
-  })
+function isDateExpired(dateValue?: string | null) {
+  if (!dateValue) return false
+  const expiry = new Date(`${dateValue}T23:59:59`)
+  if (Number.isNaN(expiry.getTime())) return false
+  return expiry < new Date()
 }
 
 async function sendSalonReferralEmail({
@@ -298,24 +290,86 @@ export async function POST(request: NextRequest) {
 
       salonRedeemed = true
     } else if (isReferral) {
-      trackEmailUsage(promo, email)
-
       if (isReferrer) {
-        if (!promo.referrerRewardAvailable) {
+        const policies = await loadPolicies()
+        const availableRewardPercent = getAvailableReferrerRewardPercent(
+          promo,
+          getReferralDefaultsFromPolicies(policies.variables),
+        )
+
+        if (availableRewardPercent <= 0) {
           return NextResponse.json({ error: 'Referral reward not available for this code.' }, { status: 400 })
         }
+        promo.referrerRewardRedeemedCount = promo.friendRedemptionCount ?? 0
         promo.referrerRewardAvailable = false
         promo.usedCount = (promo.usedCount || 0) + 1
+        trackEmailUsage(promo, email)
         referrerRedeemed = true
       } else {
+        const usedByEmails = Array.isArray(promo.usedByEmails)
+          ? promo.usedByEmails.map((usedEmail: string) => usedEmail.toLowerCase())
+          : []
+        if (email && usedByEmails.includes(email)) {
+          return NextResponse.json({
+            success: true,
+            duplicate: true,
+            friendRedeemed: false,
+            referrerRedeemed: false,
+            salonRedeemed: false,
+            salonCommissionAmount,
+            promoCode: promo,
+          })
+        }
+        if (isDateExpired(promo.validUntil)) {
+          return NextResponse.json({ error: 'This referral code has expired for friend bookings.' }, { status: 400 })
+        }
         const remaining = typeof promo.friendUsesRemaining === 'number' ? promo.friendUsesRemaining : 0
         if (remaining <= 0) {
           return NextResponse.json({ error: 'Referral code has already been used.' }, { status: 400 })
         }
-        promo.friendUsesRemaining = remaining - 1
-        promo.referrerRewardAvailable = true
+        promo.friendRedemptionCount = (promo.friendRedemptionCount ?? 0) + 1
+        promo.friendUsesRemaining = Math.max(0, remaining - 1)
+        promo.referrerRewardAvailable = (promo.friendRedemptionCount ?? 0) > (promo.referrerRewardRedeemedCount ?? 0)
         promo.usedCount = (promo.usedCount || 0) + 1
+        trackEmailUsage(promo, email)
         friendRedeemed = true
+
+        const referralsFile = 'referrals-tracking.json'
+        const referralsData = await readDataFilePreferRemote<{ referrals: any[] }>(referralsFile, { referrals: [] })
+        const referrals = Array.isArray(referralsData.referrals) ? [...referralsData.referrals] : []
+        const policies = await loadPolicies()
+        const referralSettings = resolveFriendDiscountSettings(
+          promo,
+          getReferralDefaultsFromPolicies(policies.variables),
+        )
+
+        referrals.push({
+          id: `client-ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'client',
+          promoCode: promo.code,
+          referrerEmail: normalizedRefEmail,
+          referrerName: promo.referrerName || null,
+          clientName: body?.clientName || null,
+          clientEmail: email || null,
+          service: body?.service || null,
+          bookingId: body?.bookingId || null,
+          appointmentDate: body?.appointmentDate || null,
+          appointmentTime: body?.appointmentTime || null,
+          originalPrice: Number(body?.originalPrice) || 0,
+          finalPrice: Number(body?.finalPrice) || 0,
+          discountApplied: Number(body?.discount) || 0,
+          friendDiscountPercent: referralSettings.friendDiscountPercent,
+          referrerRewardPercent: referralSettings.referrerRewardPercent,
+          friendRedemptionCount: promo.friendRedemptionCount ?? 0,
+          friendReferralLimit: promo.friendReferralLimit ?? null,
+          availableRewardPercent: getAvailableReferrerRewardPercent(
+            promo,
+            getReferralDefaultsFromPolicies(policies.variables),
+          ),
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        })
+        await writeDataFile(referralsFile, { referrals })
       }
     } else {
       trackEmailUsage(promo, email)
@@ -358,9 +412,43 @@ export async function POST(request: NextRequest) {
     promoCodes[index] = promo
     await writeDataFile('promo-codes.json', { promoCodes })
 
-    if (friendRedeemed && zohoTransporter && normalizedRefEmail) {
+    if (friendRedeemed && referralZoho && normalizedRefEmail) {
       try {
-        await sendRewardReadyEmail(normalizedRefEmail, promo.code)
+        const policies = await loadPolicies()
+        const referralSettings = resolveFriendDiscountSettings(
+          promo,
+          getReferralDefaultsFromPolicies(policies.variables),
+        )
+        await sendReferrerRewardReadyEmail(normalizedRefEmail, promo.code, {
+          ...referralSettings,
+          friendReferralLimit: promo.friendReferralLimit ?? undefined,
+          referralValidDays: promo.referralValidDays ?? null,
+          friendRedemptionCount: promo.friendRedemptionCount ?? 0,
+          availableRewardPercent: getAvailableReferrerRewardPercent(
+            promo,
+            getReferralDefaultsFromPolicies(policies.variables),
+          ),
+        })
+        await sendAdminReferralUsedEmail({
+          code: promo.code,
+          referrerName: promo.referrerName ?? null,
+          referrerEmail: normalizedRefEmail,
+          friendName: body?.clientName || null,
+          friendEmail: email || null,
+          service: body?.service || null,
+          bookingId: body?.bookingId || null,
+          appointmentDate: body?.appointmentDate || null,
+          appointmentTime: body?.appointmentTime || null,
+          originalPrice: Number(body?.originalPrice) || 0,
+          finalPrice: Number(body?.finalPrice) || 0,
+          discountApplied: Number(body?.discount) || 0,
+          friendRedemptionCount: promo.friendRedemptionCount ?? 0,
+          friendReferralLimit: promo.friendReferralLimit ?? null,
+          availableRewardPercent: getAvailableReferrerRewardPercent(
+            promo,
+            getReferralDefaultsFromPolicies(policies.variables),
+          ),
+        })
       } catch (emailError) {
         console.error('Failed to send referral reward email:', emailError)
       }

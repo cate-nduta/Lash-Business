@@ -8,7 +8,6 @@ import { useCurrency } from '@/contexts/CurrencyContext'
 import { Currency, formatCurrency as formatCurrencyUtil, convertCurrency, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '@/lib/currency-utils'
 import { useServiceCart } from '@/contexts/ServiceCartContext'
 import PaystackInlinePayment from '@/components/PaystackInlinePayment'
-import BookingServicePicker from '@/components/BookingServicePicker'
 import FormattedText from '@/components/FormattedText'
 import {
   clearBookingDraft,
@@ -18,7 +17,13 @@ import {
 } from '@/lib/booking-draft-utils'
 import { type ServiceCatalog } from '@/lib/services-utils'
 import {
+  formatAvailableDays,
+  isAvailableOnSelectedDate,
+  normalizeAvailableDays,
+} from '@/lib/service-availability-utils'
+import {
   computeBookingTotalsKES,
+  computeDepositKES,
   computeHomeVisitFeeKES,
 } from '@/lib/home-visit-pricing'
 import { formatDepositNotice, normalizeDepositNotice } from '@/lib/deposit-notice-utils'
@@ -27,6 +32,9 @@ import { formatDepositNotice, normalizeDepositNotice } from '@/lib/deposit-notic
 const CalendarPicker = lazy(() => import('@/components/CalendarPicker'))
 
 export const dynamic = 'force-dynamic'
+
+const BOOKING_AVAILABILITY_PREFETCH_KEY = 'lashdiary-booking-availability-prefetch'
+const BOOKING_AVAILABILITY_PREFETCH_MAX_AGE_MS = 60 * 1000
 
 interface TimeSlot {
   value: string
@@ -115,6 +123,7 @@ function isFillService(serviceName: string, categoryMap: Record<string, { id: st
 }
 
 const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+const isLashRemovalServiceName = (value: string) => /remov/i.test(value)
 
 export default function Booking() {
   const searchParams = useSearchParams()
@@ -127,7 +136,6 @@ export default function Booking() {
     getTotalDuration,
     clearCart,
     addService,
-    hasService,
   } = useServiceCart()
   const [ref, inView] = useInView({
     triggerOnce: true,
@@ -192,6 +200,32 @@ export default function Booking() {
   const isConsultation = selectedServiceNames.some(name => 
     name && name.toLowerCase().includes('consult')
   )
+
+  const lashRemovalService = useMemo(() => {
+    for (const category of serviceCatalog.categories) {
+      const service = category.services.find((entry) => isLashRemovalServiceName(entry.name))
+      if (service) return { category, service }
+    }
+    return null
+  }, [serviceCatalog])
+
+  const selectedLashRemovalItem = useMemo(
+    () => cartItems.find((item) => isLashRemovalServiceName(item.name)) ?? null,
+    [cartItems],
+  )
+
+  const unavailableCartItemsForDate = useMemo(() => {
+    if (!formData.date) return []
+    return cartItems.filter((item) => {
+      const category = serviceCatalog.categories.find((entry) => entry.id === item.categoryId)
+      return category ? !isAvailableOnSelectedDate(category.availableDays, formData.date) : false
+    })
+  }, [cartItems, formData.date, serviceCatalog])
+
+  useEffect(() => {
+    if (unavailableCartItemsForDate.length === 0) return
+    unavailableCartItemsForDate.forEach((item) => removeService(item.serviceId))
+  }, [removeService, unavailableCartItemsForDate])
 
 
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([])
@@ -288,7 +322,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         
         const response = await fetch('/api/client/auth/me', {
           credentials: 'include',
-          cache: 'default',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+          },
           signal: controller.signal,
         })
         
@@ -328,13 +366,6 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               }
             }
             
-            // Pre-fill appointment preference if available
-            if (data.preferences?.mappingStyle) {
-              setFormData(prev => ({
-                ...prev,
-                appointmentPreference: prev.appointmentPreference || data.preferences.mappingStyle || '',
-              }))
-            }
           }
         } else {
           // Other errors - user not logged in or other issue
@@ -375,7 +406,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           cache: 'no-store',
           signal: controller.signal,
           headers: {
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Pragma': 'no-cache',
           }
         })
@@ -437,6 +468,64 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   useEffect(() => {
     let isMounted = true
     const timestamp = Date.now()
+    const applyCalendarData = (calendarData: any) => {
+      const dates: AvailableDate[] = Array.isArray(calendarData?.dates) ? calendarData.dates : []
+      const dateStrings = dates.map((entry: AvailableDate) => entry.value)
+
+      setAvailableDates(dates)
+      setAvailableDateStrings(dateStrings)
+      setLoadingDates(false)
+
+      if (Array.isArray(calendarData?.fullyBookedDates)) {
+        setFullyBookedDates(calendarData.fullyBookedDates)
+      }
+
+      if (calendarData?.minimumBookingDate) {
+        setAvailabilityData((prev) => ({
+          ...prev,
+          minimumBookingDate: calendarData.minimumBookingDate,
+        }))
+      }
+
+      if (calendarData?.bookingWindow) {
+        setAvailabilityData((prev) => {
+          const previous = prev ?? { businessHours: {}, timeSlots: {}, bookingWindow: {} }
+          return {
+            ...previous,
+            bookingWindow: {
+              current: { ...(calendarData.bookingWindow.current ?? previous.bookingWindow?.current ?? {}) },
+              next: { ...(calendarData.bookingWindow.next ?? previous.bookingWindow?.next ?? {}) },
+              bookingLink: calendarData.bookingWindow.bookingLink ?? previous.bookingWindow?.bookingLink ?? '',
+              note: calendarData.bookingWindow.note ?? previous.bookingWindow?.note ?? '',
+              bannerMessage: calendarData.bookingWindow.bannerMessage ?? previous.bookingWindow?.bannerMessage ?? '',
+              bannerEnabled: calendarData.bookingWindow.bannerEnabled ?? previous.bookingWindow?.bannerEnabled,
+              minimumNoticeHours:
+                calendarData.bookingWindow.minimumNoticeHours ?? previous.bookingWindow?.minimumNoticeHours,
+              minimumNoticeByDay:
+                calendarData.bookingWindow.minimumNoticeByDay ?? previous.bookingWindow?.minimumNoticeByDay,
+              rescheduleCutoffHours:
+                calendarData.bookingWindow.rescheduleCutoffHours ?? previous.bookingWindow?.rescheduleCutoffHours,
+            },
+          }
+        })
+      }
+    }
+
+    try {
+      const rawPrefetch = window.sessionStorage.getItem(BOOKING_AVAILABILITY_PREFETCH_KEY)
+      if (rawPrefetch) {
+        const cached = JSON.parse(rawPrefetch) as { savedAt?: number; data?: unknown }
+        if (
+          typeof cached.savedAt === 'number' &&
+          Date.now() - cached.savedAt < BOOKING_AVAILABILITY_PREFETCH_MAX_AGE_MS
+        ) {
+          applyCalendarData(cached.data)
+        }
+      }
+    } catch {
+      // Ignore invalid session cache; the live request below will populate dates.
+    }
+
     // NO CACHE for availability-related calls - must be fresh every time
     // Create controllers for each fetch with proper timeout handling
     const discountsController = new AbortController()
@@ -451,7 +540,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     const availabilityFetchOptions: RequestInit = { 
       cache: 'no-store',
       headers: {
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         'Pragma': 'no-cache',
       },
       signal: availabilityController.signal
@@ -462,7 +551,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         const response = await fetch(`/api/calendar/available-slots?t=${timestamp}`, {
           cache: 'no-store',
           headers: {
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Pragma': 'no-cache',
           },
           signal: calendarController.signal,
@@ -475,46 +564,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         const calendarData = await response.json()
         if (!isMounted) return null
 
-        const dates: AvailableDate[] = Array.isArray(calendarData?.dates) ? calendarData.dates : []
-        const dateStrings = dates.map((entry: AvailableDate) => entry.value)
-
-        setAvailableDates(dates)
-        setAvailableDateStrings(dateStrings)
-        setLoadingDates(false)
-
-        if (Array.isArray(calendarData?.fullyBookedDates)) {
-          setFullyBookedDates(calendarData.fullyBookedDates)
-        }
-
-        if (calendarData?.minimumBookingDate) {
-          setAvailabilityData((prev) => ({
-            ...prev,
-            minimumBookingDate: calendarData.minimumBookingDate,
-          }))
-        }
-
-        if (calendarData?.bookingWindow) {
-          setAvailabilityData((prev) => {
-            const previous = prev ?? { businessHours: {}, timeSlots: {}, bookingWindow: {} }
-            return {
-              ...previous,
-              bookingWindow: {
-                current: { ...(calendarData.bookingWindow.current ?? previous.bookingWindow?.current ?? {}) },
-                next: { ...(calendarData.bookingWindow.next ?? previous.bookingWindow?.next ?? {}) },
-                bookingLink: calendarData.bookingWindow.bookingLink ?? previous.bookingWindow?.bookingLink ?? '',
-                note: calendarData.bookingWindow.note ?? previous.bookingWindow?.note ?? '',
-                bannerMessage: calendarData.bookingWindow.bannerMessage ?? previous.bookingWindow?.bannerMessage ?? '',
-                bannerEnabled: calendarData.bookingWindow.bannerEnabled ?? previous.bookingWindow?.bannerEnabled,
-                minimumNoticeHours:
-                  calendarData.bookingWindow.minimumNoticeHours ?? previous.bookingWindow?.minimumNoticeHours,
-                minimumNoticeByDay:
-                  calendarData.bookingWindow.minimumNoticeByDay ?? previous.bookingWindow?.minimumNoticeByDay,
-                rescheduleCutoffHours:
-                  calendarData.bookingWindow.rescheduleCutoffHours ?? previous.bookingWindow?.rescheduleCutoffHours,
-              },
-            }
-          })
-        }
+        applyCalendarData(calendarData)
         return calendarData
       } catch (error: any) {
         if (calendarTimeout) {
@@ -844,7 +894,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       fetch(`/api/services?t=${timestamp}`, { 
       cache: 'no-store',
       headers: {
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         'Pragma': 'no-cache',
       },
         signal: servicesController.signal 
@@ -862,7 +912,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       fetch(`/api/pre-appointment-guidelines?t=${timestamp}`, { 
         cache: 'no-store',
         headers: {
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
           'Pragma': 'no-cache',
         },
         signal: guidelinesController.signal 
@@ -897,6 +947,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   typeof category?.name === 'string' && category.name.trim().length > 0
                     ? category.name.trim()
                     : 'Category',
+                availableDays: normalizeAvailableDays(category?.availableDays),
                 showNotice: Boolean(category?.showNotice),
                 notice: typeof category?.notice === 'string' ? category.notice : '',
                 services: Array.isArray(category?.services)
@@ -1076,6 +1127,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     allowFirstTimeClient?: boolean
     isReferral?: boolean
     referrerEmail?: string | null
+    referrerName?: string | null
     friendUsesRemaining?: number | null
     referrerRewardAvailable?: boolean
     appliesToReferrer?: boolean
@@ -1307,6 +1359,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         isReferral: data.promoCode.isReferral,
         isSalonReferral: data.promoCode.isSalonReferral,
         referrerEmail: data.promoCode.referrerEmail,
+        referrerName: data.promoCode.referrerName,
         friendUsesRemaining: data.promoCode.friendUsesRemaining,
         referrerRewardAvailable: data.promoCode.referrerRewardAvailable,
         appliesToReferrer: data.promoCode.appliesToReferrer,
@@ -1408,6 +1461,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         isReferral: data.promoCode.isReferral,
         isSalonReferral: data.promoCode.isSalonReferral,
         referrerEmail: data.promoCode.referrerEmail,
+        referrerName: data.promoCode.referrerName,
         friendUsesRemaining: data.promoCode.friendUsesRemaining,
         referrerRewardAvailable: data.promoCode.referrerRewardAvailable,
         appliesToReferrer: data.promoCode.appliesToReferrer,
@@ -1696,41 +1750,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     const isFridayNight = isFridayNightBooking()
     const effectiveDepositPercentage = isFridayNight ? fridayNightDepositPercentage : depositPercentage
     
-    // Calculate deposit as percentage of final price. Fully discounted bookings do not require payment.
-    // For KSH 10 with 40%: 10 * 0.40 = 4.0 KSH exactly
-    // Use precise calculation to avoid floating point errors
-    const depositPercentageDecimal = effectiveDepositPercentage / 100
-    const exactDeposit = finalPrice * depositPercentageDecimal
-    
-    // For KES, round to nearest whole number (no decimals), minimum 1 KSH
-    // For USD, round to 2 decimal places, minimum 0.01 USD
-    let deposit: number
-    if (finalPrice <= 0) {
-      deposit = 0
-    } else if (currency === 'KES') {
-      // Round to nearest integer for KES (e.g., 4.0 -> 4, 4.5 -> 5)
-      deposit = Math.max(1, Math.round(exactDeposit))
-    } else {
-      // Round to 2 decimal places for USD (e.g., 0.40 -> 0.40, 0.401 -> 0.40)
-      deposit = Math.max(0.01, Math.round(exactDeposit * 100) / 100)
-    }
-    
-    // Apply gift card balance to deposit if available
-    const giftCardBalance = giftCardData?.valid ? giftCardData.amount : 0
-    if (giftCardBalance > 0) {
-      // Reduce deposit by gift card balance, but ensure minimum payment requirement
-      // If gift card covers entire deposit, deposit becomes 0 (but booking still requires confirmation)
-      deposit = Math.max(0, deposit - giftCardBalance)
-    }
-    
-    // CRITICAL: Ensure deposit is always calculated as percentage of final price
-    // If somehow deposit is 0 and finalPrice > 0, recalculate (shouldn't happen, but safety check)
-    if (deposit === 0 && finalPrice > 0 && giftCardBalance === 0) {
-      // Recalculate deposit - this should never happen, but ensures correctness
-      deposit = currency === 'KES' 
-        ? Math.max(1, Math.round(finalPrice * depositPercentageDecimal))
-        : Math.max(0.01, Math.round(finalPrice * depositPercentageDecimal * 100) / 100)
-    }
+    const deposit = computeDepositKES({
+      finalPriceKES: finalPrice,
+      depositPercentage: effectiveDepositPercentage,
+      giftCardAmountKES: giftCardData?.valid ? giftCardData.amount : 0,
+      paymentRequirement: requiresFullPayment ? 'full' : 'deposit',
+    })
 
     return {
       serviceSubtotal,
@@ -1844,7 +1869,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         const response = await fetch(`/api/calendar/available-slots?t=${Date.now()}`, {
           cache: 'no-store',
           headers: {
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Pragma': 'no-cache',
           },
           signal: controller.signal,
@@ -1909,7 +1934,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       const response = await fetch(`/api/calendar/available-slots?date=${date}&t=${timestamp}`, {
         cache: 'no-store',
         headers: {
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
           'Pragma': 'no-cache',
         }
       })
@@ -1963,6 +1988,52 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
   const handleDateSelect = (date: string) => {
     setFormData(prev => ({ ...prev, date, timeSlot: '' }))
+    setSubmitStatus({ type: null, message: '' })
+  }
+
+  const addLashRemovalToCart = () => {
+    if (!lashRemovalService) {
+      setSubmitStatus({
+        type: 'error',
+        message: 'Lash removal is not set up in Services yet. Please contact us so we can add it for you.',
+      })
+      return
+    }
+
+    if (
+      lashRemovalService.category.availableDays?.length &&
+      !isAvailableOnSelectedDate(lashRemovalService.category.availableDays, formData.date)
+    ) {
+      setSubmitStatus({
+        type: 'error',
+        message: `Lash removal can only be booked on ${formatAvailableDays(
+          lashRemovalService.category.availableDays,
+        ).replace(' only', '')}. Please choose an eligible date first.`,
+      })
+      return
+    }
+
+    addService({
+      serviceId: lashRemovalService.service.id,
+      name: lashRemovalService.service.name,
+      price: lashRemovalService.service.price || 0,
+      priceUSD: lashRemovalService.service.priceUSD,
+      duration: lashRemovalService.service.duration || 60,
+      categoryId: lashRemovalService.category.id,
+      categoryName: lashRemovalService.category.name,
+    })
+    setSubmitStatus({ type: null, message: '' })
+  }
+
+  const handleLashRemovalAnswer = (answer: 'yes' | 'no') => {
+    if (answer === 'yes') {
+      addLashRemovalToCart()
+      return
+    }
+
+    if (selectedLashRemovalItem) {
+      removeService(selectedLashRemovalItem.serviceId)
+    }
     setSubmitStatus({ type: null, message: '' })
   }
 
@@ -2175,7 +2246,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         setLoading(false)
         setSubmitStatus({
           type: 'error',
-          message: 'Please select at least one service below to continue.',
+          message: 'Please choose at least one service from the Services page before booking.',
         })
         // Scroll to service selection area
         setTimeout(() => {
@@ -2192,7 +2263,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         setLoading(false)
         setSubmitStatus({
           type: 'error',
-          message: 'Please select at least one service to continue.',
+          message: 'Please choose at least one service from the Services page before booking.',
         })
         return
       }
@@ -2208,6 +2279,17 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         setTimeout(() => {
           document.getElementById('date')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }, 100)
+        return
+      }
+
+      if (unavailableCartItemsForDate.length > 0) {
+        const serviceList = unavailableCartItemsForDate.map((item) => item.name).join(', ')
+        setLoading(false)
+        setSubmitStatus({
+          type: 'error',
+          message: `${serviceList} cannot be booked on the selected date. Please choose another date or remove that service.`,
+        })
+        document.getElementById('service-cart-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         return
       }
 
@@ -2434,10 +2516,22 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
             deposit: pricingDetails.deposit, // Deposit amount in KES (40% by default, configurable)
-            paymentType: isFreeBooking ? 'full' : 'deposit',
+            paymentType: isFreeBooking || requiresFullPayment ? 'full' : 'deposit',
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
+            clientReferral:
+              promoCodeData?.isReferral && !promoCodeData.isSalonReferral
+                ? {
+                    code: promoCodeData.code,
+                    referrerName: promoCodeData.referrerName || '',
+                    referrerEmail: promoCodeData.referrerEmail || '',
+                    appliesToFriend: promoCodeData.appliesToFriend === true,
+                    appliesToReferrer: promoCodeData.appliesToReferrer === true,
+                    friendUsesRemaining: promoCodeData.friendUsesRemaining ?? null,
+                  }
+                : null,
+            promoCodeData,
             salonReferral: salonReferralContext,
             giftCardCode: giftCardData?.valid ? giftCardData.code : null,
             paymentMethod: isFreeBooking ? null : 'paystack',
@@ -2696,7 +2790,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             discount: pricingDetails.discount,
             finalPrice: pricingDetails.finalPrice,
             deposit: pricingDetails.deposit, // M-Pesa = deposit
-            paymentType: 'deposit',
+            paymentType: requiresFullPayment ? 'full' : 'deposit',
             discountType: pricingDetails.discountType,
             promoCode: promoCodeData?.code || null,
             promoCodeType: referralType,
@@ -2875,22 +2969,78 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </div>
             )}
 
-            {/* Choose your service — inline picker (no need to leave this page) */}
+            {/* Selected services */}
             <div id="service-cart-section" className="mt-6 sm:mt-8 scroll-mt-28">
-              <h2 className="text-lg sm:text-xl font-display text-brown-dark mb-2">Choose your service *</h2>
+              <h2 className="text-lg sm:text-xl font-display text-brown-dark mb-2">Selected services *</h2>
               <p className="text-sm text-brown-dark/70 mb-4">
-                Pick your service here. Your date, time, and contact details stay saved while you browse options.
+                Services are selected from the Services page, then saved here for booking.
               </p>
-              <BookingServicePicker
-                catalog={serviceCatalog}
-                loading={loadingServices}
-                currency={currency}
-                exchangeRates={exchangeRates}
-                formatPrice={formatCurrencyContext}
-                addService={addService}
-                hasService={hasService}
-              />
-              {cartItems.length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-3">
+                <Link
+                  href="/services"
+                  className="inline-flex items-center justify-center rounded-lg bg-brown-dark px-5 py-2.5 text-sm font-semibold text-white hover:bg-brown transition-colors"
+                >
+                  {cartItems.length > 0 ? 'Add or change services' : 'Choose services'}
+                </Link>
+                {cartItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearCart}
+                    className="inline-flex items-center justify-center rounded-lg border border-red-200 px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Clear selected services
+                  </button>
+                )}
+              </div>
+              <div className="mb-4 rounded-2xl border border-brown-light bg-white/90 p-4">
+                <p className="text-sm font-semibold text-brown-dark">
+                  Do you currently have lash extensions that need removal?
+                </p>
+                <p className="mt-1 text-xs text-brown-dark/70">
+                  If yes, we’ll add the lash removal service to your booking total automatically.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleLashRemovalAnswer('yes')}
+                    disabled={!lashRemovalService}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                      selectedLashRemovalItem
+                        ? 'border-brown-dark bg-brown-dark text-white'
+                        : 'border-brown-light bg-white text-brown-dark hover:bg-pink-light/70'
+                    }`}
+                  >
+                    Yes, add removal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLashRemovalAnswer('no')}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+                      !selectedLashRemovalItem
+                        ? 'border-brown-dark bg-brown-dark text-white'
+                        : 'border-brown-light bg-white text-brown-dark hover:bg-pink-light/70'
+                    }`}
+                  >
+                    No removal needed
+                  </button>
+                </div>
+                {lashRemovalService ? (
+                  <p className="mt-2 text-xs text-brown-dark/60">
+                    Removal add-on: {lashRemovalService.service.name} •{' '}
+                    {formatCurrencyContext(
+                      currency === 'USD'
+                        ? lashRemovalService.service.priceUSD ??
+                            convertCurrency(lashRemovalService.service.price, 'KES', 'USD', exchangeRates)
+                        : lashRemovalService.service.price,
+                    )}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Add a service with “Removal” in the name inside Admin → Services to enable this question.
+                  </p>
+                )}
+              </div>
+              {cartItems.length > 0 ? (
                 <div className="mt-5 space-y-3">
                   <p className="text-sm font-semibold text-brown-dark">Selected ({cartItems.length})</p>
                   {cartItems.map((item) => {
@@ -2924,6 +3074,19 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       </div>
                     )
                   })}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-dashed border-brown-light bg-white/70 p-6 text-center">
+                  <p className="text-sm font-semibold text-brown-dark">No services selected yet.</p>
+                  <p className="mt-1 text-sm text-brown-dark/70">
+                    Go to the Services page, add your preferred service to cart, then come back here to finish booking.
+                  </p>
+                  <Link
+                    href="/services"
+                    className="mt-4 inline-flex items-center justify-center rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    Browse services
+                  </Link>
                 </div>
               )}
             </div>
@@ -3020,33 +3183,6 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </div>
               <p className="mt-2 text-sm text-brown-dark/70">
                 Choose your country code and enter the rest of your number. International numbers are accepted.
-              </p>
-            </div>
-
-            {/* Appointment Preference Field */}
-            <div>
-              <label
-                htmlFor="appointmentPreference"
-                className="block text-sm font-semibold text-brown-dark mb-2"
-              >
-                Appointment Preference (Optional)
-              </label>
-              <div className="relative group">
-                <select
-                  id="appointmentPreference"
-                  name="appointmentPreference"
-                  value={formData.appointmentPreference}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3.5 sm:py-3 text-base border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark transition-all touch-manipulation hover:border-[var(--color-primary)]/50 focus:scale-[1.01] min-h-[48px]"
-                >
-                  <option value="">Select your preference...</option>
-                  <option value="quiet">Quiet Appointment - I prefer minimal conversation</option>
-                  <option value="chat">Small Chat Session - I enjoy friendly conversation</option>
-                  <option value="either">Either is fine - I'm flexible</option>
-                </select>
-              </div>
-              <p className="mt-2 text-sm text-brown-dark/70">
-                Let us know your preference for conversation during your appointment.
               </p>
             </div>
 
@@ -3281,8 +3417,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                       {promoCodeData.isReferral && !promoCodeData.isSalonReferral && (
                         <p className="text-xs text-green-700 mt-1">
                           {promoCodeData.appliesToFriend === true
-                            ? 'This referral gives you 10% off right now. Your stylist will thank your referrer!'
-                            : 'Your 10% loyalty reward is ready—enjoy it on this booking using the same referral code you shared.'}
+                            ? promoCodeData.discountValue > 0
+                              ? `This referral from ${promoCodeData.referrerName || promoCodeData.referrerEmail || 'your friend'} gives you ${promoCodeData.discountValue}% off right now.`
+                              : `This referral code from ${promoCodeData.referrerName || promoCodeData.referrerEmail || 'your friend'} is linked to your booking.`
+                            : promoCodeData.discountValue > 0
+                              ? `Your ${promoCodeData.discountValue}% loyalty reward is ready—enjoy it on this booking using the same referral code you shared.`
+                              : 'Your referral reward is unlocked—thank you for sharing LashDiary!'}
                         </p>
                       )}
                       {promoCodeData.isSalonReferral && (

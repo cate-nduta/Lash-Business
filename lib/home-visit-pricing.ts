@@ -57,6 +57,33 @@ export function computeBookingTotalsKES(params: {
   }
 }
 
+export function normalizeDepositPercentage(value: unknown, fallback = 40): number {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return fallback
+  return Math.min(100, Math.round(n))
+}
+
+export function computeDepositKES(params: {
+  finalPriceKES: number
+  depositPercentage: number
+  giftCardAmountKES?: number
+  paymentRequirement?: 'deposit' | 'full'
+}): number {
+  const finalPriceKES = Math.max(0, Math.round(params.finalPriceKES))
+  if (finalPriceKES <= 0) return 0
+
+  const giftCardAmountKES = Math.max(0, Math.round(Number(params.giftCardAmountKES) || 0))
+  const requiredBeforeGiftCard =
+    params.paymentRequirement === 'full'
+      ? finalPriceKES
+      : Math.max(
+          1,
+          Math.round(finalPriceKES * (normalizeDepositPercentage(params.depositPercentage) / 100)),
+        )
+
+  return Math.max(0, Math.min(finalPriceKES, requiredBeforeGiftCard) - giftCardAmountKES)
+}
+
 export function sumServiceDetailsSubtotalKES(
   serviceDetails: Array<{ price?: number }> | null | undefined,
 ): number {

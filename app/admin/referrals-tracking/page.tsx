@@ -9,6 +9,8 @@ interface PartnerReferral {
   promoCode: string
   salonName?: string | null
   salonEmail?: string | null
+  referrerName?: string | null
+  referrerEmail?: string | null
   clientName?: string | null
   clientEmail?: string | null
   service?: string | null
@@ -20,6 +22,11 @@ interface PartnerReferral {
   discountApplied: number
   clientDiscountPercent?: number | null
   clientDiscountAmount?: number | null
+  friendDiscountPercent?: number | null
+  referrerRewardPercent?: number | null
+  availableRewardPercent?: number | null
+  friendRedemptionCount?: number | null
+  friendReferralLimit?: number | null
   commissionType?: 'percentage' | 'fixed'
   commissionPercent: number
   commissionFixedAmount?: number | null
@@ -49,7 +56,7 @@ type PartnerCodeSummary = {
   code: string
   salonName: string
   salonEmail: string
-  salonPartnerType: 'salon' | 'beautician' | 'influencer'
+  salonPartnerType: 'salon' | 'beautician' | 'influencer' | 'client'
   discountType?: 'percentage' | 'fixed'
   clientDiscountPercent: number | null
   clientDiscountAmount?: number | null
@@ -60,6 +67,8 @@ type PartnerCodeSummary = {
   salonUsedCount: number
   commissionTotal: number
   commissionPaid: number
+  referrerRewardPercent?: number | null
+  availableRewardPercent?: number | null
   active: boolean
   terminatedAt?: string | null
 }
@@ -82,6 +91,9 @@ const formatPartnerDiscount = (partner: PartnerCodeSummary) => {
 const formatPartnerCommission = (partner: PartnerCodeSummary) => {
   if (partner.salonCommissionType === 'fixed' && (partner.salonCommissionAmount ?? 0) > 0) {
     return `${formatCurrency(partner.salonCommissionAmount ?? 0)} per completed appointment`
+  }
+  if (partner.salonPartnerType === 'client') {
+    return `${partner.referrerRewardPercent ?? 0}% reward per friend`
   }
   return `${partner.salonCommissionPercent ?? 0}%`
 }
@@ -201,8 +213,11 @@ export default function ReferralsTrackingAdmin() {
       ? 'Beautician'
       : selectedPartner.salonPartnerType === 'influencer'
       ? 'Influencer'
+      : selectedPartner.salonPartnerType === 'client'
+      ? 'Client Referral'
       : 'Salon'
     : null
+  const selectedIsClientReferral = selectedPartner?.salonPartnerType === 'client'
 
   const handleStatusChange = async (id: string, nextStatus: 'pending' | 'paid') => {
     setSavingId(id)
@@ -300,7 +315,7 @@ export default function ReferralsTrackingAdmin() {
           <div>
             <h1 className="text-4xl font-display text-brown-dark">Referrals Tracking</h1>
             <p className="text-sm text-brown-dark/70 mt-1">
-              Monitor partner activity, commissions, and usage across all beautician, salon, and influencer codes.
+              Monitor partner and client referral activity, rewards, commissions, and usage.
             </p>
           </div>
           <Link href="/admin/dashboard" className="text-brown hover:text-brown-dark">
@@ -318,14 +333,14 @@ export default function ReferralsTrackingAdmin() {
 
         <div className="bg-white rounded-2xl shadow-lg p-6 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold text-brown-dark">Active partner codes</h2>
+            <h2 className="text-2xl font-semibold text-brown-dark">Active referral codes</h2>
             <p className="text-sm text-brown-dark/60">
-              See how many redemptions remain and track commission performance for each code.
+              See how many redemptions remain and track reward or commission performance for each code.
             </p>
           </div>
           {partnerCodes.length === 0 ? (
             <div className="text-center text-brown py-6 border-2 border-dashed border-brown-light rounded-xl">
-              No partner codes created yet.
+              No referral codes created yet.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -335,6 +350,8 @@ export default function ReferralsTrackingAdmin() {
                     ? 'Beautician'
                     : code.salonPartnerType === 'influencer'
                     ? 'Influencer'
+                    : code.salonPartnerType === 'client'
+                    ? 'Client Referral'
                     : 'Salon'
                 const remaining =
                   code.salonUsageLimit !== null && code.salonUsageLimit !== undefined
@@ -358,7 +375,10 @@ export default function ReferralsTrackingAdmin() {
                     </div>
                     <div className="mt-3 space-y-2 text-sm text-brown-dark">
                       <div>
-                        <span className="font-semibold">Partner:</span> {code.salonName || '—'}{' '}
+                        <span className="font-semibold">
+                          {code.salonPartnerType === 'client' ? 'Referrer:' : 'Partner:'}
+                        </span>{' '}
+                        {code.salonName || '—'}{' '}
                         <span className="text-xs text-brown-dark/60">({partnerLabel})</span>
                       </div>
                       <div className="text-xs text-brown-dark/60">{code.salonEmail || 'No email on file'}</div>
@@ -367,7 +387,9 @@ export default function ReferralsTrackingAdmin() {
                         {formatPartnerDiscount(code)}
                       </div>
                       <div>
-                        <span className="font-semibold">Commission:</span>{' '}
+                        <span className="font-semibold">
+                          {code.salonPartnerType === 'client' ? 'Reward:' : 'Commission:'}
+                        </span>{' '}
                         {formatPartnerCommission(code)}
                       </div>
                       <div>
@@ -379,7 +401,9 @@ export default function ReferralsTrackingAdmin() {
                         )}
                       </div>
                       <div className="text-xs text-brown-dark/60">
-                        Commission earned: {formatCurrency(code.commissionTotal)}
+                        {code.salonPartnerType === 'client'
+                          ? `Current available reward: ${code.availableRewardPercent ?? 0}%`
+                          : `Commission earned: ${formatCurrency(code.commissionTotal)}`}
                       </div>
                       <div className="text-xs text-brown-dark/60">
                         Commission paid: {formatCurrency(code.commissionPaid)}
@@ -428,7 +452,7 @@ export default function ReferralsTrackingAdmin() {
                 </p>
               ) : (
                 <p className="text-sm text-brown-dark/60">
-                  Select a partner above to review their referral history and commission status.
+                  Select a referral code above to review usage history.
                 </p>
               )}
             </div>
@@ -451,7 +475,7 @@ export default function ReferralsTrackingAdmin() {
           {selectedPartner && (
             <div className="mb-4 rounded-lg border border-brown-light/60 bg-pink-light/40 p-4 text-sm text-brown-dark space-y-1">
               <div className="font-semibold text-brown-dark text-base">
-                {selectedPartner.salonName || 'Partner'}{' '}
+                {selectedPartner.salonName || (selectedPartner.salonPartnerType === 'client' ? 'Client referral' : 'Partner')}{' '}
                 {selectedPartnerLabel && (
                   <span className="text-xs text-brown-dark/60">({selectedPartnerLabel})</span>
                 )}
@@ -459,14 +483,23 @@ export default function ReferralsTrackingAdmin() {
               <div className="text-brown-dark/70">{selectedPartner.salonEmail || 'No email on file'}</div>
               <div className="flex flex-wrap gap-4 text-xs text-brown-dark/70">
                 <span>Code: {selectedPartner.code}</span>
-                <span>Commission: {formatPartnerCommission(selectedPartner)}</span>
+                <span>
+                  {selectedPartner.salonPartnerType === 'client' ? 'Reward' : 'Commission'}:{' '}
+                  {formatPartnerCommission(selectedPartner)}
+                </span>
                 <span>Client discount: {formatPartnerDiscount(selectedPartner)}</span>
                 <span>
                   Usage: {selectedPartner.salonUsedCount}
                   {selectedPartner.salonUsageLimit ? ` / ${selectedPartner.salonUsageLimit}` : ''}
                 </span>
-                <span>Total earned: {formatCurrency(selectedPartner.commissionTotal)}</span>
-                <span>Total paid: {formatCurrency(selectedPartner.commissionPaid)}</span>
+                {selectedPartner.salonPartnerType === 'client' ? (
+                  <span>Available reward: {selectedPartner.availableRewardPercent ?? 0}%</span>
+                ) : (
+                  <>
+                    <span>Total earned: {formatCurrency(selectedPartner.commissionTotal)}</span>
+                    <span>Total paid: {formatCurrency(selectedPartner.commissionPaid)}</span>
+                  </>
+                )}
               </div>
               {selectedPartner.terminatedAt && (
                 <div className="text-xs text-red-600 mt-1">
@@ -478,7 +511,7 @@ export default function ReferralsTrackingAdmin() {
 
           {!selectedPartner ? (
             <div className="text-center text-brown py-12 border-2 border-dashed border-brown-light rounded-xl">
-              Choose a partner to view referral activity.
+              Choose a referral code to view referral activity.
             </div>
           ) : filteredReferrals.length === 0 ? (
             <div className="text-center text-brown py-12 border-2 border-dashed border-brown-light rounded-xl">
@@ -490,9 +523,13 @@ export default function ReferralsTrackingAdmin() {
                 <thead className="bg-pink-light/40">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">Partner</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">
+                      {selectedIsClientReferral ? 'Referrer' : 'Partner'}
+                    </th>
                     <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">Client &amp; Service</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">Commission</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">
+                      {selectedIsClientReferral ? 'Reward' : 'Commission'}
+                    </th>
                     <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-brown-dark">Status</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-brown-dark">Actions</th>
                   </tr>
@@ -509,8 +546,14 @@ export default function ReferralsTrackingAdmin() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-brown-dark">
-                        <div className="font-semibold">{entry.salonName || '—'}</div>
-                        <div className="text-xs text-brown-dark/60">{entry.salonEmail || 'No email on file'}</div>
+                        <div className="font-semibold">
+                          {selectedIsClientReferral ? entry.referrerName || 'Client referrer' : entry.salonName || '—'}
+                        </div>
+                        <div className="text-xs text-brown-dark/60">
+                          {selectedIsClientReferral
+                            ? entry.referrerEmail || 'No referrer email on file'
+                            : entry.salonEmail || 'No email on file'}
+                        </div>
                         <div className="text-xs text-brown-dark/60 mt-1">Code: {entry.promoCode}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-brown-dark">
@@ -518,52 +561,74 @@ export default function ReferralsTrackingAdmin() {
                         <div className="text-xs text-brown-dark/60">{entry.service || 'Service'}</div>
                         {referralDiscount && (
                           <div className="text-xs text-green-700 mt-1">
-                            Client discount: {referralDiscount} • Commission: {formatReferralCommissionRule(entry)}
+                            Client discount: {referralDiscount}
+                            {!selectedIsClientReferral && ` • Commission: ${formatReferralCommissionRule(entry)}`}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-brown-dark">
-                        <div className="font-semibold">
-                          {formatCurrency(
-                            (entry.commissionTotalAmount ?? (entry as any).commissionAmount ?? 0) as number,
-                          )}
-                        </div>
-                        <div className="text-xs text-brown-dark/60">
-                          Service price: {formatCurrency(entry.originalPrice)}
-                        </div>
-                        {(entry.commissionEarlyAmount ?? 0) > 0 && (
-                          <div className="text-xs text-brown-dark/60 mt-1">
-                            Early payout: {formatCurrency(entry.commissionEarlyAmount ?? 0)} (
-                            {entry.commissionEarlyPercent ?? 0}%){' '}
-                            {entry.commissionEarlyStatus && entry.commissionEarlyStatus !== 'pending'
-                              ? `• ${entry.commissionEarlyStatus}`
-                              : ''}
-                          </div>
+                        {selectedIsClientReferral ? (
+                          <>
+                            <div className="font-semibold">{entry.availableRewardPercent ?? 0}% available</div>
+                            <div className="text-xs text-brown-dark/60">
+                              Progress: {entry.friendRedemptionCount ?? 0}
+                              {entry.friendReferralLimit ? ` / ${entry.friendReferralLimit}` : ''} friends
+                            </div>
+                            <div className="text-xs text-brown-dark/60">
+                              Reward per friend: {entry.referrerRewardPercent ?? 0}%
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold">
+                              {formatCurrency(
+                                (entry.commissionTotalAmount ?? (entry as any).commissionAmount ?? 0) as number,
+                              )}
+                            </div>
+                            <div className="text-xs text-brown-dark/60">
+                              Service price: {formatCurrency(entry.originalPrice)}
+                            </div>
+                            {(entry.commissionEarlyAmount ?? 0) > 0 && (
+                              <div className="text-xs text-brown-dark/60 mt-1">
+                                Early payout: {formatCurrency(entry.commissionEarlyAmount ?? 0)} (
+                                {entry.commissionEarlyPercent ?? 0}%){' '}
+                                {entry.commissionEarlyStatus && entry.commissionEarlyStatus !== 'pending'
+                                  ? `• ${entry.commissionEarlyStatus}`
+                                  : ''}
+                              </div>
+                            )}
+                            <div className="text-xs text-brown-dark/60">
+                              Commission release: {formatCurrency(entry.commissionFinalAmount ?? 0)} (
+                              {formatReferralCommissionRule(entry)}){' '}
+                              {entry.commissionFinalStatus && entry.commissionFinalStatus !== 'pending'
+                                ? `• ${entry.commissionFinalStatus}`
+                                : ''}
+                            </div>
+                          </>
                         )}
-                        <div className="text-xs text-brown-dark/60">
-                          Commission release: {formatCurrency(entry.commissionFinalAmount ?? 0)} (
-                          {formatReferralCommissionRule(entry)}){' '}
-                          {entry.commissionFinalStatus && entry.commissionFinalStatus !== 'pending'
-                            ? `• ${entry.commissionFinalStatus}`
-                            : ''}
-                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            entry.status === 'paid'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}
-                        >
-                          {entry.status === 'paid' ? 'Paid' : 'Pending'}
-                        </span>
-                        {entry.paidAt && (
+                        {selectedIsClientReferral ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                            Counted
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              entry.status === 'paid'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}
+                          >
+                            {entry.status === 'paid' ? 'Paid' : 'Pending'}
+                          </span>
+                        )}
+                        {!selectedIsClientReferral && entry.paidAt && (
                           <div className="text-xs text-green-700 mt-1">
                             Paid {formatDateTime(entry.paidAt)}
                           </div>
                         )}
-                        {entry.commissionEarlyStatus && (entry.commissionEarlyAmount ?? 0) > 0 && (
+                        {!selectedIsClientReferral && entry.commissionEarlyStatus && (entry.commissionEarlyAmount ?? 0) > 0 && (
                           <div className="text-xs text-brown-dark/60 mt-1">
                             Early payout: {entry.commissionEarlyStatus}
                             {entry.commissionEarlyPaidAt
@@ -571,7 +636,7 @@ export default function ReferralsTrackingAdmin() {
                               : ''}
                           </div>
                         )}
-                        {entry.commissionFinalStatus && (
+                        {!selectedIsClientReferral && entry.commissionFinalStatus && (
                           <div className="text-xs text-brown-dark/60">
                             Final payout: {entry.commissionFinalStatus}
                             {entry.commissionFinalPaidAt
@@ -581,22 +646,26 @@ export default function ReferralsTrackingAdmin() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleStatusChange(entry.id, entry.status === 'paid' ? 'pending' : 'paid')}
-                          disabled={savingId === entry.id}
-                          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            entry.status === 'paid'
-                              ? 'border border-brown-light text-brown-dark hover:bg-pink-light/40'
-                              : 'bg-brown-dark text-white hover:bg-brown'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {savingId === entry.id
-                            ? 'Updating...'
-                            : entry.status === 'paid'
-                            ? 'Mark as pending'
-                            : 'Mark as paid'}
-                        </button>
+                        {selectedIsClientReferral ? (
+                          <span className="text-xs text-brown-dark/60">Tracked automatically</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(entry.id, entry.status === 'paid' ? 'pending' : 'paid')}
+                            disabled={savingId === entry.id}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                              entry.status === 'paid'
+                                ? 'border border-brown-light text-brown-dark hover:bg-pink-light/40'
+                                : 'bg-brown-dark text-white hover:bg-brown'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {savingId === entry.id
+                              ? 'Updating...'
+                              : entry.status === 'paid'
+                              ? 'Mark as pending'
+                              : 'Mark as paid'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                     )

@@ -54,6 +54,8 @@ type SendTestimonialRequestOptions = {
   appointmentDate?: string
   appointmentTime?: string
   bookingId?: string
+  modelApplicationId?: string
+  source?: 'booking' | 'model'
 }
 
 const formatDate = (value?: string) => {
@@ -78,10 +80,19 @@ const formatTime = (value?: string) => {
   })
 }
 
-const buildTestimonialLink = (email: string, bookingId?: string) => {
+const buildTestimonialLink = (email: string, bookingId?: string, service?: string, modelApplicationId?: string, source?: 'booking' | 'model') => {
   const params = new URLSearchParams({ email })
   if (bookingId) {
     params.set('bookingId', bookingId)
+  }
+  if (modelApplicationId) {
+    params.set('modelApplicationId', modelApplicationId)
+  }
+  if (source) {
+    params.set('source', source)
+  }
+  if (service) {
+    params.set('service', service)
   }
   return `${BASE_URL.replace(/\/$/, '')}/testimonials?${params.toString()}`
 }
@@ -190,13 +201,13 @@ const createEmailContent = ({
 export async function sendTestimonialRequestEmail(
   options: SendTestimonialRequestOptions,
 ): Promise<TestimonialEmailResult> {
-  const { to, name, service, appointmentDate, appointmentTime, bookingId } = options
+  const { to, name, service, appointmentDate, appointmentTime, bookingId, modelApplicationId, source } = options
 
   if (!to) {
     return { success: false, provider: 'none', error: 'Recipient email is required' }
   }
 
-  const testimonialLink = buildTestimonialLink(to, bookingId)
+  const testimonialLink = buildTestimonialLink(to, bookingId, service, modelApplicationId, source)
   const { html, text } = createEmailContent({
     name,
     service,

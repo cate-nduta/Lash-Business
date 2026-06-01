@@ -13,10 +13,15 @@ import {
 export default function Testimonials() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
+  const serviceParam = searchParams.get('service') || ''
+  const bookingIdParam = searchParams.get('bookingId') || ''
+  const modelApplicationIdParam = searchParams.get('modelApplicationId') || ''
+  const sourceParam = searchParams.get('source') || ''
 
   const [formData, setFormData] = useState({
     name: '',
     email: emailParam,
+    service: serviceParam,
     testimonial: '',
     rating: 0,
     photo: null as File | null,
@@ -91,6 +96,16 @@ export default function Testimonials() {
       const formDataToSend = new FormData()
       formDataToSend.append('name', formData.name)
       formDataToSend.append('email', formData.email)
+      formDataToSend.append('service', formData.service)
+      if (bookingIdParam) {
+        formDataToSend.append('bookingId', bookingIdParam)
+      }
+      if (modelApplicationIdParam) {
+        formDataToSend.append('modelApplicationId', modelApplicationIdParam)
+      }
+      if (sourceParam) {
+        formDataToSend.append('source', sourceParam)
+      }
       if (formData.testimonial.trim()) {
         formDataToSend.append('testimonial', formData.testimonial)
       } else {
@@ -113,6 +128,7 @@ export default function Testimonials() {
         setFormData({
           name: '',
           email: emailParam,
+          service: serviceParam,
           testimonial: '',
           rating: 0,
           photo: null,
@@ -215,6 +231,24 @@ export default function Testimonials() {
                 className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
                 placeholder="your@email.com"
               />
+            </div>
+
+            <div>
+              <label htmlFor="service" className="block text-sm font-semibold text-brown-dark mb-2">
+                Lash Service You Received *
+              </label>
+              <input
+                type="text"
+                id="service"
+                required
+                value={formData.service}
+                onChange={(e) => setFormData({ ...formData, service: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-brown-light rounded-lg bg-white text-brown-dark focus:ring-2 focus:ring-brown-dark focus:border-brown-dark"
+                placeholder="e.g. Hybrid Lashes, Wispy Set, Volume Infill"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This helps future clients understand which lash service your review is about.
+              </p>
             </div>
 
             <div>
