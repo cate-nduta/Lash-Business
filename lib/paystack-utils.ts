@@ -12,6 +12,15 @@ const PAYSTACK_ENVIRONMENT = process.env.PAYSTACK_ENVIRONMENT || 'test'
 const PAYSTACK_BASE_URL = 'https://api.paystack.co'
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET || ''
 
+type PaystackChannel =
+  | 'card'
+  | 'bank'
+  | 'ussd'
+  | 'qr'
+  | 'mobile_money'
+  | 'bank_transfer'
+  | 'eft'
+
 export interface InitializeTransactionParams {
   email: string
   amount: number // Amount in main currency (will be converted to subunits)
@@ -21,6 +30,7 @@ export interface InitializeTransactionParams {
   metadata?: Record<string, any> // Optional: additional metadata
   customerName?: string
   phone?: string
+  channels?: PaystackChannel[]
 }
 
 export interface InitializeTransactionResponse {
@@ -117,6 +127,7 @@ export async function initializeTransaction(
       metadata = {},
       customerName,
       phone,
+      channels,
     } = params
 
     // Convert amount to subunits
@@ -154,7 +165,16 @@ export async function initializeTransaction(
         variable_name: 'phone',
         value: phone,
       })
+
+      const formattedPhone = phone.replace(/\D/g, '')
+      if (formattedPhone.length >= 9 && formattedPhone.length <= 15) {
+        transactionMetadata.phone = formattedPhone
+      }
     }
+
+    const normalizedChannels = Array.isArray(channels)
+      ? channels.filter((channel, index, list) => Boolean(channel) && list.indexOf(channel) === index)
+      : undefined
 
     // Initialize transaction with Paystack
     const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
@@ -170,6 +190,7 @@ export async function initializeTransaction(
         reference,
         callback_url: finalCallbackUrl,
         metadata: Object.keys(transactionMetadata).length > 0 ? transactionMetadata : undefined,
+        channels: normalizedChannels && normalizedChannels.length > 0 ? normalizedChannels : undefined,
       }),
     })
 

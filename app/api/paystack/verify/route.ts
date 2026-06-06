@@ -89,12 +89,22 @@ async function finalizeGiftCardPayment(transaction: any) {
 }
 
 async function finalizeKnownPayment(transaction: any) {
-  if (transaction?.status !== 'success') return
+  const status = String(transaction?.status || '').toLowerCase()
+  if (!['success', 'successful', 'paid'].includes(status)) return
   const paymentType = transaction.metadata?.payment_type
   if (paymentType === 'shop_order') {
     await finalizeShopOrderPayment(transaction)
   } else if (paymentType === 'gift_card') {
     await finalizeGiftCardPayment(transaction)
+  } else if (paymentType === 'training_enrollment') {
+    const { handleTrainingEnrollmentPayment } = await import(
+      '@/lib/training-payment-handler'
+    )
+    await handleTrainingEnrollmentPayment(transaction.reference, transaction.metadata || {}, {
+      amount: transaction.amount,
+      currency: transaction.currency,
+      status: transaction.status,
+    })
   }
 }
 

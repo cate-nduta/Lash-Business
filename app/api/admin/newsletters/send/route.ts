@@ -218,12 +218,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Normalize business name - ensure it's "The LashDiary" if set to just "LashDiary"
-        const rawBusinessName = business.name || 'The LashDiary'
-        const fromName = rawBusinessName === 'LashDiary' ? 'The LashDiary' : rawBusinessName
-        
         await zohoTransporter!.sendMail({
-          from: `"${fromName}" <${FROM_EMAIL}>`,
+          from: `"The LashDiary" <${FROM_EMAIL}>`,
           to: recipient.email,
           replyTo: replyToEmail,
           subject: formatEmailSubject(subject),

@@ -33,7 +33,7 @@ export default function PromoBanner() {
   const [ready, setReady] = useState(false)
 
   // Hide banner on /labs pages
-  const shouldShow = !pathname.startsWith('/labs')
+  const shouldShow = !pathname?.startsWith('/labs')
 
   useEffect(() => {
     if (!shouldShow) {

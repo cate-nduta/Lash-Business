@@ -7,7 +7,7 @@ import Link from 'next/link'
 export default function LabsLogin() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const orderId = searchParams.get('orderId')
+  const orderId = searchParams?.get('orderId')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

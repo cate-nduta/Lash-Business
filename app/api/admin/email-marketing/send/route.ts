@@ -53,8 +53,7 @@ const BASE_URL = (() => {
   return 'https://lashdiary.co.ke'
 })()
 const OWNER_EMAIL = process.env.CALENDAR_EMAIL || process.env.FROM_EMAIL || BUSINESS_NOTIFICATION_EMAIL
-const rawFromName = process.env.EMAIL_FROM_NAME || 'The LashDiary'
-const EMAIL_FROM_NAME = rawFromName === 'LashDiary' ? 'The LashDiary' : rawFromName
+const EMAIL_FROM_NAME = 'The LashDiary'
 
 // Zoho transporter (primary email service)
 const zohoTransporter =
@@ -315,15 +314,11 @@ export async function POST(request: NextRequest) {
 
             const replyToEmail = business.email || OWNER_EMAIL
             const formattedSubject = formatEmailSubject(personalizedSubject)
-            // Normalize business name - ensure it's "The LashDiary" if set to just "LashDiary"
-            const rawBusinessName = business.name || EMAIL_FROM_NAME
-            const fromName = rawBusinessName === 'LashDiary' ? 'The LashDiary' : rawBusinessName
-
             // Send email via Zoho SMTP
             if (zohoTransporter) {
               try {
                 await zohoTransporter.sendMail({
-                  from: `"${fromName}" <${FROM_EMAIL}>`,
+                  from: `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`,
                   to: recipient.email,
                   replyTo: replyToEmail,
                   subject: formattedSubject,

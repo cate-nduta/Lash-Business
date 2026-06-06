@@ -24,9 +24,9 @@ function SubscriptionPaymentContent() {
     metadata?: Record<string, any>
   } | null>(null)
 
-  const subscriberId = searchParams.get('subscriberId')
-  const reference = searchParams.get('reference')
-  const amount = searchParams.get('amount')
+  const subscriberId = searchParams?.get('subscriberId')
+  const reference = searchParams?.get('reference')
+  const amount = searchParams?.get('amount')
 
   useEffect(() => {
     if (!subscriberId) {

@@ -213,8 +213,8 @@ function LabsCalendarPicker({
 export default function LabsBookAppointment() {
   const { currency } = useCurrency()
   const searchParams = useSearchParams()
-  const tierIdFromUrl = searchParams.get('tier')
-  const rebookConsultationId = searchParams.get('rebook')
+  const tierIdFromUrl = searchParams?.get('tier')
+  const rebookConsultationId = searchParams?.get('rebook')
   
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(PHONE_COUNTRY_CODES[0]?.dialCode || '+254')
   const [phoneLocalNumber, setPhoneLocalNumber] = useState<string>('')

@@ -1,15 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import PasswordInput from '@/components/PasswordInput'
 
-export default function AdminLogin() {
+function AdminLoginContent() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams?.get('redirect') || '/admin/dashboard'
 
@@ -104,6 +103,20 @@ export default function AdminLogin() {
         </form>
       </div>
     </div>
+  )
+}
+
+export default function AdminLogin() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-baby-pink-light flex items-center justify-center text-brown">
+          Loading...
+        </div>
+      }
+    >
+      <AdminLoginContent />
+    </Suspense>
   )
 }
 

@@ -13,7 +13,7 @@ const authorizedFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
 export default function CourseStructurePage() {
   const params = useParams()
   const router = useRouter()
-  const courseId = params.courseId as string
+  const courseId = params?.courseId as string
   
   const [structure, setStructure] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)

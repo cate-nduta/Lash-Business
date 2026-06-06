@@ -21,8 +21,7 @@ const FROM_EMAIL =
   process.env.FROM_EMAIL ||
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
-const rawFromName = process.env.EMAIL_FROM_NAME || 'The LashDiary'
-const EMAIL_FROM_NAME = rawFromName === 'LashDiary' ? 'The LashDiary' : rawFromName
+const EMAIL_FROM_NAME = 'The LashDiary'
 
 const EMAIL_STYLES = {
   background: '#FDF9F4',

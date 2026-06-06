@@ -763,8 +763,9 @@ export default function AdminHomepage() {
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/upload/artist', {
+      const response = await fetch('/api/upload/studio', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       })
 
@@ -775,21 +776,21 @@ export default function AdminHomepage() {
       }
 
       // Update the photo URL in the state
-      setHomepage({
-        ...homepage,
+      setHomepage((prev) => ({
+        ...prev,
         meetArtist: {
-          ...(homepage.meetArtist || {
-          enabled: true,
-          title: 'Meet Your Lash Artist',
-          name: '',
-          bio: '',
-          photo: '',
-          credentials: '',
-        }),
+          ...(prev.meetArtist || {
+            enabled: true,
+            title: 'Meet Your Lash Artist',
+            name: '',
+            bio: '',
+            photo: '',
+            credentials: '',
+          }),
           photo: data.url,
         },
-      })
-      setMessage({ type: 'success', text: 'Photo uploaded and cropped successfully!' })
+      }))
+      setMessage({ type: 'success', text: 'Photo uploaded and cropped successfully. Remember to save your changes.' })
     } catch (error) {
       console.error('Error uploading photo:', error)
       setMessage({

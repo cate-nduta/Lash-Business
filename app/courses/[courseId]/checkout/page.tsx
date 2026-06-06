@@ -11,8 +11,8 @@ export default function CourseCheckoutPage() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const courseId = params.courseId as string
-  const purchaseId = searchParams.get('purchaseId')
+  const courseId = params?.courseId as string
+  const purchaseId = searchParams?.get('purchaseId')
 
   const [course, setCourse] = useState<Course | null>(null)
   const [loading, setLoading] = useState(true)

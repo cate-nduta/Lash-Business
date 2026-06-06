@@ -195,7 +195,7 @@ export default function PartnerReferralEmails() {
     () => records.find((record) => record.id === selectedId) ?? null,
     [records, selectedId],
   )
-  const partnerIdQuery = searchParams.get('partnerId')
+  const partnerIdQuery = searchParams?.get('partnerId')
 
   useEffect(() => {
     let isActive = true

@@ -9,6 +9,7 @@ const DEFAULT_PAGES: PagesSettings = {
     home: { href: '/', label: 'Home', navbar: true, footer: false },
     services: { href: '/services', label: 'Services', navbar: true, footer: true },
     booking: { href: '/booking', label: 'Booking', navbar: true, footer: true },
+    training: { href: '/masterclass', label: 'Masterclass', navbar: true, footer: true },
     blog: { href: '/blog', label: 'Blog', navbar: true, footer: true },
     labs: { href: '/labs', label: 'LashDiary Labs', navbar: true, footer: false },
     contact: { href: '/contact', label: 'Contact', navbar: true, footer: true },
@@ -35,8 +36,14 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
     const data = await readDataFile<PagesSettings>('pages-settings.json', DEFAULT_PAGES)
+    const pages = { ...DEFAULT_PAGES.pages, ...(data?.pages ?? {}) }
+    pages.training = {
+      ...pages.training,
+      href: '/masterclass',
+      label: 'Masterclass',
+    }
     const merged = {
-      pages: { ...DEFAULT_PAGES.pages, ...(data?.pages ?? {}) },
+      pages,
       loginRegisterIcon: data?.loginRegisterIcon !== false,
       shopButton: data?.shopButton !== false,
       cartIcon: data?.cartIcon !== false,
@@ -59,8 +66,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const existing = await readDataFile<PagesSettings>('pages-settings.json', DEFAULT_PAGES)
+    const pages = { ...DEFAULT_PAGES.pages, ...existing?.pages, ...(body.pages ?? {}) }
+    pages.training = {
+      ...pages.training,
+      href: '/masterclass',
+      label: 'Masterclass',
+    }
     const updated: PagesSettings = {
-      pages: { ...DEFAULT_PAGES.pages, ...existing?.pages, ...(body.pages ?? {}) },
+      pages,
       loginRegisterIcon: body.loginRegisterIcon !== undefined ? body.loginRegisterIcon : (existing?.loginRegisterIcon !== false),
       shopButton: body.shopButton !== undefined ? body.shopButton : (existing?.shopButton !== false),
       cartIcon: body.cartIcon !== undefined ? body.cartIcon : (existing?.cartIcon !== false),

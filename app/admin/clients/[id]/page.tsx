@@ -72,7 +72,7 @@ interface ClientData {
 
 export default function ClientProfilePage() {
   const params = useParams<{ id: string }>()
-  const clientId = params?.id
+  const clientId = params?.id || ''
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [clientData, setClientData] = useState<ClientData | null>(null)

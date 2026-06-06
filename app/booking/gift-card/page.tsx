@@ -19,7 +19,7 @@ interface AvailableDate {
 export default function GiftCardBooking() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const giftCardCode = searchParams.get('code')
+  const giftCardCode = searchParams?.get('code')
   const { currency, formatCurrency } = useCurrency()
   
   const [giftCard, setGiftCard] = useState<any>(null)

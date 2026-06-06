@@ -32,7 +32,7 @@ export default function GiftCards() {
 
   // Check authorization token on mount
   useEffect(() => {
-    const token = searchParams.get('token')
+    const token = searchParams?.get('token')
     if (token === GIFT_CARD_SECRET_TOKEN) {
       setIsAuthorized(true)
     }
@@ -45,8 +45,8 @@ export default function GiftCards() {
 
   // Pre-fill from query params if available
   useEffect(() => {
-    const nameParam = searchParams.get('name')
-    const emailParam = searchParams.get('email')
+    const nameParam = searchParams?.get('name')
+    const emailParam = searchParams?.get('email')
     if (nameParam) setPurchaserName(decodeURIComponent(nameParam))
     if (emailParam) setPurchaserEmail(decodeURIComponent(emailParam))
   }, [searchParams])

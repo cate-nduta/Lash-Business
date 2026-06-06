@@ -6,6 +6,8 @@ import Image from 'next/image'
 import { useInView } from 'react-intersection-observer'
 import NewsletterPopup from '@/components/NewsletterPopup'
 import FormattedText from '@/components/FormattedText'
+import { formatTrainingDateRange } from '@/lib/training-utils'
+import type { TrainingIntake, TrainingProgram } from '@/types/training'
 
 interface HomepageData {
   hero: {
@@ -122,6 +124,7 @@ interface Testimonial {
 const DEFAULT_SECTION_ORDER = [
   'meetArtist',
   'features',
+  'training',
   'giftCard',
   'tsubokiMassage',
   'ourStudio',
@@ -141,6 +144,8 @@ const getSectionOrder = (sectionOrder: string[] | undefined, sectionId: string) 
 export default function Home() {
   const [homepageData, setHomepageData] = useState<HomepageData | null>(null)
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const [trainingProgram, setTrainingProgram] = useState<TrainingProgram | null>(null)
+  const [trainingIntakes, setTrainingIntakes] = useState<TrainingIntake[]>([])
   const [loading, setLoading] = useState(true)
   const [fridaySlotsActivated, setFridaySlotsActivated] = useState(false)
   const [countdownState, setCountdownState] = useState({
@@ -331,6 +336,26 @@ export default function Home() {
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+    fetch(`/api/training?t=${Date.now()}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted || !data?.program) return
+        setTrainingProgram(data.program)
+        setTrainingIntakes(Array.isArray(data.intakes) ? data.intakes : [])
+      })
+      .catch(() => {
+        if (isMounted) {
+          setTrainingProgram(null)
+          setTrainingIntakes([])
+        }
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const [heroRef, heroInView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -387,6 +412,23 @@ export default function Home() {
 
   // Memoize computed values for performance
   const features = useMemo(() => homepageData?.features || [], [homepageData?.features])
+  const featuredTrainingIntake = useMemo(() => {
+    if (trainingIntakes.length === 0) return null
+    return [...trainingIntakes].sort((a, b) => {
+      const aTime = new Date(a.updatedAt || a.createdAt || a.startDate).getTime()
+      const bTime = new Date(b.updatedAt || b.createdAt || b.startDate).getTime()
+      return bTime - aTime
+    })[0]
+  }, [trainingIntakes])
+  const trainingDisplayDurationDays =
+    featuredTrainingIntake?.durationDays ?? trainingProgram?.durationDays ?? 5
+  const trainingDisplayDatesLabel = featuredTrainingIntake?.trainingDates?.length
+    ? formatTrainingDateRange(featuredTrainingIntake.trainingDates)
+    : 'Cohort dates coming soon'
+  const trainingDisplayPriceKES = featuredTrainingIntake?.priceKES ?? trainingProgram?.priceKES ?? 0
+  const trainingDisplayOriginalPriceKES = Number(featuredTrainingIntake?.originalPriceKES || 0) > 0
+    ? Number(featuredTrainingIntake?.originalPriceKES)
+    : undefined
 
   const meetArtist = useMemo(() => homepageData?.meetArtist || {
     enabled: false,
@@ -908,6 +950,78 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
+
+      {/* Lash Masterclass Section */}
+      {trainingProgram?.isActive && trainingProgram.homepageFeature?.enabled !== false && (
+        <section style={{ order: getSectionOrder(sectionOrder, 'training') }} className="relative py-24 px-4 sm:px-6 lg:px-8">
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[color-mix(in_srgb,var(--color-primary)_18%,var(--color-surface)_82%)] via-[var(--color-background)] to-[color-mix(in_srgb,var(--color-secondary)_18%,var(--color-surface)_82%)]" />
+          <div className="relative max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center bg-white/85 border border-[var(--color-primary)]/20 rounded-3xl shadow-xl overflow-hidden">
+              {(trainingProgram.homepageFeature?.imageUrl || trainingProgram.heroImageUrl) ? (
+                <div className="relative min-h-[360px] lg:min-h-[520px]">
+                  <Image
+                    src={trainingProgram.homepageFeature?.imageUrl || trainingProgram.heroImageUrl || ''}
+                    alt={trainingProgram.homepageFeature?.title || trainingProgram.title}
+                    fill
+                    sizes="(min-width: 1024px) 50vw, 100vw"
+                    className="object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="min-h-[360px] lg:min-h-[520px] flex items-center justify-center bg-[var(--color-primary)]/10 p-10">
+                  <div className="text-center text-[var(--color-text)]">
+                    <div className="text-6xl mb-4 font-display">LD</div>
+                    <p className="font-display text-3xl">Lash Mastery</p>
+                    <p className="mt-2 text-[var(--color-text)]/70">In-person masterclass</p>
+                  </div>
+                </div>
+              )}
+              <div className="p-8 sm:p-10 lg:p-12">
+                <p className="text-xs uppercase tracking-[0.35em] text-[var(--color-primary)] mb-4">
+                  {trainingProgram.homepageFeature?.eyebrow || trainingProgram.eyebrow || 'Lash masterclass'}
+                </p>
+                <h2 className="text-4xl md:text-5xl font-display text-[var(--color-text)] mb-5">
+                  {trainingProgram.homepageFeature?.title || trainingProgram.title}
+                </h2>
+                <p className="text-base md:text-lg text-[var(--color-text)]/80 leading-relaxed mb-6">
+                  {trainingProgram.homepageFeature?.description ||
+                    trainingProgram.shortDescription ||
+                    trainingProgram.description}
+                </p>
+                <div className="flex flex-wrap gap-3 text-sm text-[var(--color-text)]/75 mb-8">
+                  <span className="px-4 py-2 rounded-full bg-[var(--color-primary)]/10">
+                    {trainingDisplayDurationDays}-day mastery
+                  </span>
+                  <span className="px-4 py-2 rounded-full bg-[var(--color-primary)]/10">
+                    {trainingDisplayDatesLabel}
+                  </span>
+                  <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)]/10">
+                    {trainingDisplayOriginalPriceKES && (
+                      <span className="text-[var(--color-text)]/45">
+                        Was:{' '}
+                        <span className="line-through">
+                          KES {trainingDisplayOriginalPriceKES.toLocaleString()}
+                        </span>
+                      </span>
+                    )}
+                    <span>
+                      {trainingDisplayOriginalPriceKES ? 'Now: ' : ''}
+                      KES {trainingDisplayPriceKES.toLocaleString()}
+                    </span>
+                  </span>
+                </div>
+                <Link
+                  href="/masterclass"
+                  className="btn-fun btn-cute hover-lift inline-flex items-center gap-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] font-semibold px-8 py-4 rounded-full shadow-xl"
+                >
+                  {trainingProgram.homepageFeature?.buttonText || 'Explore masterclass'}
+                  <span aria-hidden>-&gt;</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Buy a Gift Card Section */}

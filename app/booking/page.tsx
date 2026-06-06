@@ -1050,8 +1050,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
 
   // Handle URL parameters for pre-selecting consultation service
   useEffect(() => {
-    const serviceParam = searchParams.get('service')
-    const tierParam = searchParams.get('tier')
+    const serviceParam = searchParams?.get('service')
+    const tierParam = searchParams?.get('tier')
     
     // Store tier in localStorage for later reference
     if (tierParam) {

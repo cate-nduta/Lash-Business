@@ -8,20 +8,10 @@ import { useCart } from '@/contexts/CartContext'
 import { Currency } from '@/lib/currency-utils'
 import type { PagesSettings } from '@/app/api/pages-settings/route'
 
-const readStoredPagesSettings = (): PagesSettings | null => {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem('pages-settings')
-    return raw ? (JSON.parse(raw) as PagesSettings) : null
-  } catch {
-    return null
-  }
-}
-
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(() => readStoredPagesSettings())
+  const [pagesSettings, setPagesSettings] = useState<PagesSettings | null>(null)
   const { currency, setCurrency } = useCurrency()
   const { getTotalItems } = useCart()
   const cartItemCount = getTotalItems()

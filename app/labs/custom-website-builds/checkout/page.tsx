@@ -596,7 +596,7 @@ function LabsCheckoutContentInner() {
 
   // Restore order from orderId in URL
   useEffect(() => {
-    const orderId = searchParams.get('orderId')
+    const orderId = searchParams?.get('orderId')
     if (orderId && !orderRestored) {
       const restoreOrder = async () => {
         try {

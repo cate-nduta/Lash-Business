@@ -8,7 +8,7 @@ import Toast from '@/components/Toast'
 export default function TicketDetail() {
   const router = useRouter()
   const params = useParams()
-  const ticketId = params.id as string
+  const ticketId = params?.id as string
 
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(true)

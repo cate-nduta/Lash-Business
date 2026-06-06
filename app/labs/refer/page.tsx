@@ -14,7 +14,7 @@ export default function ReferralPage() {
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
-    const codeParam = searchParams.get('code')
+    const codeParam = searchParams?.get('code')
     if (codeParam) {
       setCode(codeParam.toUpperCase())
       checkCode(codeParam.toUpperCase())

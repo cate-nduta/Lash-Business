@@ -35,7 +35,7 @@ export default function LabsCheckout() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { currency } = useCurrency()
-  const tierId = searchParams.get('tier')
+  const tierId = searchParams?.get('tier')
 
   const [tier, setTier] = useState<PricingTier | null>(null)
   const [loading, setLoading] = useState(true)

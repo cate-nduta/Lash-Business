@@ -7,7 +7,7 @@ import type { Contract } from '@/types/consultation-workflow'
 export default function ContractSigningPage() {
   const params = useParams()
   const router = useRouter()
-  const token = params.token as string
+  const token = params?.token as string
   
   const [contract, setContract] = useState<Contract | null>(null)
   const [loading, setLoading] = useState(true)

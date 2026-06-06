@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 export default function PaymentSuccessPage() {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const [verifying, setVerifying] = useState(true)
   const [verified, setVerified] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -15,11 +14,18 @@ export default function PaymentSuccessPage() {
   const [emailError, setEmailError] = useState<string | null>(null)
   const [paymentTypeDetected, setPaymentTypeDetected] = useState<string>('unknown')
 
-  const reference = searchParams.get('reference')
-  const amount = searchParams.get('amount')
-  const currency = searchParams.get('currency') || 'KES'
-  const paymentType = searchParams.get('payment_type') || 'unknown'
+  const reference = searchParams?.get('reference')
+  const amount = searchParams?.get('amount')
+  const currency = searchParams?.get('currency') || 'KES'
+  const paymentType = searchParams?.get('payment_type') || 'unknown'
   const isModelApplicationFee = paymentTypeDetected === 'model_application_fee' || paymentType === 'model_application_fee'
+  const isTrainingEnrollment =
+    paymentTypeDetected === 'training_enrollment' || paymentType === 'training_enrollment'
+  const requiresManualEmail =
+    paymentTypeDetected === 'consultation' ||
+    paymentType === 'consultation' ||
+    paymentTypeDetected === 'booking' ||
+    paymentType === 'booking'
 
   useEffect(() => {
     if (!reference) {
@@ -36,8 +42,7 @@ export default function PaymentSuccessPage() {
 
         if (data.success && data.transaction?.status === 'success') {
           setVerified(true)
-          // Use provided payment type or default to 'unknown'
-          setPaymentTypeDetected(paymentType)
+          setPaymentTypeDetected(data.transaction?.metadata?.payment_type || paymentType)
         } else {
           setError(data.error || 'Payment verification failed')
         }
@@ -109,6 +114,8 @@ export default function PaymentSuccessPage() {
               ? 'Payment Successful & Appointment Booked!' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Payment Successful & Appointment Booked!'
+              : isTrainingEnrollment
+              ? 'Payment Successful & Enrollment Confirmed!'
               : isModelApplicationFee
               ? 'Model Slot Fee Paid!'
               : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
@@ -120,6 +127,8 @@ export default function PaymentSuccessPage() {
               ? 'Your payment was successful and your consultation appointment has been booked.' 
               : paymentTypeDetected === 'booking' || paymentType === 'booking'
               ? 'Your payment was successful and your lash appointment has been booked.'
+              : isTrainingEnrollment
+              ? 'Your payment was successful and you have been enrolled in your masterclass cohort. Please check your email for the cohort details and next steps.'
               : isModelApplicationFee
               ? 'Your model confirmation fee has been paid. Your selected model slot is now marked as paid.'
               : paymentTypeDetected === 'labs_web_services' || paymentType === 'labs_web_services'
@@ -180,6 +189,21 @@ export default function PaymentSuccessPage() {
                 <span>You'll receive all appointment details in the confirmation email</span>
               </li>
             </ul>
+          ) : isTrainingEnrollment ? (
+            <ul className="space-y-2 text-sm text-[#3E2A20]">
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Your masterclass cohort enrollment is confirmed</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>A confirmation email has been sent automatically</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">✓</span>
+                <span>Please check your email for dates, timing, package, location, and course details</span>
+              </li>
+            </ul>
           ) : isModelApplicationFee ? (
             <ul className="space-y-2 text-sm text-[#3E2A20]">
               <li className="flex items-start">
@@ -229,12 +253,12 @@ export default function PaymentSuccessPage() {
         </div>
 
         <div className="space-y-3">
-          {isModelApplicationFee ? (
+          {isModelApplicationFee || isTrainingEnrollment || !requiresManualEmail ? (
             <Link
-              href="/"
+              href={isTrainingEnrollment ? '/masterclass' : '/'}
               className="block w-full py-3 bg-[#7C4B31] text-white rounded-lg font-semibold hover:bg-[#6B3E26] transition"
             >
-              Return Home
+              {isTrainingEnrollment ? 'Back to Masterclass' : 'Return Home'}
             </Link>
           ) : emailSent ? (
             <>
@@ -320,9 +344,7 @@ export default function PaymentSuccessPage() {
                 ) : (
                   (paymentTypeDetected === 'consultation' || paymentType === 'consultation')
                     ? 'Send Consultation Confirmation Email'
-                    : (paymentTypeDetected === 'booking' || paymentType === 'booking')
-                    ? 'Send Lash Appointment Email Confirmation'
-                    : 'Send Confirmation Email'
+                    : 'Send Lash Appointment Email Confirmation'
                 )}
               </button>
               {emailError && (

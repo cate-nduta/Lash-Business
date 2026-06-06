@@ -162,6 +162,13 @@ export default function AdminDashboard() {
       ownerOnly: false,
     },
     {
+      title: 'Lash Masterclass',
+      description: 'In-person mastery cohorts, pricing, and enrollments',
+      href: '/admin/training',
+      icon: '🎓',
+      ownerOnly: false,
+    },
+    {
       title: 'Courses',
       description: 'Manage courses, pricing, and discounts',
       href: '/admin/courses',

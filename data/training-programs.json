@@ -1,0 +1,54 @@
+{
+  "programs": [
+    {
+      "id": "lash-mastery-5day",
+      "title": "5-Day Lash Mastery Training",
+      "slug": "lash-mastery",
+      "description": "In-person 5-day lash mastery program. Learn professional techniques hands-on with live models and expert guidance.",
+      "shortDescription": "Master lash artistry in 5 intensive in-person days.",
+      "eyebrow": "In-person lash masterclass",
+      "heroImageUrl": "",
+      "heroImageAlt": "Lash masterclass",
+      "durationDays": 5,
+      "priceKES": 85000,
+      "currency": "KES",
+      "location": "Nairobi, Kenya",
+      "requirements": [
+        "No prior experience required (beginners welcome)",
+        "Arrive on time each training day",
+        "Full payment required before classes begin"
+      ],
+      "whatYoullLearn": [
+        "Classic and volume lash fundamentals",
+        "Sanitation, mapping, and styling",
+        "Client consultation and retention",
+        "Business setup for lash artists"
+      ],
+      "syllabusPreview": {
+        "title": "Preview the syllabus",
+        "description": "Get a quick look at the techniques, theory, and hands-on practice covered during the 5-day mastery.",
+        "bullets": [
+          "Lash health, hygiene, and client consultation",
+          "Mapping, styling, isolation, and placement",
+          "Retention troubleshooting and aftercare"
+        ],
+        "pdfUrl": "",
+        "previewImageUrl": "",
+        "ctaText": "View syllabus preview"
+      },
+      "imageSections": [],
+      "galleryImages": [],
+      "homepageFeature": {
+        "enabled": true,
+        "eyebrow": "New masterclass",
+        "title": "Become a certified lash artist",
+        "description": "Join the in-person 5-day Lash Mastery with weekday and weekend cohorts.",
+        "imageUrl": "",
+        "buttonText": "Explore masterclass"
+      },
+      "isActive": true,
+      "createdAt": "2026-06-03T00:00:00.000Z",
+      "updatedAt": "2026-06-03T00:00:00.000Z"
+    }
+  ]
+}

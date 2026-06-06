@@ -112,6 +112,10 @@ export async function POST(request: NextRequest) {
           await handleCoursePurchasePayment(verifiedTransaction, metadata)
           break
 
+        case 'training_enrollment':
+          await handleTrainingEnrollmentPaymentWebhook(verifiedTransaction, metadata)
+          break
+
         case 'consultation':
           console.log('📋 Handling consultation payment:', {
             consultationId: metadata.consultation_id,
@@ -271,6 +275,27 @@ async function handleModelApplicationFeePayment(transaction: any, metadata: any)
     console.log('Model application fee payment processed:', application.id)
   } catch (error) {
     console.error('Error handling model application fee payment:', error)
+  }
+}
+
+/**
+ * Handle in-person lash training enrollment payment
+ */
+async function handleTrainingEnrollmentPaymentWebhook(
+  transaction: { reference: string; amount?: number; currency?: string; status?: string },
+  metadata: { enrollment_id?: string },
+) {
+  try {
+    const { handleTrainingEnrollmentPayment } = await import(
+      '@/lib/training-payment-handler'
+    )
+    await handleTrainingEnrollmentPayment(transaction.reference, metadata, {
+      amount: transaction.amount,
+      currency: transaction.currency,
+      status: transaction.status,
+    })
+  } catch (error) {
+    console.error('Error handling training enrollment payment:', error)
   }
 }
 

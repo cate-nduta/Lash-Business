@@ -12,11 +12,11 @@ import {
 
 export default function Testimonials() {
   const searchParams = useSearchParams()
-  const emailParam = searchParams.get('email') || ''
-  const serviceParam = searchParams.get('service') || ''
-  const bookingIdParam = searchParams.get('bookingId') || ''
-  const modelApplicationIdParam = searchParams.get('modelApplicationId') || ''
-  const sourceParam = searchParams.get('source') || ''
+  const emailParam = searchParams?.get('email') || ''
+  const serviceParam = searchParams?.get('service') || ''
+  const bookingIdParam = searchParams?.get('bookingId') || ''
+  const modelApplicationIdParam = searchParams?.get('modelApplicationId') || ''
+  const sourceParam = searchParams?.get('source') || ''
 
   const [formData, setFormData] = useState({
     name: '',

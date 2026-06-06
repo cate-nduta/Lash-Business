@@ -35,7 +35,7 @@ interface WebService {
 export default function ServiceDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const serviceSlug = params.id as string
+  const serviceSlug = params?.id as string
   const { currency, formatCurrency } = useCurrency()
   const { addToCart, items } = useLabsCart()
   const [service, setService] = useState<WebService | null>(null)

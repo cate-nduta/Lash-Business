@@ -60,7 +60,7 @@ export default function ProductDetail() {
         })
         const data = await response.json()
         const foundProduct = (data.products || []).find(
-          (p: Product) => p.id === params.id
+          (p: Product) => p.id === params?.id
         )
         if (foundProduct) {
           setProduct(foundProduct)
@@ -75,10 +75,10 @@ export default function ProductDetail() {
       }
     }
 
-    if (params.id) {
+    if (params?.id) {
       fetchProduct()
     }
-  }, [params.id, router])
+  }, [params?.id, router])
 
   const getDisplayPrice = (price: number) => {
     if (currency === 'USD') {

@@ -124,6 +124,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        if (paymentType === 'training_enrollment' && metadata.enrollment_id) {
+          const { handleTrainingEnrollmentPayment } = await import(
+            '@/lib/training-payment-handler'
+          )
+          await handleTrainingEnrollmentPayment(transactionReference, metadata, {
+            amount: transaction.amount,
+            currency: transaction.currency,
+            status: transaction.status,
+          })
+        }
+
         if (paymentType === 'model_application_fee') {
           const modelApplications = await readDataFile<{ applications: any[] }>('model-applications.json', { applications: [] })
           const application = modelApplications.applications.find(
@@ -191,6 +202,10 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error('Error updating records in callback:', error)
         // Continue anyway - webhook will handle it
+      }
+
+      if (paymentType === 'training_enrollment' && metadata.enrollment_id) {
+        return redirect(`/masterclass/success?enrollmentId=${metadata.enrollment_id}`)
       }
 
       // Redirect to success page with reference and payment type

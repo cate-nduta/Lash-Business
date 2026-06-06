@@ -34,6 +34,7 @@ const DEFAULT_PAGES: PagesSettings = {
     home: { href: '/', label: 'Home', navbar: true, footer: false },
     services: { href: '/services', label: 'Services', navbar: true, footer: true },
     booking: { href: '/booking', label: 'Booking', navbar: true, footer: true },
+    training: { href: '/masterclass', label: 'Masterclass', navbar: true, footer: true },
     blog: { href: '/blog', label: 'Blog', navbar: true, footer: true },
     labs: { href: '/labs', label: 'LashDiary Labs', navbar: true, footer: false },
     contact: { href: '/contact', label: 'Contact', navbar: true, footer: true },
@@ -61,6 +62,11 @@ export async function GET(request: NextRequest) {
     const data = await readDataFile<PagesSettings>('pages-settings.json', DEFAULT_PAGES)
 
     const pages = { ...DEFAULT_PAGES.pages, ...(data?.pages ?? {}) }
+    pages.training = {
+      ...pages.training,
+      href: '/masterclass',
+      label: 'Masterclass',
+    }
     const loginRegisterIcon = data?.loginRegisterIcon !== false
     const shopButton = data?.shopButton !== false
     const cartIcon = data?.cartIcon !== false

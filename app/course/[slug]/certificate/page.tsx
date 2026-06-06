@@ -18,7 +18,7 @@ export default function CertificatePage() {
   useEffect(() => {
     const loadCertificate = async () => {
       try {
-        const slug = decodeURIComponent(params.slug as string)
+        const slug = decodeURIComponent(params?.slug as string)
         
         // Load course from API
         const response = await fetch('/api/courses')
@@ -95,7 +95,7 @@ export default function CertificatePage() {
     }
 
     loadCertificate()
-  }, [params.slug])
+  }, [params?.slug])
 
   if (loading) {
     return (

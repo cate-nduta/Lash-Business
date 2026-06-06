@@ -29,7 +29,7 @@ export default function PrintPromoCard() {
   const [promoCode, setPromoCode] = useState<PromoCode | null>(null)
   const [logoSettings, setLogoSettings] = useState<LogoSettings | null>(null)
   const [loading, setLoading] = useState(true)
-  const code = searchParams.get('code')
+  const code = searchParams?.get('code')
 
   useEffect(() => {
     const loadData = async () => {

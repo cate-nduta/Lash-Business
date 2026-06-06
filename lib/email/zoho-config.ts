@@ -38,9 +38,15 @@ export const FROM_EMAIL =
   ZOHO_FROM_EMAIL ||
   (ZOHO_SMTP_USER ? `${ZOHO_SMTP_USER}` : BUSINESS_NOTIFICATION_EMAIL)
 
-// Normalize email from name - ensure it's always "The LashDiary" if set to just "LashDiary"
-const rawFromName = process.env.EMAIL_FROM_NAME || 'The LashDiary'
-export const EMAIL_FROM_NAME = rawFromName === 'LashDiary' ? 'The LashDiary' : rawFromName
+export const EMAIL_FROM_NAME = 'The LashDiary'
+
+function formatFromAddress(from?: string): string {
+  if (!from) return `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`
+
+  const match = from.match(/<([^>]+)>/)
+  const email = match?.[1] || from
+  return `"${EMAIL_FROM_NAME}" <${email.trim()}>`
+}
 
 // Create Zoho transporter
 let zohoTransporter: ReturnType<typeof nodemailer.createTransport> | null = null
@@ -185,7 +191,7 @@ export async function sendEmailViaZoho(options: {
   }
 
   try {
-    const fromAddress = options.from || `"${EMAIL_FROM_NAME}" <${FROM_EMAIL}>`
+    const fromAddress = formatFromAddress(options.from)
     
     // Send email immediately - no queuing or batching
     const result = await transporter.sendMail({

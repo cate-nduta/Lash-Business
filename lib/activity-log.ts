@@ -14,6 +14,7 @@ export type ActivityModule =
   | 'email_marketing'
   | 'partner_onboarding'
   | 'courses'
+  | 'training'
   | 'general'
 
 export type ActivityAction =

@@ -10,6 +10,7 @@ const PAGE_ORDER = [
   'home',
   'services',
   'booking',
+  'training',
   'blog',
   'labs',
   'contact',

@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 export default function ContractSignedPage() {
   const params = useParams()
-  const token = params.token as string
+  const token = params?.token as string
 
   return (
     <div className="min-h-screen bg-[#FDF9F4] flex items-center justify-center px-4">
