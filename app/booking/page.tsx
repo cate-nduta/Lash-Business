@@ -122,6 +122,37 @@ function isFillService(serviceName: string, categoryMap: Record<string, { id: st
   return /fill/i.test(serviceName)
 }
 
+function isClusterLashesCategory(category?: { id?: string; name?: string } | null) {
+  if (!category) return false
+  const normalizedId = category.id?.toLowerCase() ?? ''
+  const normalizedName = category.name?.toLowerCase() ?? ''
+  return normalizedId.includes('cluster') || normalizedName.includes('cluster')
+}
+
+type HomeCallLocation = {
+  id: string
+  name: string
+  feeKES: number
+}
+
+const normalizeHomeCallLocations = (locations: unknown, legacyFeeKES: number): HomeCallLocation[] => {
+  if (Array.isArray(locations)) {
+    return locations
+      .map((location, index) => {
+        const source = location && typeof location === 'object' ? (location as Record<string, unknown>) : {}
+        const name = typeof source.name === 'string' ? source.name.trim() : ''
+        const id = typeof source.id === 'string' && source.id.trim() ? source.id.trim() : `home-call-location-${index}`
+        const feeKES = Math.max(0, Math.round(Number.isFinite(Number(source.feeKES)) ? Number(source.feeKES) : 0))
+        return { id, name, feeKES }
+      })
+      .filter((location) => location.name || location.feeKES > 0)
+  }
+
+  return legacyFeeKES > 0
+    ? [{ id: 'default-home-call-location', name: 'Home call', feeKES: legacyFeeKES }]
+    : []
+}
+
 const normalizeStyleName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 const isLashRemovalServiceName = (value: string) => /remov/i.test(value)
 
@@ -182,6 +213,7 @@ export default function Booking() {
     notes: '',
     appointmentPreference: '',
     visitType: 'studio' as 'studio' | 'home',
+    homeCallLocationId: '',
     residentialArea: '',
     homeAddressDetails: '',
   })
@@ -195,6 +227,11 @@ export default function Booking() {
       : formData.service
       ? [formData.service]
       : []
+  const selectedServicesAreClusterLashes =
+    selectedServiceNames.length > 0 &&
+    (cartItems.length > 0
+      ? cartItems.every((item) => isClusterLashesCategory({ id: item.categoryId, name: item.categoryName }))
+      : selectedServiceNames.every((serviceName) => isClusterLashesCategory(serviceCategoryMap[serviceName])))
 
   // Check if this is a consultation booking
   const isConsultation = selectedServiceNames.some(name => 
@@ -680,6 +717,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         
         // Process availability
         if (availabilityData) {
+          const homeCallFeeKES = Math.max(
+            0,
+            Math.round(
+              Number.isFinite(Number(availabilityData?.homeCalls?.feeKES))
+                ? Number(availabilityData.homeCalls.feeKES)
+                : 0,
+            ),
+          )
           const normalized = {
             minimumBookingDate: availabilityData?.minimumBookingDate,
             fullyBookedDates: Array.isArray(availabilityData?.fullyBookedDates)
@@ -710,14 +755,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 availabilityData.homeCalls.sectionDescription.trim()
                   ? availabilityData.homeCalls.sectionDescription.trim()
                   : 'Choose studio or home visit. For home visits, share your residential area and full address (building, apartment, gate codes, landmarks).',
-              feeKES: Math.max(
-                0,
-                Math.round(
-                  Number.isFinite(Number(availabilityData?.homeCalls?.feeKES))
-                    ? Number(availabilityData.homeCalls.feeKES)
-                    : 0,
-                ),
-              ),
+              feeKES: homeCallFeeKES,
+              locations: normalizeHomeCallLocations(availabilityData?.homeCalls?.locations, homeCallFeeKES),
             },
           }
           setAvailabilityData(normalized)
@@ -733,6 +772,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               sectionDescription:
                 'Choose studio or home visit. For home visits, share your residential area and full address.',
               feeKES: 0,
+              locations: [],
             },
           })
         }
@@ -1166,6 +1206,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       ...prev,
       ...draft.formData,
       visitType: draft.formData.visitType === 'home' ? 'home' : 'studio',
+      homeCallLocationId: draft.formData.homeCallLocationId ?? '',
     }))
     if (draft.phoneCountryCode) {
       setPhoneCountryCode(draft.phoneCountryCode)
@@ -1594,9 +1635,16 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       sectionTitle: string
       sectionDescription: string
       feeKES: number
+      locations: HomeCallLocation[]
     }
   } | null>(null)
   const bookingWindow = availabilityData?.bookingWindow
+  const homeCallsAvailableForSelection =
+    availabilityData?.homeCalls?.enabled === true && selectedServicesAreClusterLashes
+  const activeHomeCalls = homeCallsAvailableForSelection ? availabilityData?.homeCalls : null
+  const activeHomeCallLocations = activeHomeCalls?.locations ?? []
+  const selectedHomeCallLocation =
+    activeHomeCallLocations.find((location) => location.id === formData.homeCallLocationId) ?? null
 
   // Check if booking is a Friday night slot
   const isFridayNightBooking = (): boolean => {
@@ -1729,11 +1777,12 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       discountType = 'returning'
     }
 
-    const homeCallsEnabled = availabilityData?.homeCalls?.enabled === true
+    const homeCallsEnabled = homeCallsAvailableForSelection
     const isHomeVisit = homeCallsEnabled && formData.visitType === 'home'
     const homeVisitFee = computeHomeVisitFeeKES({
       isHomeVisit,
       homeCalls: availabilityData?.homeCalls,
+      selectedLocationId: formData.homeCallLocationId,
       serviceSubtotalKES: serviceSubtotal,
       discountKES: discount,
     })
@@ -1777,9 +1826,19 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     promoCodeData?.allowFirstTimeClient === true
 
   useEffect(() => {
-    if (availabilityData?.homeCalls?.enabled !== true) return
-    setFormData((prev) => (prev.visitType === 'home' ? prev : { ...prev, visitType: 'home' }))
-  }, [availabilityData?.homeCalls?.enabled])
+    if (homeCallsAvailableForSelection) return
+    setFormData((prev) =>
+      prev.visitType === 'studio' && !prev.homeCallLocationId
+        ? prev
+        : { ...prev, visitType: 'studio', homeCallLocationId: '' },
+    )
+  }, [homeCallsAvailableForSelection])
+
+  useEffect(() => {
+    if (formData.visitType !== 'home' || !formData.homeCallLocationId) return
+    if (activeHomeCallLocations.some((location) => location.id === formData.homeCallLocationId)) return
+    setFormData((prev) => ({ ...prev, homeCallLocationId: '' }))
+  }, [activeHomeCallLocations, formData.homeCallLocationId, formData.visitType])
 
   const pricing = calculatePricing(selectedServiceNames)
   const promoOverridesFirstTimeNotice = allowFirstTimePromoOverride && !selectedServiceIsFill
@@ -2334,9 +2393,20 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         return
       }
 
-      const homeCallsEnabled = availabilityData?.homeCalls?.enabled === true
-      const effectiveVisitType = homeCallsEnabled ? 'home' : 'studio'
+      const homeCallsEnabled = homeCallsAvailableForSelection
+      const effectiveVisitType = homeCallsEnabled && formData.visitType === 'home' ? 'home' : 'studio'
       if (homeCallsEnabled && effectiveVisitType === 'home') {
+        if (activeHomeCallLocations.length > 0 && !selectedHomeCallLocation) {
+          setLoading(false)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Please choose your home-call location so we can apply the correct travel price.',
+          })
+          setTimeout(() => {
+            document.getElementById('home-visit-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 100)
+          return
+        }
         if (!formData.residentialArea?.trim() || !formData.homeAddressDetails?.trim()) {
           setLoading(false)
           setSubmitStatus({
@@ -2352,7 +2422,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
       }
       const bookingLocationSubmit =
         effectiveVisitType === 'home'
-          ? `Home visit — Area: ${formData.residentialArea.trim()}. Address: ${formData.homeAddressDetails.trim()}`
+          ? `Home visit — Location: ${selectedHomeCallLocation?.name ?? formData.residentialArea.trim()}. Area: ${formData.residentialArea.trim()}. Address: ${formData.homeAddressDetails.trim()}`
           : STUDIO_LOCATION
 
       if (hasFillServiceSelected) {
@@ -2509,6 +2579,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             })),
             location: bookingLocationSubmit,
             visitType: effectiveVisitType,
+            homeCallLocationId: effectiveVisitType === 'home' ? selectedHomeCallLocation?.id ?? null : null,
+            homeCallLocationName: effectiveVisitType === 'home' ? selectedHomeCallLocation?.name ?? null : null,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
             serviceSubtotal: pricingDetails.serviceSubtotal,
@@ -2783,6 +2855,8 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
             })),
             location: bookingLocationSubmit,
             visitType: effectiveVisitType,
+            homeCallLocationId: effectiveVisitType === 'home' ? selectedHomeCallLocation?.id ?? null : null,
+            homeCallLocationName: effectiveVisitType === 'home' ? selectedHomeCallLocation?.name ?? null : null,
             isFirstTimeClient: effectiveIsFirstTimeClient === true,
             originalPrice: pricingDetails.originalPrice,
             serviceSubtotal: pricingDetails.serviceSubtotal,
@@ -3186,22 +3260,96 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               </p>
             </div>
 
-            {/* Home visit (optional, admin-controlled) */}
-            {availabilityData?.homeCalls?.enabled && (
+            {/* Appointment location (optional home calls, admin-controlled) */}
+            {activeHomeCalls && (
               <div
                 id="home-visit-section"
                 className="rounded-xl border-2 border-brown-light bg-pink-light/30 p-4 sm:p-5 space-y-4"
               >
                 <h3 className="text-base sm:text-lg font-display font-semibold text-brown-dark">
-                  {availabilityData.homeCalls.sectionTitle}
+                  {activeHomeCalls.sectionTitle}
                 </h3>
-                <p className="text-sm text-brown-dark/80">{availabilityData.homeCalls.sectionDescription}</p>
-                <div className="rounded-lg border border-brown-light bg-white/70 px-4 py-3">
-                  <p className="font-semibold text-brown-dark">Home visit</p>
-                  <p className="text-sm text-brown-dark/70">Home visits are currently enabled, so this booking will be for a home visit. Please share your area and full address below.</p>
+                <p className="text-sm text-brown-dark/80">{activeHomeCalls.sectionDescription}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label
+                    className={`cursor-pointer rounded-lg border-2 bg-white/80 px-4 py-3 transition-all ${
+                      formData.visitType === 'studio'
+                        ? 'border-brown-dark shadow-sm'
+                        : 'border-brown-light hover:border-brown-dark/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="visitType"
+                      value="studio"
+                      checked={formData.visitType === 'studio'}
+                      onChange={handleChange}
+                      className="sr-only"
+                    />
+                    <span className="block font-semibold text-brown-dark">Come to the studio</span>
+                    <span className="mt-1 block text-sm text-brown-dark/70">
+                      You&apos;ll come to {STUDIO_LOCATION}.
+                    </span>
+                  </label>
+
+                  <label
+                    className={`cursor-pointer rounded-lg border-2 bg-white/80 px-4 py-3 transition-all ${
+                      formData.visitType === 'home'
+                        ? 'border-brown-dark shadow-sm'
+                        : 'border-brown-light hover:border-brown-dark/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="visitType"
+                      value="home"
+                      checked={formData.visitType === 'home'}
+                      onChange={handleChange}
+                      className="sr-only"
+                    />
+                    <span className="block font-semibold text-brown-dark">Home call</span>
+                    <span className="mt-1 block text-sm text-brown-dark/70">
+                      I&apos;ll come to your location. Choose your area below to see the travel price.
+                    </span>
+                  </label>
                 </div>
                 {formData.visitType === 'home' && (
                   <div className="space-y-4 pt-2 border-t border-brown-light/60">
+                    {activeHomeCallLocations.length > 0 && (
+                      <div>
+                        <p className="block text-sm font-semibold text-brown-dark mb-2">
+                          Home-call location *
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {activeHomeCallLocations.map((location) => (
+                            <label
+                              key={location.id}
+                              className={`cursor-pointer rounded-lg border-2 bg-white px-4 py-3 transition-all ${
+                                formData.homeCallLocationId === location.id
+                                  ? 'border-brown-dark shadow-sm'
+                                  : 'border-brown-light hover:border-brown-dark/60'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="homeCallLocationId"
+                                value={location.id}
+                                checked={formData.homeCallLocationId === location.id}
+                                onChange={handleChange}
+                                className="sr-only"
+                                required={formData.visitType === 'home'}
+                              />
+                              <span className="block font-semibold text-brown-dark">{location.name}</span>
+                              <span className="mt-1 block text-sm text-brown-dark/70">
+                                {location.feeKES > 0
+                                  ? formatCurrencyContext(getPriceInCurrency(location.feeKES))
+                                  : 'No extra charge'}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <label htmlFor="residentialArea" className="block text-sm font-semibold text-brown-dark mb-2">
                         Residential area / neighbourhood *

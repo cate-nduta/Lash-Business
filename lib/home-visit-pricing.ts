@@ -1,10 +1,17 @@
 /** Home visit settings stored on availability.json → homeCalls */
+export interface HomeCallLocationConfig {
+  id?: string
+  name?: string
+  feeKES?: number
+}
+
 export interface HomeCallsConfig {
   enabled?: boolean
   sectionTitle?: string
   sectionDescription?: string
   /** Extra charge in KES added on top of service price for home visits */
   feeKES?: number
+  locations?: HomeCallLocationConfig[]
 }
 
 export function normalizeHomeVisitFeeKES(fee: unknown): number {
@@ -20,11 +27,19 @@ export function normalizeHomeVisitFeeKES(fee: unknown): number {
 export function computeHomeVisitFeeKES(params: {
   isHomeVisit: boolean
   homeCalls?: HomeCallsConfig | null
+  selectedLocationId?: string | null
   serviceSubtotalKES: number
   discountKES: number
 }): number {
   if (!params.isHomeVisit || !params.homeCalls?.enabled) return 0
-  const fee = normalizeHomeVisitFeeKES(params.homeCalls.feeKES)
+  const selectedLocation =
+    params.selectedLocationId && Array.isArray(params.homeCalls.locations)
+      ? params.homeCalls.locations.find((location) => location.id === params.selectedLocationId)
+      : null
+  const hasLocationPrices = Array.isArray(params.homeCalls.locations) && params.homeCalls.locations.length > 0
+  const fee = normalizeHomeVisitFeeKES(
+    selectedLocation ? selectedLocation.feeKES : hasLocationPrices ? 0 : params.homeCalls.feeKES,
+  )
   if (fee === 0) return 0
   const subtotal = Math.max(0, Math.round(params.serviceSubtotalKES))
   const discount = Math.max(0, Math.round(params.discountKES))

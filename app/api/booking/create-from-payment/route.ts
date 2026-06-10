@@ -189,6 +189,8 @@ export async function POST(request: NextRequest) {
       timeSlot: bookingData.timeSlot,
       location: bookingData.location || STUDIO_LOCATION,
       visitType: bookingData.visitType || 'studio',
+      homeCallLocationId: bookingData.homeCallLocationId ?? null,
+      homeCallLocationName: bookingData.homeCallLocationName ?? null,
       residentialArea: bookingData.residentialArea ?? null,
       homeAddressDetails: bookingData.homeAddressDetails ?? null,
       serviceSubtotal: bookingData.serviceSubtotal ?? null,

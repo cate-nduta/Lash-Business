@@ -47,6 +47,13 @@ interface HomeCallsSettings {
   sectionDescription: string
   /** Extra charge in KES for home visits (added to service total; waived if services are 100% off) */
   feeKES: number
+  locations: HomeCallLocationSettings[]
+}
+
+interface HomeCallLocationSettings {
+  id: string
+  name: string
+  feeKES: number
 }
 
 interface AvailabilityData {
@@ -65,9 +72,34 @@ const defaultHomeCalls = (): HomeCallsSettings => ({
   enabled: false,
   sectionTitle: 'Home visit',
   sectionDescription:
-    'Choose studio or home visit. For home visits, clients enter their residential area and full address (building, apartment, directions).',
+    'Choose studio or home call. For home calls, clients choose their location and enter their full address (building, apartment, directions).',
+  feeKES: 0,
+  locations: [],
+})
+
+const createHomeCallLocation = (): HomeCallLocationSettings => ({
+  id: `home-call-location-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  name: '',
   feeKES: 0,
 })
+
+const normalizeHomeCallLocations = (locations: unknown, legacyFeeKES: number): HomeCallLocationSettings[] => {
+  if (Array.isArray(locations)) {
+    return locations
+      .map((location, index) => {
+        const source = location && typeof location === 'object' ? (location as Record<string, unknown>) : {}
+        const name = typeof source.name === 'string' ? source.name.trim() : ''
+        const id = typeof source.id === 'string' && source.id.trim() ? source.id.trim() : `home-call-location-${index}`
+        const feeKES = Math.max(0, Math.round(Number.isFinite(Number(source.feeKES)) ? Number(source.feeKES) : 0))
+        return { id, name, feeKES }
+      })
+      .filter((location) => location.name || location.feeKES > 0)
+  }
+
+  return legacyFeeKES > 0
+    ? [{ id: 'default-home-call-location', name: 'Home call', feeKES: legacyFeeKES }]
+    : []
+}
 
 export default function AdminAvailability() {
   const createDefaultBookingWindow = (): BookingWindowState => ({
@@ -195,6 +227,10 @@ export default function AdminAvailability() {
           ),
         }
 
+        const homeCallFeeKES = Math.max(
+          0,
+          Math.round(Number.isFinite(Number(data?.homeCalls?.feeKES)) ? Number(data.homeCalls.feeKES) : 0),
+        )
         const normalized: AvailabilityData = {
           businessHours,
           timeSlots,
@@ -209,10 +245,8 @@ export default function AdminAvailability() {
               typeof data?.homeCalls?.sectionDescription === 'string' && data.homeCalls.sectionDescription.trim()
                 ? data.homeCalls.sectionDescription.trim()
                 : defaultHomeCalls().sectionDescription,
-            feeKES: Math.max(
-              0,
-              Math.round(Number.isFinite(Number(data?.homeCalls?.feeKES)) ? Number(data.homeCalls.feeKES) : 0),
-            ),
+            feeKES: homeCallFeeKES,
+            locations: normalizeHomeCallLocations(data?.homeCalls?.locations, homeCallFeeKES),
           },
         }
 
@@ -279,15 +313,32 @@ export default function AdminAvailability() {
     setMessage(null)
 
     try {
+      const cleanedAvailability: AvailabilityData = {
+        ...availability,
+        homeCalls: {
+          ...availability.homeCalls,
+          locations: availability.homeCalls.locations
+            .map((location) => ({
+              ...location,
+              name: location.name.trim(),
+              feeKES: Math.max(0, Math.round(Number(location.feeKES) || 0)),
+            }))
+            .filter((location) => location.name.length > 0),
+          feeKES: 0,
+        },
+      }
+      cleanedAvailability.homeCalls.feeKES =
+        cleanedAvailability.homeCalls.locations[0]?.feeKES ?? availability.homeCalls.feeKES
       const response = await authorizedFetch('/api/admin/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(availability),
+        body: JSON.stringify(cleanedAvailability),
       })
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Availability updated successfully!' })
-        setOriginalAvailability(availability) // Update original to clear unsaved changes flag
+        setAvailability(cleanedAvailability)
+        setOriginalAvailability(cleanedAvailability) // Update original to clear unsaved changes flag
         setShowDialog(false) // Close dialog if open
       } else {
         setMessage({ type: 'error', text: 'Failed to save availability' })
@@ -672,29 +723,108 @@ export default function AdminAvailability() {
           </label>
           {availability.homeCalls.enabled && (
             <div className="mb-4 p-4 bg-emerald-50/80 border border-emerald-200 rounded-lg">
-              <label className="block text-sm font-medium text-brown-dark mb-1">
-                Home visit charge (KES)
-              </label>
-              <p className="text-xs text-brown-dark/70 mb-2">
-                Added on top of the service price when a client books a home visit. If they have a 100% discount on
-                services, this charge is not applied.
-              </p>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={availability.homeCalls.feeKES}
-                onChange={(e) =>
-                  setAvailability((prev) => ({
-                    ...prev,
-                    homeCalls: {
-                      ...prev.homeCalls,
-                      feeKES: Math.max(0, Math.round(Number(e.target.value) || 0)),
-                    },
-                  }))
-                }
-                className="w-full max-w-xs px-3 py-2 border border-brown-light rounded-lg bg-white"
-              />
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-brown-dark">Home call locations and prices</h3>
+                  <p className="text-xs text-brown-dark/70 mt-1">
+                    Add each location clients can choose from. The selected location price is added to the service
+                    total, unless their services are fully discounted.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAvailability((prev) => ({
+                      ...prev,
+                      homeCalls: {
+                        ...prev.homeCalls,
+                        locations: [...prev.homeCalls.locations, createHomeCallLocation()],
+                      },
+                    }))
+                  }
+                  className="px-4 py-2 bg-brown-dark text-white rounded-lg hover:bg-brown transition-colors text-sm font-semibold"
+                >
+                  Add location
+                </button>
+              </div>
+
+              {availability.homeCalls.locations.length === 0 ? (
+                <p className="text-sm text-brown-dark/70 bg-white/70 border border-dashed border-brown-light rounded-lg px-4 py-3">
+                  No home-call locations yet. Add at least one location so clients can choose where they are.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {availability.homeCalls.locations.map((location, index) => (
+                    <div
+                      key={location.id}
+                      className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-3 items-end bg-white/80 border border-brown-light rounded-lg p-3"
+                    >
+                      <div>
+                        <label className="block text-xs font-medium text-brown-dark mb-1">
+                          Location name
+                        </label>
+                        <input
+                          type="text"
+                          value={location.name}
+                          onChange={(e) =>
+                            setAvailability((prev) => ({
+                              ...prev,
+                              homeCalls: {
+                                ...prev.homeCalls,
+                                locations: prev.homeCalls.locations.map((entry, entryIndex) =>
+                                  entryIndex === index ? { ...entry, name: e.target.value } : entry,
+                                ),
+                              },
+                            }))
+                          }
+                          placeholder="e.g. Kilimani / Westlands"
+                          className="w-full px-3 py-2 border border-brown-light rounded-lg bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-brown-dark mb-1">
+                          Price (KES)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={location.feeKES}
+                          onChange={(e) =>
+                            setAvailability((prev) => ({
+                              ...prev,
+                              homeCalls: {
+                                ...prev.homeCalls,
+                                locations: prev.homeCalls.locations.map((entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, feeKES: Math.max(0, Math.round(Number(e.target.value) || 0)) }
+                                    : entry,
+                                ),
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-2 border border-brown-light rounded-lg bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAvailability((prev) => ({
+                            ...prev,
+                            homeCalls: {
+                              ...prev.homeCalls,
+                              locations: prev.homeCalls.locations.filter((_, entryIndex) => entryIndex !== index),
+                            },
+                          }))
+                        }
+                        className="px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition-colors text-sm font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <div className="space-y-4">

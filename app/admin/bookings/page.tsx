@@ -83,6 +83,8 @@ interface Booking {
   clientTimezone?: string
   clientCountry?: string
   visitType?: 'studio' | 'home'
+  homeCallLocationId?: string | null
+  homeCallLocationName?: string | null
   residentialArea?: string | null
   homeAddressDetails?: string | null
   serviceSubtotal?: number | null
@@ -1978,6 +1980,16 @@ export default function AdminBookings() {
                     </p>
                     {selectedBooking.residentialArea?.trim() || selectedBooking.homeAddressDetails?.trim() ? (
                       <div className="space-y-3 text-sm text-emerald-950">
+                        {selectedBooking.homeCallLocationName?.trim() && (
+                          <div>
+                            <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">
+                              Home-call location
+                            </p>
+                            <p className="whitespace-pre-wrap font-medium">
+                              {selectedBooking.homeCallLocationName.trim()}
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">
                             Residential area

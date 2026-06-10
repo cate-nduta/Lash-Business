@@ -12,6 +12,7 @@ export type BookingFormDraft = {
   notes: string
   appointmentPreference: string
   visitType: 'studio' | 'home'
+  homeCallLocationId: string
   residentialArea: string
   homeAddressDetails: string
 }
