@@ -88,7 +88,34 @@ async function finalizeGiftCardPayment(transaction: any) {
   }
 }
 
-async function finalizeKnownPayment(transaction: any) {
+async function finalizeBookingPayment(transaction: any, origin: string) {
+  const bookingReference = transaction.metadata?.booking_reference
+  if (!bookingReference || !transaction.reference) return
+
+  try {
+    const response = await fetch(`${origin}/api/booking/create-from-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingReference,
+        paymentReference: transaction.reference,
+      }),
+    })
+
+    if (!response.ok && response.status !== 404) {
+      const details = await response.text().catch(() => '')
+      console.warn('Booking payment verified but booking finalization returned an issue:', {
+        bookingReference,
+        status: response.status,
+        details,
+      })
+    }
+  } catch (error) {
+    console.warn('Booking payment verified but immediate booking finalization failed:', error)
+  }
+}
+
+async function finalizeKnownPayment(transaction: any, origin: string) {
   const status = String(transaction?.status || '').toLowerCase()
   if (!['success', 'successful', 'paid'].includes(status)) return
   const paymentType = transaction.metadata?.payment_type
@@ -96,6 +123,8 @@ async function finalizeKnownPayment(transaction: any) {
     await finalizeShopOrderPayment(transaction)
   } else if (paymentType === 'gift_card') {
     await finalizeGiftCardPayment(transaction)
+  } else if (paymentType === 'booking') {
+    await finalizeBookingPayment(transaction, origin)
   } else if (paymentType === 'training_enrollment') {
     const { handleTrainingEnrollmentPayment } = await import(
       '@/lib/training-payment-handler'
@@ -135,7 +164,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await finalizeKnownPayment(result.transaction)
+    await finalizeKnownPayment(result.transaction, request.nextUrl.origin)
 
     // For Labs tier payments, the webhook will handle the rest
     // Just return success here
@@ -174,7 +203,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    await finalizeKnownPayment(result.transaction)
+    await finalizeKnownPayment(result.transaction, request.nextUrl.origin)
 
     return NextResponse.json({
       success: true,

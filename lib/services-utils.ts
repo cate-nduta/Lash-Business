@@ -14,6 +14,7 @@ export type ServiceCategory = {
   id: string
   name: string
   availableDays?: WeekdayKey[]
+  homeCallEnabled?: boolean
   showNotice: boolean
   notice: string
   services: Service[]
@@ -105,6 +106,7 @@ export const normalizeServiceCatalog = (
         id: categoryId,
         name,
         availableDays: [],
+        homeCallEnabled: false,
         showNotice: false,
         notice: '',
         services,
@@ -121,6 +123,7 @@ export const normalizeServiceCatalog = (
         id: ensureUniqueId(undefined, 'Services', usedCategoryIds, 'category'),
         name: 'Services',
         availableDays: [],
+        homeCallEnabled: false,
         showNotice: false,
         notice: '',
         services: [],
@@ -168,6 +171,7 @@ export const normalizeServiceCatalog = (
         id: categoryId,
         name: typeof category?.name === 'string' && category.name.trim().length > 0 ? category.name.trim() : 'Category',
         availableDays: normalizeAvailableDays(category?.availableDays),
+        homeCallEnabled: category?.homeCallEnabled === true,
         showNotice: Boolean(category?.showNotice),
         notice: typeof category?.notice === 'string' ? category.notice : '',
         services,

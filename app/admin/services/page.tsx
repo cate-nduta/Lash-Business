@@ -36,6 +36,7 @@ const blankCategory = (): ServiceCategory => ({
   id: generateId('category'),
   name: 'New Category',
   availableDays: [],
+  homeCallEnabled: false,
   showNotice: false,
   notice: '',
   services: [blankService()],
@@ -690,6 +691,29 @@ const moveService = (categoryId: string, serviceId: string, direction: 'up' | 'd
                     })}
                   </div>
                 </div>
+              </div>
+
+              <div className="border border-brown-light rounded-xl bg-white p-4 space-y-2">
+                <label className="flex items-start gap-3 text-sm font-semibold text-brown-dark cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={activeCategory.homeCallEnabled === true}
+                    onChange={(event) =>
+                      updateCategory(activeCategory.id, (category) => ({
+                        ...category,
+                        homeCallEnabled: event.target.checked,
+                      }))
+                    }
+                    className="mt-0.5 w-4 h-4"
+                  />
+                  <span>
+                    Allow home call for this category
+                    <span className="block mt-1 text-xs font-normal text-brown-dark/60">
+                      When enabled, clients booking services in this category can choose Home call and pick a travel
+                      location price.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div className="border border-brown-light rounded-xl bg-white p-4 space-y-3">

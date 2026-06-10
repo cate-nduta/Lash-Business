@@ -59,6 +59,7 @@ interface ServiceOption {
 interface ServiceOptionGroup {
   categoryId: string
   categoryName: string
+  homeCallEnabled?: boolean
   options: ServiceOption[]
 }
 
@@ -122,13 +123,6 @@ function isFillService(serviceName: string, categoryMap: Record<string, { id: st
   return /fill/i.test(serviceName)
 }
 
-function isClusterLashesCategory(category?: { id?: string; name?: string } | null) {
-  if (!category) return false
-  const normalizedId = category.id?.toLowerCase() ?? ''
-  const normalizedName = category.name?.toLowerCase() ?? ''
-  return normalizedId.includes('cluster') || normalizedName.includes('cluster')
-}
-
 type HomeCallLocation = {
   id: string
   name: string
@@ -176,7 +170,9 @@ export default function Booking() {
   const [servicePrices, setServicePrices] = useState<Record<string, number>>({})
   const [servicePricesUSD, setServicePricesUSD] = useState<Record<string, number>>({})
   const [serviceDurations, setServiceDurations] = useState<Record<string, number>>({})
-  const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, { id: string; name: string }>>({})
+  const [serviceCategoryMap, setServiceCategoryMap] = useState<
+    Record<string, { id: string; name: string; homeCallEnabled?: boolean }>
+  >({})
   const [serviceOptionGroups, setServiceOptionGroups] = useState<ServiceOptionGroup[]>([])
   const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [loadingServices, setLoadingServices] = useState(true)
@@ -227,11 +223,14 @@ export default function Booking() {
       : formData.service
       ? [formData.service]
       : []
-  const selectedServicesAreClusterLashes =
+  const selectedServicesAllowHomeCall =
     selectedServiceNames.length > 0 &&
     (cartItems.length > 0
-      ? cartItems.every((item) => isClusterLashesCategory({ id: item.categoryId, name: item.categoryName }))
-      : selectedServiceNames.every((serviceName) => isClusterLashesCategory(serviceCategoryMap[serviceName])))
+      ? cartItems.every((item) => {
+          const category = serviceCatalog.categories.find((entry) => entry.id === item.categoryId)
+          return category?.homeCallEnabled === true
+        })
+      : selectedServiceNames.every((serviceName) => serviceCategoryMap[serviceName]?.homeCallEnabled === true))
 
   // Check if this is a consultation booking
   const isConsultation = selectedServiceNames.some(name => 
@@ -988,6 +987,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                     ? category.name.trim()
                     : 'Category',
                 availableDays: normalizeAvailableDays(category?.availableDays),
+                homeCallEnabled: category?.homeCallEnabled === true,
                 showNotice: Boolean(category?.showNotice),
                 notice: typeof category?.notice === 'string' ? category.notice : '',
                 services: Array.isArray(category?.services)
@@ -1019,6 +1019,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   typeof category?.name === 'string' && category.name.trim().length > 0
                     ? category.name.trim()
                     : 'Category'
+                const categoryHomeCallEnabled = category?.homeCallEnabled === true
 
                 const options: ServiceOption[] = Array.isArray(category?.services)
                   ? category.services.map((service: any) => ({
@@ -1039,6 +1040,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 return {
                   categoryId,
                   categoryName,
+                  homeCallEnabled: categoryHomeCallEnabled,
                   options,
                 }
               })
@@ -1048,7 +1050,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
           const pricesUSD: Record<string, number> = {}
           const durations: Record<string, number> = {}
 
-          const categoryMap: Record<string, { id: string; name: string }> = {}
+          const categoryMap: Record<string, { id: string; name: string; homeCallEnabled?: boolean }> = {}
 
           groups.forEach((group) => {
             group.options.forEach((option) => {
@@ -1057,7 +1059,11 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 pricesUSD[option.name] = option.priceUSD
               }
               durations[option.name] = option.duration
-              categoryMap[option.name] = { id: option.categoryId, name: option.categoryName }
+              categoryMap[option.name] = {
+                id: option.categoryId,
+                name: option.categoryName,
+                homeCallEnabled: group.homeCallEnabled,
+              }
             })
           })
 
@@ -1640,7 +1646,7 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   } | null>(null)
   const bookingWindow = availabilityData?.bookingWindow
   const homeCallsAvailableForSelection =
-    availabilityData?.homeCalls?.enabled === true && selectedServicesAreClusterLashes
+    availabilityData?.homeCalls?.enabled === true && selectedServicesAllowHomeCall
   const activeHomeCalls = homeCallsAvailableForSelection ? availabilityData?.homeCalls : null
   const activeHomeCallLocations = activeHomeCalls?.locations ?? []
   const selectedHomeCallLocation =
