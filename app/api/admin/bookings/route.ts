@@ -5,6 +5,10 @@ import { recordActivity } from '@/lib/activity-log'
 
 interface Booking {
   id: string
+  bookingReference?: string
+  paymentOrderTrackingId?: string | null
+  paymentTransactionId?: string | null
+  pesapalOrderTrackingId?: string | null
   name: string
   email: string
   phone: string
@@ -47,6 +51,16 @@ interface Booking {
   desiredLookMatchesRecommendation?: boolean | null
 }
 
+function getBookingDedupeKey(booking: Booking) {
+  return (
+    booking.bookingReference ||
+    booking.paymentOrderTrackingId ||
+    booking.paymentTransactionId ||
+    booking.pesapalOrderTrackingId ||
+    booking.id
+  )
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireAdminAuth()
@@ -55,8 +69,15 @@ export async function GET(request: NextRequest) {
     const bookings = (data.bookings || []).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
+    const seenBookings = new Set<string>()
+    const uniqueBookings = bookings.filter((booking) => {
+      const key = getBookingDedupeKey(booking)
+      if (seenBookings.has(key)) return false
+      seenBookings.add(key)
+      return true
+    })
 
-    return NextResponse.json({ bookings }, {
+    return NextResponse.json({ bookings: uniqueBookings }, {
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
         'Pragma': 'no-cache',

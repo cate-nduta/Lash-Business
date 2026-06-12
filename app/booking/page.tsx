@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -162,6 +162,8 @@ export default function Booking() {
     clearCart,
     addService,
   } = useServiceCart()
+  const restoredServiceIdsRef = useRef<Set<string>>(new Set())
+  const activePaymentCartSignatureRef = useRef('')
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
@@ -231,6 +233,10 @@ export default function Booking() {
           return category?.homeCallEnabled === true
         })
       : selectedServiceNames.every((serviceName) => serviceCategoryMap[serviceName]?.homeCallEnabled === true))
+  const cartSignature = useMemo(
+    () => cartItems.map((item) => `${item.serviceId}:${item.price}:${item.duration}`).join('|'),
+    [cartItems],
+  )
 
   // Check if this is a consultation booking
   const isConsultation = selectedServiceNames.some(name => 
@@ -317,6 +323,22 @@ export default function Booking() {
     bookingReference: string
     isFullPayment: boolean
   } | null>(null)
+  useEffect(() => {
+    if (!showPaymentModal) {
+      activePaymentCartSignatureRef.current = cartSignature
+      return
+    }
+
+    if (activePaymentCartSignatureRef.current !== cartSignature) {
+      setShowPaymentModal(false)
+      setPaymentData(null)
+      setSubmitStatus({
+        type: 'error',
+        message: 'Services changed',
+        details: 'Please continue to checkout again so we charge the updated amount.',
+      })
+    }
+  }, [cartSignature, showPaymentModal])
 const [returningDiscountPercent, setReturningDiscountPercent] = useState(0)
 const [lastPaymentDate, setLastPaymentDate] = useState<string | null>(null)
 const [returningDaysSince, setReturningDaysSince] = useState<number | null>(null)
@@ -1151,6 +1173,49 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
     }
   }, [searchParams, loadingServices, serviceOptionGroups, cartItems, addService, formData.service])
 
+  // Restore services passed from the Services page if browser storage is unavailable or slow.
+  useEffect(() => {
+    if (loadingServices || serviceOptionGroups.length === 0) return
+
+    const requestedServiceIds = [
+      ...(searchParams?.getAll('serviceId') ?? []),
+      ...(searchParams?.get('services')?.split(',') ?? []),
+    ]
+      .map((serviceId) => serviceId.trim())
+      .filter(Boolean)
+
+    if (requestedServiceIds.length === 0) return
+
+    const uniqueRequestedServiceIds = Array.from(new Set(requestedServiceIds))
+    const unhandledRequestedServiceIds = uniqueRequestedServiceIds.filter(
+      (serviceId) => !restoredServiceIdsRef.current.has(serviceId),
+    )
+
+    if (unhandledRequestedServiceIds.length === 0) return
+
+    const existingServiceIds = new Set(cartItems.map((item) => item.serviceId))
+
+    serviceOptionGroups.forEach((group) => {
+      group.options.forEach((option) => {
+        if (!unhandledRequestedServiceIds.includes(option.id) || existingServiceIds.has(option.id)) return
+
+        addService({
+          serviceId: option.id,
+          name: option.name,
+          price: option.price,
+          priceUSD: option.priceUSD,
+          duration: option.duration,
+          categoryId: option.categoryId,
+          categoryName: option.categoryName,
+        })
+      })
+    })
+
+    unhandledRequestedServiceIds.forEach((serviceId) => {
+      restoredServiceIdsRef.current.add(serviceId)
+    })
+  }, [searchParams, loadingServices, serviceOptionGroups, cartItems, addService])
+
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('')
@@ -1265,6 +1330,51 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
   const clearBookingSession = () => {
     clearBookingDraft()
     clearCart()
+  }
+
+  const removeServiceIdsFromBookingUrl = (serviceIdsToRemove: string[]) => {
+    if (typeof window === 'undefined' || serviceIdsToRemove.length === 0) return
+
+    const serviceIdsToRemoveSet = new Set(serviceIdsToRemove)
+    const url = new URL(window.location.href)
+    const remainingServiceIds = url.searchParams
+      .getAll('serviceId')
+      .filter((serviceId) => !serviceIdsToRemoveSet.has(serviceId))
+    const servicesParam = url.searchParams.get('services')
+    const remainingServicesParamIds = servicesParam
+      ? servicesParam
+          .split(',')
+          .map((serviceId) => serviceId.trim())
+          .filter((serviceId) => serviceId && !serviceIdsToRemoveSet.has(serviceId))
+      : []
+
+    url.searchParams.delete('serviceId')
+    remainingServiceIds.forEach((serviceId) => url.searchParams.append('serviceId', serviceId))
+
+    if (servicesParam) {
+      if (remainingServicesParamIds.length > 0) {
+        url.searchParams.set('services', remainingServicesParamIds.join(','))
+      } else {
+        url.searchParams.delete('services')
+      }
+    }
+
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
+  const handleRemoveSelectedService = (serviceId: string) => {
+    restoredServiceIdsRef.current.add(serviceId)
+    removeService(serviceId)
+    removeServiceIdsFromBookingUrl([serviceId])
+    setSubmitStatus({ type: null, message: '' })
+  }
+
+  const handleClearSelectedServices = () => {
+    const serviceIdsToClear = cartItems.map((item) => item.serviceId)
+    serviceIdsToClear.forEach((serviceId) => restoredServiceIdsRef.current.add(serviceId))
+    clearCart()
+    removeServiceIdsFromBookingUrl(serviceIdsToClear)
+    setSubmitStatus({ type: null, message: '' })
   }
 
   // Consultation questionnaire state
@@ -2228,11 +2338,13 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
         })
         
         // Set payment data for inline payment component
+        const initializedAmount = Number(data.amount ?? amount) || 0
+        const initializedCurrency = data.currency === 'USD' ? 'USD' : 'KES'
         setPaymentData({
           publicKey: paystackPublicKey,
           email: formData.email,
-          amount: Number(amount) || 0, // Ensure amount is a valid number
-          currency: currency === 'USD' ? 'USD' : 'KES',
+          amount: initializedAmount,
+          currency: initializedCurrency,
           reference: data.reference,
           customerName: formData.name,
           phone: fullPhone,
@@ -3055,7 +3167,56 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
               <p className="text-sm text-brown-dark/70 mb-4">
                 Services are selected from the Services page, then saved here for booking.
               </p>
-              <div className="mb-4 flex flex-wrap gap-3">
+              {cartItems.length > 0 ? (
+                <div className="mt-5 space-y-3">
+                  <p className="text-sm font-semibold text-brown-dark">Selected ({cartItems.length})</p>
+                  {cartItems.map((item) => {
+                    let price = item.price
+                    if (currency === 'USD') {
+                      price =
+                        item.priceUSD !== undefined
+                          ? item.priceUSD
+                          : convertCurrency(item.price, 'KES', 'USD', exchangeRates)
+                    }
+                    return (
+                      <div
+                        key={item.serviceId}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-2 border-brown-light rounded-lg bg-white"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-brown-dark text-sm sm:text-base break-words">{item.name}</h4>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs sm:text-sm text-brown-dark/70">
+                            <span>{formatCurrencyContext(price)}</span>
+                            <span>•</span>
+                            <span>{item.duration} min</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSelectedService(item.serviceId)}
+                          className="self-start sm:self-auto px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium min-h-[44px] sm:min-h-0"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-dashed border-brown-light bg-white/70 p-6 text-center">
+                  <p className="text-sm font-semibold text-brown-dark">No services selected yet.</p>
+                  <p className="mt-1 text-sm text-brown-dark/70">
+                    Go to the Services page, add your preferred service to cart, then come back here to finish booking.
+                  </p>
+                  <Link
+                    href="/services"
+                    className="mt-4 inline-flex items-center justify-center rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    Browse services
+                  </Link>
+                </div>
+              )}
+              <div className="mt-5 flex flex-wrap gap-3">
                 <Link
                   href="/services"
                   className="inline-flex items-center justify-center rounded-lg bg-brown-dark px-5 py-2.5 text-sm font-semibold text-white hover:bg-brown transition-colors"
@@ -3065,14 +3226,14 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                 {cartItems.length > 0 && (
                   <button
                     type="button"
-                    onClick={clearCart}
+                    onClick={handleClearSelectedServices}
                     className="inline-flex items-center justify-center rounded-lg border border-red-200 px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
                   >
                     Clear selected services
                   </button>
                 )}
               </div>
-              <div className="mb-4 rounded-2xl border border-brown-light bg-white/90 p-4">
+              <div className="mt-5 rounded-2xl border border-brown-light bg-white/90 p-4">
                 <p className="text-sm font-semibold text-brown-dark">
                   Do you currently have lash extensions that need removal?
                 </p>
@@ -3120,55 +3281,6 @@ const [discountsLoaded, setDiscountsLoaded] = useState(false)
                   </p>
                 )}
               </div>
-              {cartItems.length > 0 ? (
-                <div className="mt-5 space-y-3">
-                  <p className="text-sm font-semibold text-brown-dark">Selected ({cartItems.length})</p>
-                  {cartItems.map((item) => {
-                    let price = item.price
-                    if (currency === 'USD') {
-                      price =
-                        item.priceUSD !== undefined
-                          ? item.priceUSD
-                          : convertCurrency(item.price, 'KES', 'USD', exchangeRates)
-                    }
-                    return (
-                      <div
-                        key={item.serviceId}
-                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-2 border-brown-light rounded-lg bg-white"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-brown-dark text-sm sm:text-base break-words">{item.name}</h4>
-                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs sm:text-sm text-brown-dark/70">
-                            <span>{formatCurrencyContext(price)}</span>
-                            <span>•</span>
-                            <span>{item.duration} min</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeService(item.serviceId)}
-                          className="self-start sm:self-auto px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium min-h-[44px] sm:min-h-0"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="mt-5 rounded-2xl border border-dashed border-brown-light bg-white/70 p-6 text-center">
-                  <p className="text-sm font-semibold text-brown-dark">No services selected yet.</p>
-                  <p className="mt-1 text-sm text-brown-dark/70">
-                    Go to the Services page, add your preferred service to cart, then come back here to finish booking.
-                  </p>
-                  <Link
-                    href="/services"
-                    className="mt-4 inline-flex items-center justify-center rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-                  >
-                    Browse services
-                  </Link>
-                </div>
-              )}
             </div>
 
             {/* Personal Details Section - STEP 3 */}

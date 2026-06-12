@@ -1372,15 +1372,21 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
         }
       }
 
-      const ownerResult = await transporter.sendMail({
-        from: fromAddress,
-        to: OWNER_EMAIL,
-        replyTo: email || OWNER_EMAIL,
-        subject: `New Booking Request`,
-        html: ownerEmailHtml,
-      })
+      let ownerEmailId: string | null = null
+      let ownerEmailSent = false
+      if (!bookingData.isReminder) {
+        const ownerResult = await transporter.sendMail({
+          from: fromAddress,
+          to: OWNER_EMAIL,
+          replyTo: email || OWNER_EMAIL,
+          subject: `New Booking Request`,
+          html: ownerEmailHtml,
+        })
 
-      console.log('✅ Owner email sent via Zoho SMTP:', ownerResult.messageId)
+        ownerEmailId = ownerResult.messageId || null
+        ownerEmailSent = true
+        console.log('✅ Owner email sent via Zoho SMTP:', ownerResult.messageId)
+      }
 
       const status =
         customerEmailStatus === 'sent'
@@ -1394,10 +1400,10 @@ export async function sendEmailNotification(bookingData: SendEmailPayload) {
       return {
         success: true,
         status,
-        ownerEmailId: ownerResult.messageId,
+        ownerEmailId,
         customerEmailId,
         customerEmailError,
-        ownerEmailSent: true,
+        ownerEmailSent,
         customerEmailSent: customerEmailStatus === 'sent',
       }
     } catch (zohoError: any) {

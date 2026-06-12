@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readDataFile } from '@/lib/data-utils'
+import { readDataFile, writeDataFile } from '@/lib/data-utils'
 import { sendEmailNotification } from '../email/utils'
 
 export const dynamic = 'force-dynamic'
@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
 
     // Find booking by payment reference
     const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
-    const booking = bookingsData.bookings.find(
+    const bookingIndex = bookingsData.bookings.findIndex(
       b => 
         b.paymentOrderTrackingId === reference ||
         b.paymentTransactionId === reference ||
         b.bookingReference === reference
     )
+    const booking = bookingIndex >= 0 ? bookingsData.bookings[bookingIndex] : null
 
     if (!booking) {
       return NextResponse.json(
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest) {
         { error: 'Payment not confirmed. Please ensure payment was successful.' },
         { status: 400 }
       )
+    }
+
+    if (booking.confirmationEmailSent === true || booking.adminBookingRequestEmailSent === true) {
+      return NextResponse.json({
+        success: true,
+        message: 'Booking confirmation email was already sent',
+        bookingId: booking.bookingId,
+        emailSent: true,
+        alreadySent: true,
+      })
     }
 
     // Send confirmation email
@@ -85,6 +96,15 @@ export async function POST(request: NextRequest) {
         ownerEmailSent: emailResult.ownerEmailSent,
         customerEmailSent: emailResult.customerEmailSent,
       })
+
+      bookingsData.bookings[bookingIndex] = {
+        ...booking,
+        confirmationEmailSent: emailResult.customerEmailSent === true,
+        confirmationEmailSentAt: new Date().toISOString(),
+        adminBookingRequestEmailSent: emailResult.ownerEmailSent === true,
+        adminBookingRequestEmailSentAt: new Date().toISOString(),
+      }
+      await writeDataFile('bookings.json', bookingsData)
 
       return NextResponse.json({
         success: true,

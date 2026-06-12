@@ -66,7 +66,7 @@ const BOOKING_AVAILABILITY_PREFETCH_KEY = 'lashdiary-booking-availability-prefet
 
 export default function Services() {
   const { currency, formatCurrency } = useCurrency()
-  const { addService, hasService, getTotalItems } = useServiceCart()
+  const { items: cartItems, addService, hasService, getTotalItems } = useServiceCart()
   const [catalog, setCatalog] = useState<ServiceCatalog>({ categories: [] })
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -257,6 +257,14 @@ export default function Services() {
     return catalog.categories.find((category) => category.id === activeCategoryId) ?? null
   }, [catalog, activeCategoryId])
 
+  const bookingHref = useMemo(() => {
+    if (cartItems.length === 0) return '/booking'
+
+    const params = new URLSearchParams()
+    cartItems.forEach((item) => params.append('serviceId', item.serviceId))
+    return `/booking?${params.toString()}`
+  }, [cartItems])
+
   useEffect(() => {
     if (catalog.categories.length === 0) {
       setActiveCategoryId(null)
@@ -434,9 +442,9 @@ export default function Services() {
                                   {justAdded ? <span className="animate-bounce-fun">✓ Added!</span> : 'Add to Cart'}
                                 </button>
                               )}
-                              {getTotalItems() > 0 && (
+                              {isInCart && getTotalItems() > 0 && (
                                 <Link
-                                  href="/booking"
+                                  href={bookingHref}
                                   onMouseEnter={() => void prefetchBookingAvailability()}
                                   onFocus={() => void prefetchBookingAvailability()}
                                   onClick={() => void prefetchBookingAvailability()}

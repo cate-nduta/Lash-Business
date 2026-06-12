@@ -25,40 +25,102 @@ interface ServiceCartContextType {
 }
 
 const ServiceCartContext = createContext<ServiceCartContextType | undefined>(undefined)
+const SERVICE_CART_STORAGE_KEY = 'serviceCart'
+
+const getBrowserStorages = () => {
+  const storages: Storage[] = []
+
+  ;(['localStorage', 'sessionStorage'] as const).forEach((storageKey) => {
+    try {
+      storages.push(window[storageKey])
+    } catch {
+      // Access can throw in some browser privacy modes.
+    }
+  })
+
+  return storages
+}
+
+const loadStoredServiceCart = () => {
+  for (const storage of getBrowserStorages()) {
+    try {
+      const savedCart = storage.getItem(SERVICE_CART_STORAGE_KEY)
+      if (!savedCart) continue
+
+      const parsed = JSON.parse(savedCart)
+      if (Array.isArray(parsed)) {
+        return parsed as ServiceCartItem[]
+      }
+    } catch {
+      try {
+        storage.removeItem(SERVICE_CART_STORAGE_KEY)
+      } catch {
+        // Ignore storage cleanup errors.
+      }
+    }
+  }
+
+  return []
+}
+
+const saveStoredServiceCart = (items: ServiceCartItem[]) => {
+  const serializedCart = JSON.stringify(items)
+
+  for (const storage of getBrowserStorages()) {
+    try {
+      storage.setItem(SERVICE_CART_STORAGE_KEY, serializedCart)
+    } catch {
+      // Some browsers can block one storage type; keep trying the others.
+    }
+  }
+}
+
+const clearStoredServiceCart = () => {
+  for (const storage of getBrowserStorages()) {
+    try {
+      storage.removeItem(SERVICE_CART_STORAGE_KEY)
+    } catch {
+      // Ignore storage cleanup errors.
+    }
+  }
+}
 
 export function ServiceCartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ServiceCartItem[]>([])
+  const [hasLoadedCart, setHasLoadedCart] = useState(false)
 
-  // Load cart from localStorage on mount
+  // Load cart from browser storage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const savedCart = localStorage.getItem('serviceCart')
-        if (savedCart) {
-          const parsed = JSON.parse(savedCart)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setItems(parsed)
-            console.log('✅ Service cart loaded from localStorage:', parsed.length, 'items')
-          }
+        const parsed = loadStoredServiceCart()
+        if (parsed.length > 0) {
+          setItems(parsed)
+          console.log('✅ Service cart loaded from browser storage:', parsed.length, 'items')
         }
       } catch (error) {
-        console.error('❌ Error loading service cart from localStorage:', error)
+        console.error('❌ Error loading service cart from browser storage:', error)
         // Clear corrupted data
-        localStorage.removeItem('serviceCart')
+        clearStoredServiceCart()
+      } finally {
+        setHasLoadedCart(true)
       }
+    } else {
+      setHasLoadedCart(true)
     }
   }, [])
 
-  // Save cart to localStorage whenever it changes
+  // Save cart to browser storage whenever it changes
   useEffect(() => {
+    if (!hasLoadedCart) return
     if (typeof window !== 'undefined') {
       try {
-    localStorage.setItem('serviceCart', JSON.stringify(items))
+        saveStoredServiceCart(items)
       } catch (error) {
-        console.error('Error saving service cart to localStorage:', error)
+        console.error('Error saving service cart to browser storage:', error)
       }
     }
-  }, [items])
+  }, [hasLoadedCart, items])
 
   const addService = (service: ServiceCartItem) => {
     setItems((prevItems) => {

@@ -40,6 +40,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const existingBookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
+    const existingBooking = (existingBookingsData.bookings || []).find(
+      (booking) =>
+        booking?.bookingReference === bookingReference ||
+        booking?.paymentOrderTrackingId === paymentReference ||
+        booking?.paymentTransactionId === paymentReference,
+    )
+
+    if (existingBooking) {
+      return NextResponse.json({
+        success: true,
+        bookingId: existingBooking.bookingId || existingBooking.id,
+        alreadyCreated: true,
+        message: 'Booking already exists for this payment',
+      })
+    }
+
     // Load pending booking data
     const pendingBookings = await readDataFile<Array<{
       bookingReference: string
@@ -167,6 +184,24 @@ export async function POST(request: NextRequest) {
     // Create the actual booking
     const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
     const bookings = bookingsData.bookings || []
+    const duplicateBooking = bookings.find(
+      (booking) =>
+        booking?.bookingReference === bookingReference ||
+        booking?.paymentOrderTrackingId === paymentReference ||
+        booking?.paymentTransactionId === paymentReference,
+    )
+
+    if (duplicateBooking) {
+      const updatedPending = pendingBookings.filter(pb => pb.bookingReference !== bookingReference)
+      await writeDataFile('pending-bookings.json', updatedPending)
+
+      return NextResponse.json({
+        success: true,
+        bookingId: duplicateBooking.bookingId || duplicateBooking.id,
+        alreadyCreated: true,
+        message: 'Booking already exists for this payment',
+      })
+    }
 
     const originalServicePrice = Number(bookingData.originalPrice || bookingData.finalPrice || 0)
     const salonCommissionTotal = Math.round(

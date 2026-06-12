@@ -715,6 +715,15 @@ async function handleBookingPayment(transaction: any, metadata: any) {
             })
 
             if (emailResult && emailResult.success) {
+              existingBooking.confirmationEmailSent = emailResult.customerEmailSent === true
+              existingBooking.confirmationEmailSentAt = new Date().toISOString()
+              existingBooking.adminBookingRequestEmailSent = emailResult.ownerEmailSent === true
+              existingBooking.adminBookingRequestEmailSentAt = new Date().toISOString()
+              if (bookingIndex !== -1) {
+                bookings[bookingIndex] = existingBooking
+                await writeDataFile('bookings.json', Array.isArray(bookingsData) ? bookings : { ...bookingsData, bookings })
+              }
+
               console.log('✅ Booking confirmation email sent via webhook:', {
                 bookingId: existingBooking.bookingId,
                 email: existingBooking.email,
@@ -785,6 +794,24 @@ async function handleBookingPayment(transaction: any, metadata: any) {
 async function createBookingDirectlyInWebhook(bookingData: any, bookingReference: string, transaction: any) {
   try {
     console.log('📝 Creating booking directly in webhook:', bookingReference)
+    const existingBookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
+    const existingBookings = existingBookingsData.bookings || []
+    const existingBooking = existingBookings.find(
+      (booking) =>
+        booking?.bookingReference === bookingReference ||
+        booking?.paymentOrderTrackingId === transaction.reference ||
+        booking?.paymentTransactionId === transaction.reference,
+    )
+
+    if (existingBooking) {
+      console.log('Booking already exists for payment; skipping duplicate creation:', {
+        bookingReference,
+        paymentReference: transaction.reference,
+        bookingId: existingBooking.bookingId || existingBooking.id,
+      })
+      return
+    }
+
     const bookingId = `booking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const manageToken = randomBytes(24).toString('hex')
     const createdAt = new Date().toISOString()
@@ -873,6 +900,21 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
     // Create the actual booking
     const bookingsData = await readDataFile<{ bookings: any[] }>('bookings.json', { bookings: [] })
     const bookings = bookingsData.bookings || []
+    const duplicateBooking = bookings.find(
+      (booking) =>
+        booking?.bookingReference === bookingReference ||
+        booking?.paymentOrderTrackingId === transaction.reference ||
+        booking?.paymentTransactionId === transaction.reference,
+    )
+
+    if (duplicateBooking) {
+      console.log('Booking was created while webhook was processing; skipping duplicate row:', {
+        bookingReference,
+        paymentReference: transaction.reference,
+        bookingId: duplicateBooking.bookingId || duplicateBooking.id,
+      })
+      return
+    }
 
     const originalServicePrice = Number(bookingData.originalPrice || bookingData.finalPrice || 0)
     const salonCommissionTotal = Math.round(
@@ -948,6 +990,10 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
       isFirstTimeClient: bookingData.isFirstTimeClient || false,
       createdByAdmin: bookingData.createdByAdmin === true,
       assistedBooking: bookingData.createdByAdmin === true,
+      confirmationEmailSent: false,
+      confirmationEmailSentAt: null as string | null,
+      adminBookingRequestEmailSent: false,
+      adminBookingRequestEmailSentAt: null as string | null,
     }
 
     const promoRedemptionResult = await redeemPromoCodeForBooking(newBooking)
@@ -1017,6 +1063,12 @@ async function createBookingDirectlyInWebhook(bookingData: any, bookingReference
 
       if (emailResult && emailResult.success && emailResult.ownerEmailSent) {
         emailSent = true
+        newBooking.confirmationEmailSent = emailResult.customerEmailSent === true
+        newBooking.confirmationEmailSentAt = new Date().toISOString()
+        newBooking.adminBookingRequestEmailSent = emailResult.ownerEmailSent === true
+        newBooking.adminBookingRequestEmailSentAt = new Date().toISOString()
+        await writeDataFile('bookings.json', { bookings })
+
         console.log('✅ Booking confirmation emails sent:', {
           bookingId,
           email: bookingData.email,
